@@ -1,0 +1,9 @@
+{
+  "_comment": "Model per phase (plans/harness_plan.md §3). Deterministic — no in-prompt model choices. Aliases resolve to the latest model in each tier.",
+  "decompose": "opus",
+  "plan": "opus",
+  "review": "opus",
+  "implement": "sonnet",
+  "test": "sonnet",
+  "trivial": "haiku"
+}
