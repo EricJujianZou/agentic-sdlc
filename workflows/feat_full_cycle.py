@@ -80,6 +80,17 @@ def _compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path)
         + ticket_context
         + "\n```\n"
     )
+    # Prior stage outputs are the hand-off within a run (plans/harness_plan.md
+    # §5): the plan stage is read-only, so its plan reaches implement/test/
+    # review as a saved output file the agent can Read.
+    prior_outputs = sorted(run_dir.glob("iter*_output.md"))
+    if prior_outputs:
+        listing = "\n".join(f"- {p.as_posix()}" for p in prior_outputs)
+        prompt += (
+            "\n## Prior stage outputs this run\n\n"
+            "Read the ones relevant to your stage (the latest plan output "
+            "is your work order):\n" + listing + "\n"
+        )
     prompt_path = run_dir / f"iter{state.iteration:02d}_{stage}_prompt.md"
     prompt_path.write_text(prompt, encoding="utf-8")
     return prompt_path
@@ -120,13 +131,16 @@ def main() -> int:
 
     def invoke(stage: str, state: State, story: Story):
         prompt_path = _compose_stage_prompt(stage, state, story, run_dir)
-        return invoke_stage(
+        result = invoke_stage(
             prompt_path,
             stage=stage,
             model=models[stage],
             cwd=REPO_ROOT,
             timeout_seconds=timeout_seconds,
         )
+        output_path = run_dir / f"iter{state.iteration:02d}_{stage}_output.md"
+        output_path.write_text(result.raw_output, encoding="utf-8")
+        return result
 
     outcome = run_ticket(
         story,
