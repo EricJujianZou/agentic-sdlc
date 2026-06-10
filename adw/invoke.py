@@ -6,6 +6,7 @@ composes prompt content; it only runs what the workflow points it at.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -98,6 +99,9 @@ def invoke_stage(
     if not prompt_path.exists():
         raise FileNotFoundError(f"stage prompt not found: {prompt_path}")
     cmd = build_command(prompt_path.read_text(encoding="utf-8"), stage=stage, model=model)
+    # ADW_TICKET_RUN switches the hooks (hooks/*.py) into enforcement mode:
+    # harness-file edit denial, Stop checklist, auto-commit.
+    env = {**os.environ, "ADW_TICKET_RUN": "1"}
     try:
         proc = subprocess.run(
             cmd,
@@ -107,6 +111,7 @@ def invoke_stage(
             encoding="utf-8",
             timeout=timeout_seconds,
             shell=False,
+            env=env,
         )
         stdout, exit_code, timed_out = proc.stdout or "", proc.returncode, False
     except subprocess.TimeoutExpired as exc:
