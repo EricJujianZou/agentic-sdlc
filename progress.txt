@@ -1,0 +1,7 @@
+## Codebase Patterns
+(durable, reusable patterns only — graduate anything stable into skills/ and delete it here)
+
+---
+Tactical learnings below, newest last. Hard cap: 100 lines total (enforced by adw/progress.py).
+Prune every run: durable patterns -> skills/, harness ambiguity/bugs -> system-repair ticket, stale -> delete.
+---
