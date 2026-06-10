@@ -20,6 +20,9 @@ class State:
     branch: str = ""
     last_failure: str | None = None
     budget_used_tokens: int = 0
+    # ISO timestamp set by adw/safety.py when the circuit opens; no
+    # auto-retry may start before it elapses (plans/safety_plan.md §2).
+    cooldown_until: str | None = None
 
     def __post_init__(self) -> None:
         if self.stage not in STAGES:
@@ -42,6 +45,7 @@ def load_state(path: str | Path) -> State:
         branch=raw["branch"],
         last_failure=raw.get("last_failure"),
         budget_used_tokens=raw.get("budget_used_tokens", 0),
+        cooldown_until=raw.get("cooldown_until"),
     )
 
 

@@ -59,17 +59,26 @@ def build_command(
     ]
 
 
-def _parse_envelope(stdout: str) -> tuple[str, int, float, str | None]:
-    """Return (result_text, total_tokens, cost_usd, session_id) from the CLI JSON envelope."""
+def _parse_envelope(stdout: str) -> tuple[str, int, float, str | None, int]:
+    """Return (result_text, total_tokens, cost_usd, session_id, permission_denials)
+    from the CLI JSON envelope."""
     try:
         envelope = json.loads(stdout)
     except json.JSONDecodeError:
         # Envelope itself unparseable — fall back to raw text for status extraction.
-        return stdout, 0, 0.0, None
+        return stdout, 0, 0.0, None, 0
     usage = envelope.get("usage", {}) or {}
     tokens = int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
     cost = float(envelope.get("total_cost_usd", 0.0))
-    return envelope.get("result", "") or "", tokens, cost, envelope.get("session_id")
+    denials = envelope.get("permission_denials") or []
+    denial_count = len(denials) if isinstance(denials, list) else int(denials)
+    return (
+        envelope.get("result", "") or "",
+        tokens,
+        cost,
+        envelope.get("session_id"),
+        denial_count,
+    )
 
 
 def invoke_stage(
@@ -104,7 +113,7 @@ def invoke_stage(
         stdout = (exc.stdout or b"").decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
         exit_code, timed_out = 124, True
 
-    result_text, tokens, cost, session_id = _parse_envelope(stdout)
+    result_text, tokens, cost, session_id, denials = _parse_envelope(stdout)
     status: StatusBlock | None = None
     parse_error: str | None = None
     try:
@@ -119,6 +128,7 @@ def invoke_stage(
         cost_usd=cost,
         raw_output=result_text,
         parse_error=parse_error,
+        permission_denials=denials,
         session_id=session_id,
         suggested_tools=status.suggested_tools if status else [],
     )

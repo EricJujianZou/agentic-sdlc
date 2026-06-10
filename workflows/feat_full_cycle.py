@@ -21,6 +21,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from adw import runlog
 from adw.invoke import invoke_stage
 from adw.orchestrator import run_ticket
+from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
 from adw.state import State
 from adw.tickets import Story, get_story, load_prd, mark_story, pick_next_story, save_prd
 
@@ -88,7 +89,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ticket", help="story id; defaults to highest-priority open story")
     parser.add_argument("--max-iterations", type=int, default=None)
+    parser.add_argument(
+        "--override-cooldown",
+        action="store_true",
+        help="start despite an active circuit cooldown (human judgment call)",
+    )
     args = parser.parse_args()
+
+    cooldown_msg = check_cooldown(STATE_PATH)
+    if cooldown_msg and not args.override_cooldown:
+        print(f"refusing to start: {cooldown_msg}")
+        print("pass --override-cooldown to start anyway")
+        return 1
 
     models = json.loads(MODELS_PATH.read_text(encoding="utf-8"))
     budgets = json.loads(BUDGETS_PATH.read_text(encoding="utf-8"))
@@ -121,6 +133,7 @@ def main() -> int:
         invoke,
         state_path=STATE_PATH,
         max_iterations=max_iterations,
+        breaker=CircuitBreaker(SafetyConfig.from_budgets(BUDGETS_PATH)),
     )
 
     prd = load_prd(PRD_PATH)
