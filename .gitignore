@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Harness runtime artifacts (per-run, never durable — see architecture.md memory model)
+state.json
+observability/runs/

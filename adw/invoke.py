@@ -1,0 +1,139 @@
+"""Headless stage invocation: `claude -p` with scoped tools (plans/harness_plan.md §1).
+
+Prompts are data — file paths in, structured JSON out. This module never
+composes prompt content; it only runs what the workflow points it at.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from adw.status import StatusBlock, StatusBlockError, parse_status_block
+
+# Per-stage tool scoping: plan is read-only; implement gets edit+bash;
+# test gets bash+Playwright; review is read-only+Playwright.
+STAGE_TOOLS: dict[str, list[str]] = {
+    "plan": ["Read", "Glob", "Grep"],
+    "implement": ["Read", "Glob", "Grep", "Edit", "Write", "Bash"],
+    "test": ["Read", "Glob", "Grep", "Bash", "mcp__playwright"],
+    "review": ["Read", "Glob", "Grep", "mcp__playwright"],
+}
+
+DEFAULT_TIMEOUT_SECONDS = 15 * 60
+
+
+@dataclass
+class StageResult:
+    status: StatusBlock | None
+    exit_code: int
+    timed_out: bool = False
+    tokens_used: int = 0
+    cost_usd: float = 0.0
+    raw_output: str = ""
+    parse_error: str | None = None
+    permission_denials: int = 0
+    session_id: str | None = None
+    suggested_tools: list[str] = field(default_factory=list)
+
+
+def build_command(
+    prompt_text: str,
+    *,
+    stage: str,
+    model: str,
+) -> list[str]:
+    if stage not in STAGE_TOOLS:
+        raise ValueError(f"stage must be one of {tuple(STAGE_TOOLS)}, got {stage!r}")
+    return [
+        "claude",
+        "-p",
+        prompt_text,
+        "--output-format",
+        "json",
+        "--model",
+        model,
+        "--allowedTools",
+        ",".join(STAGE_TOOLS[stage]),
+    ]
+
+
+def _parse_envelope(stdout: str) -> tuple[str, int, float, str | None, int]:
+    """Return (result_text, total_tokens, cost_usd, session_id, permission_denials)
+    from the CLI JSON envelope."""
+    try:
+        envelope = json.loads(stdout)
+    except json.JSONDecodeError:
+        # Envelope itself unparseable — fall back to raw text for status extraction.
+        return stdout, 0, 0.0, None, 0
+    usage = envelope.get("usage", {}) or {}
+    tokens = int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
+    cost = float(envelope.get("total_cost_usd", 0.0))
+    denials = envelope.get("permission_denials") or []
+    denial_count = len(denials) if isinstance(denials, list) else int(denials)
+    return (
+        envelope.get("result", "") or "",
+        tokens,
+        cost,
+        envelope.get("session_id"),
+        denial_count,
+    )
+
+
+def invoke_stage(
+    prompt_path: str | Path,
+    *,
+    stage: str,
+    model: str,
+    cwd: str | Path,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> StageResult:
+    """Run one stage headlessly and parse its status block.
+
+    A timeout is reported, not raised: the workflow decides whether it was
+    productive (files changed) via git, per the circuit-breaker rules.
+    """
+    prompt_path = Path(prompt_path)
+    if not prompt_path.exists():
+        raise FileNotFoundError(f"stage prompt not found: {prompt_path}")
+    cmd = build_command(prompt_path.read_text(encoding="utf-8"), stage=stage, model=model)
+    # ADW_TICKET_RUN switches the hooks (hooks/*.py) into enforcement mode:
+    # harness-file edit denial, Stop checklist, auto-commit.
+    env = {**os.environ, "ADW_TICKET_RUN": "1"}
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout_seconds,
+            shell=False,
+            env=env,
+        )
+        stdout, exit_code, timed_out = proc.stdout or "", proc.returncode, False
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or b"").decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        exit_code, timed_out = 124, True
+
+    result_text, tokens, cost, session_id, denials = _parse_envelope(stdout)
+    status: StatusBlock | None = None
+    parse_error: str | None = None
+    try:
+        status = parse_status_block(result_text)
+    except StatusBlockError as exc:
+        parse_error = str(exc)
+    return StageResult(
+        status=status,
+        exit_code=exit_code,
+        timed_out=timed_out,
+        tokens_used=tokens,
+        cost_usd=cost,
+        raw_output=result_text,
+        parse_error=parse_error,
+        permission_denials=denials,
+        session_id=session_id,
+        suggested_tools=status.suggested_tools if status else [],
+    )

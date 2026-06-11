@@ -1,0 +1,46 @@
+{
+  "_comment": "Hook wiring (plans/hooks_plan.md). Scripts gate themselves on ADW_TICKET_RUN where a rule should only bind harness-driven runs; destructive-command and branch-policy denials are always on.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet python hooks/pretooluse_guard.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet python hooks/pretooluse_guard.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet python hooks/posttooluse_autocommit.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet python hooks/stop_checklist.py"
+          }
+        ]
+      }
+    ]
+  }
+}

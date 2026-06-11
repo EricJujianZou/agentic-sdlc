@@ -1,0 +1,8 @@
+{
+  "_comment": "Rate and budget limits (plans/safety_plan.md §3), enforced by the workflow.",
+  "hourly_api_call_cap": 30,
+  "per_ticket_token_budget": 2000000,
+  "max_iterations_default": 5,
+  "circuit_cooldown_minutes": 30,
+  "stage_timeout_minutes": 15
+}
