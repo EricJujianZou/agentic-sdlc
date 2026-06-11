@@ -93,10 +93,14 @@ def main() -> int:
                 "status block from plans/harness_plan.md §2"
             )
 
-    dirty = working_tree_dirty(cwd)
-    if dirty is not None:
-        files = ", ".join(line.split()[-1] for line in dirty.splitlines()[:5])
-        failures.append(f"working tree not clean — commit your work first ({files})")
+    # Read-only stages (plan, review) have no git-write tools, so a dirty
+    # tree is the orchestrator's bookkeeping, not their unfinished work —
+    # demanding a commit they cannot make would deadlock the stage.
+    if os.environ.get("ADW_STAGE") not in ("plan", "review"):
+        dirty = working_tree_dirty(cwd)
+        if dirty is not None:
+            files = ", ".join(line.split()[-1] for line in dirty.splitlines()[:5])
+            failures.append(f"working tree not clean — commit your work first ({files})")
 
     try:
         assert_under_cap(Path(cwd) / "progress.txt")

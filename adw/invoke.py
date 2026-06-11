@@ -16,11 +16,15 @@ from adw.status import StatusBlock, StatusBlockError, parse_status_block
 
 # Per-stage tool scoping: plan is read-only; implement gets edit+bash;
 # test gets bash+Playwright; review is read-only+Playwright.
+# Read-only stages still get scoped git inspection commands: PRIME.md
+# requires `git status`/`git log` and REVIEW.md requires `git diff` — an
+# unscoped denial there trips the breaker's permission-denial counter.
+_GIT_READONLY = ["Bash(git status:*)", "Bash(git log:*)", "Bash(git diff:*)"]
 STAGE_TOOLS: dict[str, list[str]] = {
-    "plan": ["Read", "Glob", "Grep"],
+    "plan": ["Read", "Glob", "Grep", *_GIT_READONLY],
     "implement": ["Read", "Glob", "Grep", "Edit", "Write", "Bash"],
     "test": ["Read", "Glob", "Grep", "Bash", "mcp__playwright"],
-    "review": ["Read", "Glob", "Grep", "mcp__playwright"],
+    "review": ["Read", "Glob", "Grep", "mcp__playwright", *_GIT_READONLY],
 }
 
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
@@ -106,8 +110,10 @@ def invoke_stage(
         raise FileNotFoundError(f"stage prompt not found: {prompt_path}")
     cmd = build_command(stage=stage, model=model)
     # ADW_TICKET_RUN switches the hooks (hooks/*.py) into enforcement mode:
-    # harness-file edit denial, Stop checklist, auto-commit.
-    env = {**os.environ, "ADW_TICKET_RUN": "1"}
+    # harness-file edit denial, Stop checklist, auto-commit. ADW_STAGE lets
+    # stage-aware hooks skip checks a stage cannot satisfy (a read-only
+    # planner cannot commit, so the clean-tree gate must not bind it).
+    env = {**os.environ, "ADW_TICKET_RUN": "1", "ADW_STAGE": stage}
     try:
         proc = subprocess.run(
             cmd,

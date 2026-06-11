@@ -32,6 +32,12 @@ button is off-screen" is a known failure mode — confirm the change is
 visible, positioned sanely, and interactive. State explicitly if the
 ticket has no user-facing surface.
 
+If no Playwright tool is available in your session, do not fail the
+review for that alone: fall back to reading the markup/styles against
+the acceptance criteria and the test stage's evidence, state in
+`summary` that visual verification was skipped for lack of tooling, and
+set `"suggested_tools": ["playwright"]` in your status block.
+
 ## The exit_signal bar
 
 `exit_signal: true` only when: every criterion verified with evidence,
