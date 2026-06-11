@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,8 +48,11 @@ def build_command(
 ) -> list[str]:
     if stage not in STAGE_TOOLS:
         raise ValueError(f"stage must be one of {tuple(STAGE_TOOLS)}, got {stage!r}")
+    # On Windows the CLI is an npm shim (claude.cmd), which CreateProcess
+    # cannot resolve from a bare name with shell=False; which() returns the
+    # full PATHEXT-resolved path on every platform.
     return [
-        "claude",
+        shutil.which("claude") or "claude",
         "-p",
         prompt_text,
         "--output-format",
