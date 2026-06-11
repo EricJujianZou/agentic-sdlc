@@ -235,3 +235,16 @@ def test_envelope_permission_denials_parsed():
 
     _, _, _, _, none_denials = _parse_envelope('{"result": "ok"}')
     assert none_denials == 0
+
+
+def test_from_budgets_reads_permission_denial_cap(tmp_path):
+    import json as _json
+    from adw.safety import SafetyConfig
+    path = tmp_path / "budgets.json"
+    path.write_text(_json.dumps({
+        "per_ticket_token_budget": 1000,
+        "circuit_cooldown_minutes": 5,
+        "permission_denial_cap": 10,
+    }), encoding="utf-8")
+    cfg = SafetyConfig.from_budgets(path)
+    assert cfg.permission_denials == 10

@@ -143,3 +143,37 @@ def test_state_persisted_during_run(tmp_path):
     assert state.ticket_id == "S-001"
     assert state.stage == "review"
     assert state.budget_used_tokens == 400
+
+
+def test_successful_review_outranks_breaker(tmp_path):
+    """A passing dual gate must complete the ticket even if a cumulative
+    breaker counter (e.g. permission denials) would otherwise trip."""
+
+    class DenialBreaker:
+        """Counter crosses the line exactly on the (successful) review."""
+
+        def record(self, state, result):
+            if result.status is not None and result.status.stage == "review":
+                return "circuit open: too many permission denials"
+            return None
+
+    def invoke(stage, state, story):
+        result = ok(stage, exit_signal=(stage == "review"))
+        result.permission_denials = 1
+        return result
+
+    outcome = run(invoke, tmp_path, breaker=DenialBreaker())
+    assert outcome.outcome == "done"
+
+
+def test_breaker_still_halts_unfinished_work(tmp_path):
+    class AlwaysOpen:
+        def record(self, state, result):
+            return "circuit open: stop"
+
+    def invoke(stage, state, story):
+        return ok(stage)  # no exit_signal anywhere
+
+    outcome = run(invoke, tmp_path, breaker=AlwaysOpen())
+    assert outcome.outcome == "halted"
+    assert "circuit open" in outcome.reason

@@ -53,6 +53,7 @@ class SafetyConfig:
         return cls(
             per_ticket_token_budget=raw.get("per_ticket_token_budget"),
             cooldown_minutes=raw.get("circuit_cooldown_minutes", cls.cooldown_minutes),
+            permission_denials=raw.get("permission_denial_cap", cls.permission_denials),
         )
 
 
