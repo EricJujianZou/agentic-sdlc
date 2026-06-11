@@ -8,3 +8,4 @@ sdlc_stage: none (written at merge gate)
 # Merge history
 
 <!-- The workflow appends one line per merged ticket: `- YYYY-MM-DD S-NNN: what + why` -->
+- 2026-06-10 S-001: local static ticket dashboard (dashboard/) rendering prd.json by status, replacing Notion for viewing the backlog

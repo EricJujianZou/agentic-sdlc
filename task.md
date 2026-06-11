@@ -12,32 +12,9 @@ Statuses here are coarse: `idea` → `ready` (criteria written) →
 
 ## Promoted
 
-### S-001 — Ticket dashboard (replace Notion for viewing tickets) — `promoted` / done, awaiting merge gate
-
-**2026-06-10: completed by the harness in 1 iteration (run 5); branch
-`adw/S-001` awaits human merge. Verified serving over HTTP. See
-`observability/test_run1.md` for the full run log.**
-
-A local, zero-build dashboard so a human can see the backlog and live
-ticket state in a browser instead of a Notion board.
-
-- Static HTML + vanilla JS/CSS in `dashboard/`, no frameworks, no build step.
-- Reads `prd.json` (live machine state) and renders one card per story:
-  id, type, title, priority, status, acceptance criteria; grouped into
-  columns by status (open / in_progress / blocked / done).
-- Serve from repo root with `uv run python -m http.server 8000` and open
-  `http://localhost:8000/dashboard/` (browsers block `fetch` of local
-  files over `file://`, so a static server is required — document this).
-- Acceptance criteria: see prd.json S-001.
+*(nothing currently promoted — prd.json has no open stories)*
 
 ## Ready
-
-### Wire run-log cleanup + merge history — `ready`
-
-`adw/runlog.cleanup_run()` and `append_history_line()` are implemented
-and tested but never called (audit finding A1, `plans/improvements.md`).
-Add a small human-run merge-gate script that appends the history line
-and deletes `observability/runs/<id>/` after merge.
 
 ### Bug + trivial workflows — `ready`
 
@@ -76,4 +53,15 @@ status block; one lost its plan text that way (test_run1.md follow-up 2).
 
 ## Shipped
 
-*(nothing yet — history lives in `observability/history.md` once wired)*
+### S-001 — Ticket dashboard (replace Notion for viewing tickets) — `shipped` 2026-06-10
+
+Completed by the harness in 1 iteration (run 5), merged to main
+(`1d83097`), finalized via `workflows/merge_gate.py`. Run analysis:
+`observability/test_run1.md`; durable record: `observability/history.md`.
+
+### Wire run-log cleanup + merge history — `shipped` 2026-06-10
+
+`workflows/merge_gate.py` (human-run, post-merge) now calls
+`cleanup_run()` and `append_history_line()` — audit finding A1 closed.
+Run it after every merge: `uv run python workflows/merge_gate.py
+--ticket S-NNN --summary "what + why"`.
