@@ -18,6 +18,111 @@
       "skill_match": null,
       "passes": true,
       "status": "done"
+    },
+    {
+      "id": "S-002",
+      "type": "system-repair",
+      "priority": 1,
+      "title": "Add 'you are headless' rule to all stage command prompts",
+      "description": "In test runs 3-4, stage agents that hit contradictory constraints ended their turn by asking the nonexistent human a question ('Two ways forward, your call') instead of reporting blocked in the status block; run 3's planner lost its entire plan text that way because only the final message survives a stage. Add an explicit rule to every stage command file (commands/PLAN.md, IMPLEMENT.md, TEST.md, REVIEW.md, and PRIME.md if it gives behavioral instructions): you are running headless, nobody will ever answer a question, and any contradiction or blocker must be reported as outcome=blocked in the structured status block with the reason in failure_reason. Evidence: observability/test_run1.md follow-up 2.",
+      "acceptance_criteria": [
+        "Each of commands/PLAN.md, commands/IMPLEMENT.md, commands/TEST.md, commands/REVIEW.md contains an explicit headless rule: no human will answer questions, and contradictions/blockers must be reported as outcome=blocked in the status block instead of asking",
+        "The rule names the status block as the only channel for blockers (failure_reason carries the why)",
+        "A pytest test asserts the headless rule text is present in all four stage command files so it cannot silently regress",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "S-003",
+      "type": "system-repair",
+      "priority": 2,
+      "title": "Circuit breaker: trip immediately on repeated dead-on-arrival stages",
+      "description": "Test run 2 burned all iterations re-trying identical instant failures: the CLI exited non-zero with 0 tokens used and empty output, three times in a row, and the breaker never fired because the same_error_loops threshold (5) can never be reached before max_iterations (5) under default budgets. Add an instant-failure rule to adw/safety.py CircuitBreaker: a stage result with exit_code != 0 AND tokens_used == 0 AND empty raw output counts as dead-on-arrival; after 2 consecutive such results, open the circuit regardless of other thresholds. Make the threshold a budgets.json knob (instant_failure_cap, default 2) wired through SafetyConfig.from_budgets like permission_denial_cap. Evidence: observability/test_run1.md follow-up 1 and the run 2 row of its table.",
+      "acceptance_criteria": [
+        "CircuitBreaker.record opens the circuit (returns a halt reason naming instant failure) after 2 consecutive dead-on-arrival results: exit_code != 0, tokens_used == 0, empty raw output",
+        "A successful or token-consuming stage result resets the consecutive counter",
+        "The threshold is read from configs/budgets.json key instant_failure_cap (default 2) via SafetyConfig.from_budgets",
+        "Unit tests cover: trip at 2 consecutive instant failures, reset on a live result, and config override of the cap",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "S-004",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "Bug + trivial workflows so bug/chore tickets become runnable",
+      "description": "architecture.md names bug_plan_implement_test.py and trivial_implement_test.py but only feat_full_cycle.py exists, so ticket types bug and chore are schema-valid but unrunnable (audit finding A3, plans/improvements.md). Compose the two workflows from existing adw/ pieces: bug runs plan -> implement -> test (no review stage; the test stage's regression evidence is the gate), trivial runs implement -> test for chore-sized changes. Factor shared setup (branch, prompt composition, invoke wiring) out of feat_full_cycle.py rather than copying it.",
+      "acceptance_criteria": [
+        "workflows/bug_plan_implement_test.py runs plan, implement, test stages for a ticket and honors the same breaker, budgets, and state bookkeeping as feat_full_cycle",
+        "workflows/trivial_implement_test.py runs implement, test stages with the same guarantees",
+        "Shared orchestration setup is factored so the three workflows do not triplicate prompt-composition or git bookkeeping code",
+        "Stage order remains owned by the workflow scripts, never by prompts",
+        "Unit tests cover stage sequencing of both new workflows with a fake invoke_fn",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
+    },
+    {
+      "id": "S-005",
+      "type": "system-repair",
+      "priority": 4,
+      "title": "Backlog runner: outer loop over open stories",
+      "description": "v1 runs one ticket per human invocation. Add workflows/run_backlog.py (improvements C6, snarktank/ralph pattern): a thin outer loop that, while open stories with passes=false remain, invokes the per-ticket workflow for the next story, honoring the circuit-breaker cooldown gate between tickets and stopping on the first blocked/halted outcome instead of skipping it. The inner safety model is untouched; the runner adds no new authority.",
+      "acceptance_criteria": [
+        "workflows/run_backlog.py loops: pick next open story, run its workflow, repeat until no open stories remain",
+        "An active cooldown in state.json pauses or stops the loop; it is never silently overridden",
+        "A blocked or halted ticket stops the loop with a clear printed reason (no skipping to the next story)",
+        "A --max-tickets N flag bounds the loop (bounded everything, architecture.md principle 5)",
+        "Unit tests cover loop termination on: backlog empty, blocked outcome, cooldown, and max-tickets",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
+    },
+    {
+      "id": "S-006",
+      "type": "system-repair",
+      "priority": 5,
+      "title": "GitHub Issues intake + done/blocked notifications (phone-facing backlog)",
+      "description": "Bridge to the remote-operation goal: tickets arranged from a phone, outcomes reported back to it. Intake: a sync script pulls GitHub Issues labeled adw from the repo into prd.json stories (issue body carries description + acceptance criteria; labels carry type/priority), so the GitHub mobile app becomes the write-capable taskboard. Outbound: when a workflow finishes a ticket, it opens/updates a PR for the adw/<id> branch and comments the outcome (done/blocked + reason) on the source issue, so GitHub push notifications reach the phone. Requires the existing git-credential token; no new services.",
+      "acceptance_criteria": [
+        "workflows/sync_issues.py converts open GitHub Issues labeled adw into valid prd.json stories with a deterministic id mapping and never duplicates existing stories",
+        "Malformed issues are skipped with a printed reason, never written into prd.json",
+        "On ticket completion the workflow opens (or updates) a PR for adw/<id> and comments done/blocked + reason on the source issue",
+        "All GitHub calls go through the REST API with the locally stored credential; the scripts degrade with a clear error when offline",
+        "Unit tests cover the issue-to-story mapping and skip logic with fixture payloads (no live API in tests)",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
+    },
+    {
+      "id": "S-007",
+      "type": "system-repair",
+      "priority": 6,
+      "title": "Container isolation for unattended runs",
+      "description": "The loop currently runs on the bare Win11 host - the one open violation of the safety floor (improvements C1, highest-leverage safety item; adopt the textcortex/claude-code-sandbox Docker pattern). Run ADW_TICKET_RUN stage sessions inside a container with the repo mounted, no real credentials beyond a scoped git token, and network restricted to what stages need. This is the precondition for genuinely unattended operation and for any future --skip-permissions mode.",
+      "acceptance_criteria": [
+        "Stage invocations run inside a container when an isolation flag is set; the host filesystem outside the repo mount is unreachable",
+        "No host credentials are visible inside the container beyond the scoped git push token",
+        "Hooks (PreToolUse guard, Stop checklist, autocommit) still function inside the container",
+        "A documented fallback runs stages on the host exactly as today when isolation is off",
+        "README documents the isolation setup and its limits",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
     }
   ]
 }

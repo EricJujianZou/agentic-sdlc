@@ -12,44 +12,41 @@ Statuses here are coarse: `idea` → `ready` (criteria written) →
 
 ## Promoted
 
-*(nothing currently promoted — prd.json has no open stories)*
+All promoted 2026-06-10 as `system-repair` stories (they edit harness
+files, which the guard hook only allows on system-repair tickets). Live
+status is tracked in prd.json; S-004…S-007 sit at `blocked` per the
+human-gate convention — flip to `open` when their turn comes.
+
+- **S-002** — "you are headless" rule in all stage commands — `open`
+  (test_run1.md follow-up 2: agents asked the nonexistent human instead
+  of reporting `blocked`).
+- **S-003** — breaker trips on 2 consecutive dead-on-arrival stages —
+  `open` (test_run1.md follow-up 1: run 2 burned all iterations on
+  instant failures the same-error rule can never catch).
+- **S-004** — bug + trivial workflows (finding A3) — `blocked` until S-002/S-003 ship.
+- **S-005** — backlog runner outer loop (improvements C6) — `blocked`.
+- **S-006** — GitHub Issues intake + done/blocked notifications (the
+  phone-facing taskboard) — `blocked`.
+- **S-007** — container isolation for unattended runs (improvements C1)
+  — `blocked`; precondition for leaving the system alone.
 
 ## Ready
 
-### Bug + trivial workflows — `ready`
-
-`bug_plan_implement_test.py` and `trivial_implement_test.py` are named in
-`architecture.md` but don't exist; ticket types `bug`/`chore` are
-schema-valid but unrunnable (finding A3). Compose from existing `adw/` pieces.
-
-### Breaker: trip instantly on repeated dead-on-arrival stages — `ready`
-
-Run 2 burned all iterations on identical instant failures (CLI exit≠0,
-0 tokens, empty output). Trip after 2 such results regardless of the
-same-error threshold, which can never fire before max-iterations under
-default budgets (test_run1.md follow-up 1).
-
-### Add "you are headless" rule to stage commands — `ready`
-
-In runs 3–4 agents ended contradictory situations by asking the
-nonexistent human a question instead of reporting `blocked` in the
-status block; one lost its plan text that way (test_run1.md follow-up 2).
+*(empty — everything actionable is promoted)*
 
 ## Ideas
 
 - Enforce or delete `hourly_api_call_cap` in budgets.json (finding A2).
 - Fix guard-hook push-to-main regex false positive on branch names
   containing "main" (finding A4).
-- Seed first skills after S-001 merges: `static_web_page` (generalize
-  from S-001 — review flagged it as a clean first solve),
-  `python_module_with_tests` (finding A6 / improvements C5).
+- Seed first skills: `static_web_page` (generalize from S-001 — review
+  flagged it as a clean first solve), `python_module_with_tests`
+  (finding A6 / improvements C5).
 - Configure a Playwright MCP server so review lens 3 stops being
   skipped (review suggested it via `suggested_tools` both runs).
-- Container isolation for unattended runs (improvements C1 — highest-leverage safety item).
-- Backlog runner: outer loop over open stories with cooldown between
-  tickets (improvements C6).
 - Deterministic test-evidence check in the orchestrator before accepting
-  `done` (improvements C3).
+  `done` (improvements C3) — prerequisite for any future auto-merge of
+  trivial tickets.
 
 ## Shipped
 
