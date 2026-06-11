@@ -14,7 +14,7 @@ Sources: the 2026-06-10 repo audit and `claude-code-harness-repos.md`
 
 | # | Finding | Fix | Effort |
 |---|---|---|---|
-| A1 | `runlog.cleanup_run()` and `runlog.append_history_line()` are defined and tested but **never called by any workflow** — run logs accumulate forever, history.md never gets written | Call both from the merge gate path (a small `workflows/merge_gate.py` helper a human runs, since merge is human-only) | S |
+| A1 | ~~`runlog.cleanup_run()` and `runlog.append_history_line()` never called~~ **Fixed 2026-06-10**: `workflows/merge_gate.py` (human-run, post-merge) calls both | — | done |
 | A2 | `hourly_api_call_cap` in `configs/budgets.json` is **never enforced** (safety.py only reads token budget + cooldown) | Add a call-counter to `CircuitBreaker` or drop the config key — dead config is worse than no config | S |
 | A3 | `architecture.md` names `bug_plan_implement_test.py` and `trivial_implement_test.py`; only `feat_full_cycle.py` exists. Ticket types `bug`/`chore` are accepted by the schema but **no workflow can run them** | Write the two missing workflows (mostly composition of existing adw/ pieces) | M |
 | A4 | Guard-hook regex quirk: `\bgit\s+push\b[^|;&]*\b(main|master)\b` false-positives on any branch/path containing the word `main` (e.g. `adw/S-007-main-dashboard`) and blocks legitimate pushes | Anchor the match to the refspec position or resolve the actual target branch | S |
