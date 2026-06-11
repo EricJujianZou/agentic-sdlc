@@ -86,6 +86,7 @@ def run_ticket(
                     "timed_out": result.timed_out,
                     "tokens_used": result.tokens_used,
                     "exit_code": result.exit_code,
+                    "stderr_head": result.stderr[:500],
                 },
                 runs_root=runs_root,
             )
