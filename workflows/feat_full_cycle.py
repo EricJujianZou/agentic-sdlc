@@ -47,6 +47,15 @@ def _ensure_work_branch(branch: str) -> None:
         _git("checkout", "-b", branch)
 
 
+def _commit_bookkeeping(message: str) -> None:
+    """Commit orchestrator state changes (prd.json status flips) so stages
+    start from a clean tree — read-only stages cannot commit them, and the
+    Stop checklist fails any stage that leaves a dirty tree."""
+    if _git("status", "--porcelain").strip():
+        _git("add", "-A")
+        _git("commit", "-m", message)
+
+
 def _compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file with the ticket and state context."""
     command_file = COMMANDS_DIR / f"{stage.upper()}.md"
@@ -124,9 +133,10 @@ def main() -> int:
         print("no open story with passes=false — nothing to do")
         return 0
 
+    _ensure_work_branch(f"adw/{story.id}")
     mark_story(prd, story.id, status="in_progress")
     save_prd(prd, PRD_PATH)
-    _ensure_work_branch(f"adw/{story.id}")
+    _commit_bookkeeping(f"chore: mark {story.id} in_progress")
     run_dir = runlog.run_dir(story.id)
 
     def invoke(stage: str, state: State, story: Story):
@@ -164,6 +174,7 @@ def main() -> int:
         mark_story(prd, story.id, status="blocked")
         print(f"{story.id} {outcome.outcome}: {outcome.reason}")
     save_prd(prd, PRD_PATH)
+    _commit_bookkeeping(f"chore: record {story.id} outcome: {outcome.outcome}")
     return 0 if outcome.outcome == "done" else 1
 
 
