@@ -12,7 +12,11 @@ Statuses here are coarse: `idea` → `ready` (criteria written) →
 
 ## Promoted
 
-### S-001 — Ticket dashboard (replace Notion for viewing tickets) — `promoted`
+### S-001 — Ticket dashboard (replace Notion for viewing tickets) — `promoted` / done, awaiting merge gate
+
+**2026-06-10: completed by the harness in 1 iteration (run 5); branch
+`adw/S-001` awaits human merge. Verified serving over HTTP. See
+`observability/test_run1.md` for the full run log.**
 
 A local, zero-build dashboard so a human can see the backlog and live
 ticket state in a browser instead of a Notion board.
@@ -41,13 +45,29 @@ and deletes `observability/runs/<id>/` after merge.
 `architecture.md` but don't exist; ticket types `bug`/`chore` are
 schema-valid but unrunnable (finding A3). Compose from existing `adw/` pieces.
 
+### Breaker: trip instantly on repeated dead-on-arrival stages — `ready`
+
+Run 2 burned all iterations on identical instant failures (CLI exit≠0,
+0 tokens, empty output). Trip after 2 such results regardless of the
+same-error threshold, which can never fire before max-iterations under
+default budgets (test_run1.md follow-up 1).
+
+### Add "you are headless" rule to stage commands — `ready`
+
+In runs 3–4 agents ended contradictory situations by asking the
+nonexistent human a question instead of reporting `blocked` in the
+status block; one lost its plan text that way (test_run1.md follow-up 2).
+
 ## Ideas
 
 - Enforce or delete `hourly_api_call_cap` in budgets.json (finding A2).
 - Fix guard-hook push-to-main regex false positive on branch names
   containing "main" (finding A4).
-- Seed first skills after S-001 ships: `static_web_page`,
+- Seed first skills after S-001 merges: `static_web_page` (generalize
+  from S-001 — review flagged it as a clean first solve),
   `python_module_with_tests` (finding A6 / improvements C5).
+- Configure a Playwright MCP server so review lens 3 stops being
+  skipped (review suggested it via `suggested_tools` both runs).
 - Container isolation for unattended runs (improvements C1 — highest-leverage safety item).
 - Backlog runner: outer loop over open stories with cooldown between
   tickets (improvements C6).
