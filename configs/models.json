@@ -1,8 +1,8 @@
 {
-  "_comment": "Model per phase (plans/harness_plan.md §3). Deterministic — no in-prompt model choices. Aliases resolve to the latest model in each tier.",
-  "decompose": "opus",
-  "plan": "opus",
-  "review": "opus",
+  "_comment": "Model per phase (plans/harness_plan.md §3). Deterministic — no in-prompt model choices. Opus stages pinned to claude-opus-4-8 explicitly (2026-06-11: the bare 'opus' tier alias is ambiguous now that 'fable' exists as a separate top-tier alias, and a fable-routed run burned the session limit).",
+  "decompose": "claude-opus-4-8",
+  "plan": "claude-opus-4-8",
+  "review": "claude-opus-4-8",
   "implement": "sonnet",
   "test": "sonnet",
   "trivial": "haiku"
