@@ -91,6 +91,19 @@ def run_ticket(
                 runs_root=runs_root,
             )
 
+            # Completion outranks the breaker: the dual gate passing means
+            # the ticket is done, and a cumulative counter (e.g. permission
+            # denials earlier in the run) must not veto finished work.
+            if (
+                stage == "review"
+                and result.status is not None
+                and result.status.outcome == "success"
+                and result.status.exit_signal
+            ):
+                state.last_failure = None
+                save_state(state, state_path)
+                return _finish(story, state, "done", None, stages_run)
+
             halt_reason = breaker.record(state, result)
             if halt_reason is not None:
                 state.last_failure = halt_reason
@@ -109,11 +122,8 @@ def run_ticket(
             if result.status.outcome == "failure":
                 state.last_failure = result.status.failure_reason or f"{stage} failed"
                 break
-            # success
+            # success (review success WITH exit_signal already returned above)
             state.last_failure = None
-            if stage == "review" and result.status.exit_signal:
-                save_state(state, state_path)
-                return _finish(story, state, "done", None, stages_run)
             if stage == "review":
                 # Review succeeded but did not assert completion — loop.
                 state.last_failure = "review success without exit_signal"
