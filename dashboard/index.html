@@ -1,0 +1,294 @@
+<!-- Serve from repo root: uv run python -m http.server 8000
+     Then open: http://localhost:8000/dashboard/ -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ticket Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      #board { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 500px) {
+      #board { grid-template-columns: 1fr; }
+    }
+
+    .column {
+      background: #1e2130;
+      border-radius: 10px;
+      padding: 1rem;
+      min-height: 120px;
+    }
+
+    .column-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #2d3149;
+    }
+
+    .col-open    .column-header { color: #94a3b8; }
+    .col-in_progress .column-header { color: #60a5fa; }
+    .col-blocked .column-header { color: #f87171; }
+    .col-done    .column-header { color: #4ade80; }
+
+    .card {
+      background: #262a40;
+      border-radius: 8px;
+      padding: 0.85rem;
+      margin-bottom: 0.65rem;
+      border: 1px solid #2d3149;
+      position: relative;
+    }
+
+    .card.passing {
+      border-color: #22c55e;
+      box-shadow: 0 0 0 1px #22c55e33;
+    }
+
+    .card.passing::after {
+      content: "✓ passing";
+      position: absolute;
+      top: 0.6rem;
+      right: 0.7rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #4ade80;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .card-id {
+      font-size: 0.7rem;
+      color: #64748b;
+      margin-bottom: 0.25rem;
+      font-family: monospace;
+    }
+
+    .card-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 0.4rem;
+      line-height: 1.3;
+    }
+
+    .card-meta {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.6rem;
+    }
+
+    .badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-type {
+      background: #334155;
+      color: #94a3b8;
+    }
+
+    .badge-priority {
+      background: #1e3a5f;
+      color: #60a5fa;
+    }
+
+    .ac-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.3rem;
+    }
+
+    .ac-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .ac-list li {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      line-height: 1.4;
+      padding: 0.2rem 0;
+      padding-left: 1rem;
+      position: relative;
+    }
+
+    .ac-list li::before {
+      content: "·";
+      position: absolute;
+      left: 0.3rem;
+      color: #475569;
+    }
+
+    #error {
+      display: none;
+      background: #3b1515;
+      border: 1px solid #f87171;
+      color: #fca5a5;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .empty-col {
+      font-size: 0.75rem;
+      color: #374151;
+      text-align: center;
+      padding: 1.5rem 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ticket Dashboard</h1>
+  <div id="error"></div>
+  <div id="board"></div>
+
+  <script>
+    const STATUSES = ["open", "in_progress", "blocked", "done"];
+    const LABELS = { open: "Open", in_progress: "In Progress", blocked: "Blocked", done: "Done" };
+
+    function showError(msg) {
+      const el = document.getElementById("error");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+
+    function buildCard(story) {
+      const card = document.createElement("div");
+      card.className = "card" + (story.passes === true ? " passing" : "");
+
+      const idEl = document.createElement("div");
+      idEl.className = "card-id";
+      idEl.textContent = story.id;
+      card.appendChild(idEl);
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "card-title";
+      titleEl.textContent = story.title || "(no title)";
+      card.appendChild(titleEl);
+
+      const meta = document.createElement("div");
+      meta.className = "card-meta";
+
+      const typeBadge = document.createElement("span");
+      typeBadge.className = "badge badge-type";
+      typeBadge.textContent = story.type || "?";
+      meta.appendChild(typeBadge);
+
+      if (story.priority != null) {
+        const prioBadge = document.createElement("span");
+        prioBadge.className = "badge badge-priority";
+        prioBadge.textContent = "P" + story.priority;
+        meta.appendChild(prioBadge);
+      }
+      card.appendChild(meta);
+
+      const ac = Array.isArray(story.acceptance_criteria) ? story.acceptance_criteria : [];
+      if (ac.length > 0) {
+        const label = document.createElement("div");
+        label.className = "ac-label";
+        label.textContent = "Acceptance Criteria";
+        card.appendChild(label);
+
+        const ul = document.createElement("ul");
+        ul.className = "ac-list";
+        ac.forEach(criterion => {
+          const li = document.createElement("li");
+          li.textContent = criterion;
+          ul.appendChild(li);
+        });
+        card.appendChild(ul);
+      }
+
+      return card;
+    }
+
+    function render(data) {
+      const board = document.getElementById("board");
+      board.innerHTML = "";
+
+      const buckets = {};
+      STATUSES.forEach(s => { buckets[s] = []; });
+
+      const stories = Array.isArray(data.stories) ? data.stories : [];
+      stories.forEach(story => {
+        const key = STATUSES.includes(story.status) ? story.status : "open";
+        buckets[key].push(story);
+      });
+
+      STATUSES.forEach(status => {
+        const col = document.createElement("div");
+        col.className = "column col-" + status;
+
+        const header = document.createElement("div");
+        header.className = "column-header";
+        header.textContent = LABELS[status] + " (" + buckets[status].length + ")";
+        col.appendChild(header);
+
+        if (buckets[status].length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty-col";
+          empty.textContent = "No tickets";
+          col.appendChild(empty);
+        } else {
+          buckets[status].forEach(story => col.appendChild(buildCard(story)));
+        }
+
+        board.appendChild(col);
+      });
+    }
+
+    (async function load() {
+      try {
+        const response = await fetch("../prd.json");
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status + " " + response.statusText);
+        }
+        const data = await response.json();
+        render(data);
+      } catch (err) {
+        showError("Could not load prd.json: " + err.message);
+      }
+    })();
+  </script>
+</body>
+</html>
