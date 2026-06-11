@@ -16,8 +16,8 @@
         "A pytest test (tests/test_dashboard.py) asserts dashboard/index.html exists and references prd.json, and the full suite uv run pytest -q stays green"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "in_progress"
+      "passes": true,
+      "status": "done"
     }
   ]
 }
