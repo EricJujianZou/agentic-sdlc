@@ -34,6 +34,7 @@ class StageResult:
     tokens_used: int = 0
     cost_usd: float = 0.0
     raw_output: str = ""
+    stderr: str = ""
     parse_error: str | None = None
     permission_denials: int = 0
     session_id: str | None = None
@@ -41,11 +42,13 @@ class StageResult:
 
 
 def build_command(
-    prompt_text: str,
     *,
     stage: str,
     model: str,
 ) -> list[str]:
+    """Argv for one headless stage. The prompt is NOT in the argv: it goes
+    to the CLI via stdin, because the Windows npm shim (claude.cmd) routes
+    argv through cmd.exe, which mangles multi-line arguments."""
     if stage not in STAGE_TOOLS:
         raise ValueError(f"stage must be one of {tuple(STAGE_TOOLS)}, got {stage!r}")
     # On Windows the CLI is an npm shim (claude.cmd), which CreateProcess
@@ -54,7 +57,6 @@ def build_command(
     return [
         shutil.which("claude") or "claude",
         "-p",
-        prompt_text,
         "--output-format",
         "json",
         "--model",
@@ -102,13 +104,14 @@ def invoke_stage(
     prompt_path = Path(prompt_path)
     if not prompt_path.exists():
         raise FileNotFoundError(f"stage prompt not found: {prompt_path}")
-    cmd = build_command(prompt_path.read_text(encoding="utf-8"), stage=stage, model=model)
+    cmd = build_command(stage=stage, model=model)
     # ADW_TICKET_RUN switches the hooks (hooks/*.py) into enforcement mode:
     # harness-file edit denial, Stop checklist, auto-commit.
     env = {**os.environ, "ADW_TICKET_RUN": "1"}
     try:
         proc = subprocess.run(
             cmd,
+            input=prompt_path.read_text(encoding="utf-8"),
             cwd=str(cwd),
             capture_output=True,
             text=True,
@@ -117,9 +120,12 @@ def invoke_stage(
             shell=False,
             env=env,
         )
-        stdout, exit_code, timed_out = proc.stdout or "", proc.returncode, False
+        stdout, stderr_text, exit_code, timed_out = (
+            proc.stdout or "", proc.stderr or "", proc.returncode, False
+        )
     except subprocess.TimeoutExpired as exc:
         stdout = (exc.stdout or b"").decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr_text = (exc.stderr or b"").decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
         exit_code, timed_out = 124, True
 
     result_text, tokens, cost, session_id, denials = _parse_envelope(stdout)
@@ -136,6 +142,7 @@ def invoke_stage(
         tokens_used=tokens,
         cost_usd=cost,
         raw_output=result_text,
+        stderr=stderr_text,
         parse_error=parse_error,
         permission_denials=denials,
         session_id=session_id,

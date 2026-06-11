@@ -139,7 +139,10 @@ def main() -> int:
             timeout_seconds=timeout_seconds,
         )
         output_path = run_dir / f"iter{state.iteration:02d}_{stage}_output.md"
-        output_path.write_text(result.raw_output, encoding="utf-8")
+        output_text = result.raw_output
+        if result.stderr.strip():
+            output_text += f"\n\n## stage stderr\n\n```\n{result.stderr.strip()}\n```\n"
+        output_path.write_text(output_text, encoding="utf-8")
         return result
 
     outcome = run_ticket(
