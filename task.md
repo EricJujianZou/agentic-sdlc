@@ -29,7 +29,6 @@ human-gate convention — flip to `open` when their turn comes.
   phone-facing taskboard) — `blocked`.
 - **S-007** — container isolation for unattended runs (improvements C1)
   — `blocked`; precondition for leaving the system alone.
-
 ## Ready
 
 *(empty — everything actionable is promoted)*
@@ -49,6 +48,18 @@ human-gate convention — flip to `open` when their turn comes.
   trivial tickets.
 
 ## Shipped
+
+### S-008 — Document stage (post-gate change doc for the merge human) — `shipped` 2026-06-12
+
+Built autonomously by the harness in 1 iteration (attempt 3; attempts 1–2
+died on a *contended* provider session limit — a concurrent 5-way
+parallel batch, `test_run3.md`, not a harness bug). Squash-merged to main
+via PR #9 (`faac430`), finalized via `workflows/merge_gate.py`. 116/116
+tests green, re-verified by hand. Run analysis:
+`observability/test_run2.md`; new findings A7–A9 in
+`plans/improvements.md`. **Caveat:** the document stage's *live* path
+(prompt compose → `claude -p` → in-stage git commit) is unexercised — its
+first real run is the next ticket after this merge; watch it.
 
 ### S-001 — Ticket dashboard (replace Notion for viewing tickets) — `shipped` 2026-06-10
 
