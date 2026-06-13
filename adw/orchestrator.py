@@ -39,6 +39,7 @@ class TicketOutcome:
     iterations: int = 1
     tokens_used: int = 0
     stages_run: list[str] = field(default_factory=list)
+    warning: str | None = None
 
 
 @dataclass
