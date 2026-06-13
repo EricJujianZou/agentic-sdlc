@@ -50,8 +50,8 @@ def test_happy_path_one_iteration(tmp_path):
 
     outcome = run(invoke, tmp_path)
     assert outcome.outcome == "done"
-    assert outcome.stages_run == ["plan", "implement", "test", "review"]
-    assert outcome.tokens_used == 400
+    assert outcome.stages_run == ["plan", "implement", "test", "review", "document"]
+    assert outcome.tokens_used == 500
 
 
 def test_failure_loops_back_to_plan_then_succeeds(tmp_path):
