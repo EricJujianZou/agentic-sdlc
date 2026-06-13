@@ -17,6 +17,7 @@ from adw.state import State, new_state, save_state
 from adw.tickets import Story
 
 STAGE_ORDER = ("plan", "implement", "test", "review")
+DOCUMENT_STAGE = "document"
 
 # invoke_fn(stage, state, story) -> StageResult. Injected so the loop is
 # testable without spawning real agents.
