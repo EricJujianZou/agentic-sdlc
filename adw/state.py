@@ -9,7 +9,7 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-STAGES = ("plan", "implement", "test", "review")
+STAGES = ("plan", "implement", "test", "review", "document")
 
 
 @dataclass
