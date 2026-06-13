@@ -104,7 +104,14 @@ def run_ticket(
             ):
                 state.last_failure = None
                 save_state(state, state_path)
-                return _finish(story, state, "done", None, stages_run)
+                warning = _run_document_stage(
+                    story, state, invoke_fn,
+                    state_path=state_path,
+                    runs_root=runs_root,
+                    stages_run=stages_run,
+                    breaker=breaker,
+                )
+                return _finish(story, state, "done", None, stages_run, warning=warning)
 
             halt_reason = breaker.record(state, result)
             if halt_reason is not None:
