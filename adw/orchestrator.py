@@ -201,6 +201,7 @@ def _run_document_stage(
             },
             runs_root=runs_root,
         )
+        save_state(state, state_path)
         halt_reason = breaker.record(state, result)
         if halt_reason is not None:
             return f"document stage warning (breaker): {halt_reason}"
