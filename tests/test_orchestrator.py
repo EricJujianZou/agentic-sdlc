@@ -50,8 +50,8 @@ def test_happy_path_one_iteration(tmp_path):
 
     outcome = run(invoke, tmp_path)
     assert outcome.outcome == "done"
-    assert outcome.stages_run == ["plan", "implement", "test", "review"]
-    assert outcome.tokens_used == 400
+    assert outcome.stages_run == ["plan", "implement", "test", "review", "document"]
+    assert outcome.tokens_used == 500
 
 
 def test_failure_loops_back_to_plan_then_succeeds(tmp_path):
@@ -141,8 +141,8 @@ def test_state_persisted_during_run(tmp_path):
     run(invoke, tmp_path)
     state = load_state(tmp_path / "state.json")
     assert state.ticket_id == "S-001"
-    assert state.stage == "review"
-    assert state.budget_used_tokens == 400
+    assert state.stage == "document"
+    assert state.budget_used_tokens == 500
 
 
 def test_successful_review_outranks_breaker(tmp_path):
@@ -177,3 +177,68 @@ def test_breaker_still_halts_unfinished_work(tmp_path):
     outcome = run(invoke, tmp_path, breaker=AlwaysOpen())
     assert outcome.outcome == "halted"
     assert "circuit open" in outcome.reason
+
+
+# --- document stage tests ---
+
+
+def test_document_runs_once_after_dual_gate(tmp_path):
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert outcome.warning is None
+    assert outcome.stages_run.count("document") == 1
+    assert outcome.stages_run[-1] == "document"
+
+
+def test_document_not_invoked_when_review_fails(tmp_path):
+    def invoke(stage, state, story):
+        if stage == "review":
+            return fail(stage, reason="review failed")
+        return ok(stage)
+
+    outcome = run(invoke, tmp_path, max_iterations=1)
+    assert "document" not in outcome.stages_run
+
+
+def test_document_not_invoked_when_review_loops(tmp_path):
+    """Review success without exit_signal should loop, not invoke document."""
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=False)
+
+    outcome = run(invoke, tmp_path, max_iterations=2)
+    assert outcome.outcome == "halted"
+    assert "document" not in outcome.stages_run
+
+
+def test_document_failure_retried_once_still_done(tmp_path):
+    doc_calls = []
+
+    def invoke(stage, state, story):
+        if stage == "document":
+            doc_calls.append(stage)
+            return fail(stage, reason="commit failed")
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert outcome.warning is not None and len(outcome.warning) > 0
+    assert outcome.stages_run.count("document") == 2
+
+
+def test_document_breaker_halt_becomes_warning(tmp_path):
+    class BreakerOnDocument:
+        def record(self, state, result):
+            if state.stage == "document":
+                return "circuit open: document"
+            return None
+
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path, breaker=BreakerOnDocument())
+    assert outcome.outcome == "done"
+    assert outcome.warning is not None
+    assert "breaker" in outcome.warning

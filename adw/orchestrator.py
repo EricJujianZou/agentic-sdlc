@@ -17,6 +17,7 @@ from adw.state import State, new_state, save_state
 from adw.tickets import Story
 
 STAGE_ORDER = ("plan", "implement", "test", "review")
+DOCUMENT_STAGE = "document"
 
 # invoke_fn(stage, state, story) -> StageResult. Injected so the loop is
 # testable without spawning real agents.
@@ -39,6 +40,7 @@ class TicketOutcome:
     iterations: int = 1
     tokens_used: int = 0
     stages_run: list[str] = field(default_factory=list)
+    warning: str | None = None
 
 
 @dataclass
@@ -102,7 +104,14 @@ def run_ticket(
             ):
                 state.last_failure = None
                 save_state(state, state_path)
-                return _finish(story, state, "done", None, stages_run)
+                warning = _run_document_stage(
+                    story, state, invoke_fn,
+                    state_path=state_path,
+                    runs_root=runs_root,
+                    stages_run=stages_run,
+                    breaker=breaker,
+                )
+                return _finish(story, state, "done", None, stages_run, warning=warning)
 
             halt_reason = breaker.record(state, result)
             if halt_reason is not None:
@@ -143,6 +152,8 @@ def _finish(
     outcome: str,
     reason: str | None,
     stages_run: list[str],
+    *,
+    warning: str | None = None,
 ) -> TicketOutcome:
     return TicketOutcome(
         ticket_id=story.id,
@@ -151,4 +162,55 @@ def _finish(
         iterations=state.iteration,
         tokens_used=state.budget_used_tokens,
         stages_run=stages_run,
+        warning=warning,
     )
+
+
+def _run_document_stage(
+    story: Story,
+    state: State,
+    invoke_fn: InvokeFn,
+    *,
+    state_path: str | Path,
+    runs_root: str | Path,
+    stages_run: list[str],
+    breaker: Breaker,
+) -> str | None:
+    """Run the document stage once with one retry. Returns None on success,
+    or a warning string if both attempts fail or the breaker fires."""
+    state.stage = DOCUMENT_STAGE
+    last_problem: str = "unknown failure"
+    for _attempt in (1, 2):
+        save_state(state, state_path)
+        result = invoke_fn(DOCUMENT_STAGE, state, story)
+        state.budget_used_tokens += result.tokens_used
+        stages_run.append(DOCUMENT_STAGE)
+        runlog.write_stage_log(
+            story.id,
+            stage=DOCUMENT_STAGE,
+            iteration=state.iteration,
+            payload={
+                "stage": DOCUMENT_STAGE,
+                "outcome": result.status.outcome if result.status else None,
+                "summary": result.status.summary if result.status else None,
+                "parse_error": result.parse_error,
+                "timed_out": result.timed_out,
+                "tokens_used": result.tokens_used,
+                "exit_code": result.exit_code,
+                "stderr_head": result.stderr[:500],
+            },
+            runs_root=runs_root,
+        )
+        save_state(state, state_path)
+        halt_reason = breaker.record(state, result)
+        if halt_reason is not None:
+            return f"document stage warning (breaker): {halt_reason}"
+        if result.status is not None and result.status.outcome == "success":
+            return None
+        if result.timed_out:
+            last_problem = "timed out"
+        elif result.status is not None and result.status.failure_reason:
+            last_problem = result.status.failure_reason
+        else:
+            last_problem = result.parse_error or f"outcome={result.status.outcome if result.status else 'no status block'}"
+    return f"document stage warning: {last_problem}"
