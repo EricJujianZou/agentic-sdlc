@@ -25,6 +25,7 @@ STAGE_TOOLS: dict[str, list[str]] = {
     "implement": ["Read", "Glob", "Grep", "Edit", "Write", "Bash"],
     "test": ["Read", "Glob", "Grep", "Bash", "mcp__playwright"],
     "review": ["Read", "Glob", "Grep", "mcp__playwright", *_GIT_READONLY],
+    "document": ["Read", "Glob", "Grep", "Write", *_GIT_READONLY, "Bash(git add:*)", "Bash(git commit:*)"],
 }
 
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
