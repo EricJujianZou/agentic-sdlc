@@ -141,8 +141,8 @@ def test_state_persisted_during_run(tmp_path):
     run(invoke, tmp_path)
     state = load_state(tmp_path / "state.json")
     assert state.ticket_id == "S-001"
-    assert state.stage == "review"
-    assert state.budget_used_tokens == 400
+    assert state.stage == "document"
+    assert state.budget_used_tokens == 500
 
 
 def test_successful_review_outranks_breaker(tmp_path):
