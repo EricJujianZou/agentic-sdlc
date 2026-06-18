@@ -5,18 +5,20 @@ else — the cooldown gate, config loading, story selection, work branch,
 prompt composition, invoke wiring, and outcome bookkeeping — is identical
 and lives here so the entry-point scripts in workflows/ stay thin and never
 triplicate orchestration (architecture.md principle 1). Each workflow script
-owns its stage order and passes it in; this module never decides it.
+owns its stage order and passes it in; this module never decides it. The
+backlog runner (workflows/run_backlog.py) reuses the same per-story core.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 from adw import runlog
 from adw.invoke import invoke_stage
-from adw.orchestrator import run_ticket
+from adw.orchestrator import STAGE_ORDER, TicketOutcome, run_ticket
 from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
 from adw.state import State
 from adw.tickets import Story, get_story, load_prd, mark_story, pick_next_story, save_prd
@@ -27,6 +29,16 @@ STATE_PATH = REPO_ROOT / "state.json"
 MODELS_PATH = REPO_ROOT / "configs" / "models.json"
 BUDGETS_PATH = REPO_ROOT / "configs" / "budgets.json"
 COMMANDS_DIR = REPO_ROOT / "commands"
+
+# Which stage pipeline each ticket type runs; the backlog runner dispatches
+# on this. feat/system-repair get the full cycle, bug skips review, chore
+# skips planning. Mirrors the STAGE_ORDER each workflow script declares.
+STAGE_ORDER_BY_TYPE: dict[str, tuple[str, ...]] = {
+    "feat": STAGE_ORDER,
+    "system-repair": STAGE_ORDER,
+    "bug": ("plan", "implement", "test"),
+    "chore": ("implement", "test"),
+}
 
 
 def _git(*args: str) -> str:
@@ -125,50 +137,19 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
     return prompt_path
 
 
-def run_workflow(
+def run_one_story(
+    story: Story,
     stage_order: tuple[str, ...],
     *,
-    ticket_types: tuple[str, ...] | None = None,
-    description: str = "",
-) -> int:
-    """Drive one ticket through `stage_order`. Returns a process exit code
-    (0 = done, 1 = blocked/halted/cooldown-refused).
-
-    `ticket_types` filters auto-selection so each workflow only picks the
-    ticket types it is built for; an explicit --ticket overrides the filter.
-    """
-    parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--ticket", help="story id; defaults to highest-priority open story")
-    parser.add_argument("--max-iterations", type=int, default=None)
-    parser.add_argument(
-        "--override-cooldown",
-        action="store_true",
-        help="start despite an active circuit cooldown (human judgment call)",
-    )
-    args = parser.parse_args()
-
-    cooldown_msg = check_cooldown(STATE_PATH)
-    if cooldown_msg and not args.override_cooldown:
-        print(f"refusing to start: {cooldown_msg}")
-        print("pass --override-cooldown to start anyway")
-        return 1
-
-    models = json.loads(MODELS_PATH.read_text(encoding="utf-8"))
-    budgets = json.loads(BUDGETS_PATH.read_text(encoding="utf-8"))
-    max_iterations = args.max_iterations or budgets["max_iterations_default"]
+    models: dict,
+    budgets: dict,
+    max_iterations: int,
+) -> TicketOutcome:
+    """Run one story through `stage_order` and record its outcome in prd.json.
+    Shared by the single-ticket CLI (run_workflow) and the backlog runner."""
     timeout_seconds = budgets["stage_timeout_minutes"] * 60
-
-    prd = load_prd(PRD_PATH)
-    story = (
-        get_story(prd, args.ticket)
-        if args.ticket
-        else pick_next_story(prd, types=ticket_types)
-    )
-    if story is None:
-        print("no open story with passes=false — nothing to do")
-        return 0
-
     _ensure_work_branch(f"adw/{story.id}")
+    prd = load_prd(PRD_PATH)
     mark_story(prd, story.id, status="in_progress")
     save_prd(prd, PRD_PATH)
     _commit_bookkeeping(f"chore: mark {story.id} in_progress")
@@ -202,14 +183,103 @@ def run_workflow(
 
     prd = load_prd(PRD_PATH)
     if outcome.outcome == "done":
+        mark_story(prd, story.id, status="done", passes=True)
+    else:
+        mark_story(prd, story.id, status="blocked")
+    save_prd(prd, PRD_PATH)
+    _commit_bookkeeping(f"chore: record {story.id} outcome: {outcome.outcome}")
+    return outcome
+
+
+def run_workflow(
+    stage_order: tuple[str, ...],
+    *,
+    ticket_types: tuple[str, ...] | None = None,
+    description: str = "",
+) -> int:
+    """Drive one ticket through `stage_order`. Returns a process exit code
+    (0 = done, 1 = blocked/halted/cooldown-refused).
+
+    `ticket_types` filters auto-selection so each workflow only picks the
+    ticket types it is built for; an explicit --ticket overrides the filter.
+    """
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--ticket", help="story id; defaults to highest-priority open story")
+    parser.add_argument("--max-iterations", type=int, default=None)
+    parser.add_argument(
+        "--override-cooldown",
+        action="store_true",
+        help="start despite an active circuit cooldown (human judgment call)",
+    )
+    args = parser.parse_args()
+
+    cooldown_msg = check_cooldown(STATE_PATH)
+    if cooldown_msg and not args.override_cooldown:
+        print(f"refusing to start: {cooldown_msg}")
+        print("pass --override-cooldown to start anyway")
+        return 1
+
+    models = json.loads(MODELS_PATH.read_text(encoding="utf-8"))
+    budgets = json.loads(BUDGETS_PATH.read_text(encoding="utf-8"))
+    max_iterations = args.max_iterations or budgets["max_iterations_default"]
+
+    prd = load_prd(PRD_PATH)
+    story = (
+        get_story(prd, args.ticket)
+        if args.ticket
+        else pick_next_story(prd, types=ticket_types)
+    )
+    if story is None:
+        print("no open story with passes=false — nothing to do")
+        return 0
+
+    outcome = run_one_story(
+        story, stage_order, models=models, budgets=budgets, max_iterations=max_iterations
+    )
+    if outcome.outcome == "done":
         # Merge to main stays a human gate (plans/safety_plan.md §4); the
         # ticket is done, the branch awaits review/merge.
-        mark_story(prd, story.id, status="done", passes=True)
         print(f"{story.id} done after {outcome.iterations} iteration(s); "
               f"branch adw/{story.id} ready for merge gate")
     else:
-        mark_story(prd, story.id, status="blocked")
         print(f"{story.id} {outcome.outcome}: {outcome.reason}")
-    save_prd(prd, PRD_PATH)
-    _commit_bookkeeping(f"chore: record {story.id} outcome: {outcome.outcome}")
     return 0 if outcome.outcome == "done" else 1
+
+
+@dataclass
+class BacklogResult:
+    tickets_run: int
+    stop_reason: str
+    clean: bool  # True if the loop ended on an empty backlog or the bound
+
+
+def run_backlog_loop(
+    *,
+    run_story_fn,
+    cooldown_fn,
+    max_tickets: int,
+    prd_path=PRD_PATH,
+    state_path=STATE_PATH,
+) -> BacklogResult:
+    """Outer loop over open stories (snarktank/ralph pattern). Picks the next
+    open story, runs it via run_story_fn, and repeats until the backlog empties
+    or max_tickets is hit. Stops (never skips) on the first non-done outcome,
+    and never overrides an active circuit cooldown. Adds no new authority — the
+    inner safety model (run_ticket + breaker) is untouched. run_story_fn and
+    cooldown_fn are injected so the loop is testable without real workflows."""
+    count = 0
+    while count < max_tickets:
+        cooldown = cooldown_fn(state_path)
+        if cooldown is not None:
+            return BacklogResult(count, f"circuit cooldown active; stopping: {cooldown}", False)
+        prd = load_prd(prd_path)
+        story = pick_next_story(prd)
+        if story is None:
+            return BacklogResult(count, "no open stories remain", True)
+        outcome = run_story_fn(story)
+        count += 1
+        if outcome.outcome != "done":
+            return BacklogResult(
+                count, f"stopped at {story.id}: {outcome.outcome} ({outcome.reason})", False
+            )
+    return BacklogResult(count, f"reached --max-tickets ({max_tickets})", True)
