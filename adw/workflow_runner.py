@@ -98,6 +98,46 @@ def _make_verify_fn(budgets: dict):
     return verify
 
 
+def _push_branch(branch: str) -> bool:
+    """Push `branch` to origin; degrade (print, return False) on any failure
+    so a missing remote or offline credential never affects ticket outcome."""
+    try:
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        print(f"github notify: push of {branch} failed, continuing without it: {exc}")
+        return False
+
+
+def _notify_github(story: Story, outcome: str, reason: str = "") -> None:
+    """Best-effort outbound notification: push the work branch, open/update a
+    PR for it, and comment the outcome on the source issue if one exists.
+    Never raises — any GitHub/credential failure is printed and swallowed so
+    a `done` ticket can never be turned into a failure by notification."""
+    branch = f"adw/{story.id}"
+    _push_branch(branch)
+    try:
+        token = get_token()
+        owner, repo = repo_slug()
+        open_or_update_pr(
+            owner, repo, token,
+            head=branch, base="main",
+            title=f"{story.id}: {story.title}",
+            body=pr_body(story, outcome),
+        )
+        issue_number = source_issue_number(story.id)
+        if issue_number is not None:
+            comment_on_issue(
+                owner, repo, token, issue_number,
+                outcome_comment_body(story, outcome, reason),
+            )
+    except GitHubError as exc:
+        print(f"github notify skipped: {exc}")
+
+
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file with the ticket and state context."""
     command_file = COMMANDS_DIR / f"{stage.upper()}.md"
