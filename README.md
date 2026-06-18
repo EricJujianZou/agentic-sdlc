@@ -130,23 +130,24 @@ a red PR merge until you turn on branch protection. That is a one-time
 manual repo-admin step (agents cannot change repo settings or push to
 `main`, by design), so do it once from a plain terminal:
 
-- **GitHub UI:** Settings → Branches → add a ruleset (or classic protection
-  rule) for `main` → "Require status checks to pass" → select the CI check
-  (it appears as `test`, the job name; rulesets may show it as `CI / test`)
-  → save.
-- **`gh` CLI:**
+**GitHub UI:** Settings → Branches → add a ruleset (or classic protection
+rule) for `main` → "Require status checks to pass" → select the CI check
+(it appears as `test`, the job name; rulesets may show it as `CI / test`) →
+save.
 
-  ```bash
-  gh api -X PUT repos/EricJujianZou/agentic-sdlc/branches/main/protection \
-    --input - <<'JSON'
-  {
-    "required_status_checks": { "strict": true, "contexts": ["test"] },
-    "enforce_admins": true,
-    "required_pull_request_reviews": null,
-    "restrictions": null
-  }
-  JSON
-  ```
+**`gh` CLI** (run from a plain terminal, not an agent session):
+
+```bash
+gh api -X PUT repos/EricJujianZou/agentic-sdlc/branches/main/protection \
+  --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true, "contexts": ["test"] },
+  "enforce_admins": true,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+JSON
+```
 
 The check context only exists after the workflow's first run, so open one
 PR (this gives the check a name), then enable protection selecting that
