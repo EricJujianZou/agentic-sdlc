@@ -238,6 +238,7 @@ def run_one_story(
         mark_story(prd, story.id, status="blocked")
     save_prd(prd, PRD_PATH)
     _commit_bookkeeping(f"chore: record {story.id} outcome: {outcome.outcome}")
+    _notify_github(story, outcome.outcome, outcome.reason or "")
     return outcome
 
 
