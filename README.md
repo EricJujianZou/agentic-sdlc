@@ -115,6 +115,45 @@ FYIs / sharp edges:
   expose production credentials to the loop; prefer container isolation
   for fully unattended operation (planned, `plans/improvements.md` C1).
 
+## CI gate and branch protection
+
+The in-loop test and review stages are produced by the same agents that
+wrote the code — they sit *inside* the harness's trust boundary. The CI
+gate (`.github/workflows/ci.yml`, S-009) runs `uv run pytest -q` on every
+pull request to `main` in GitHub's environment, where no stage agent can
+skip, fake, or misreport it. It is the **agent-proof** half of the safety
+model and the precondition that makes auto-merge defensible (the in-harness
+mirror is S-010 / `plans/improvements.md` C3).
+
+The workflow file alone does not *enforce* anything — GitHub will still let
+a red PR merge until you turn on branch protection. That is a one-time
+manual repo-admin step (agents cannot change repo settings or push to
+`main`, by design), so do it once from a plain terminal:
+
+- **GitHub UI:** Settings → Branches → add a ruleset (or classic protection
+  rule) for `main` → "Require status checks to pass" → select the CI check
+  (it appears as `test`, the job name; rulesets may show it as `CI / test`)
+  → save.
+- **`gh` CLI:**
+
+  ```bash
+  gh api -X PUT repos/EricJujianZou/agentic-sdlc/branches/main/protection \
+    --input - <<'JSON'
+  {
+    "required_status_checks": { "strict": true, "contexts": ["test"] },
+    "enforce_admins": true,
+    "required_pull_request_reviews": null,
+    "restrictions": null
+  }
+  JSON
+  ```
+
+The check context only exists after the workflow's first run, so open one
+PR (this gives the check a name), then enable protection selecting that
+name. Once enabled, `main` rejects any merge whose CI check is not green —
+the single deterministic gate that protects you when no human reads the
+diff.
+
 ## Repository map
 
 | Path | What it is | Humans edit? |
