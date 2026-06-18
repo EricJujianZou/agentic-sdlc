@@ -3,6 +3,7 @@
   "hourly_api_call_cap": 30,
   "per_ticket_token_budget": 2000000,
   "permission_denial_cap": 10,
+  "instant_failure_cap": 2,
   "max_iterations_default": 5,
   "circuit_cooldown_minutes": 30,
   "stage_timeout_minutes": 15

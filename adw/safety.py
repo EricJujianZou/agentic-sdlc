@@ -44,6 +44,7 @@ class SafetyConfig:
     # outputs would make any short (possibly legitimate) reply trip it.
     output_decline_floor_chars: int = 1500
     permission_denials: int = 2
+    instant_failure_cap: int = 2
     per_ticket_token_budget: int | None = None
     cooldown_minutes: int = 30
 
@@ -54,6 +55,7 @@ class SafetyConfig:
             per_ticket_token_budget=raw.get("per_ticket_token_budget"),
             cooldown_minutes=raw.get("circuit_cooldown_minutes", cls.cooldown_minutes),
             permission_denials=raw.get("permission_denial_cap", cls.permission_denials),
+            instant_failure_cap=raw.get("instant_failure_cap", cls.instant_failure_cap),
         )
 
 
@@ -71,6 +73,7 @@ class CircuitBreaker:
     _error_streak: int = 0
     _last_error: str | None = None
     _denials_total: int = 0
+    _instant_failure_streak: int = 0
     _prev_output_len: dict[str, int] = field(default_factory=dict)
 
     def record(self, state: State, result: StageResult) -> str | None:
@@ -85,6 +88,24 @@ class CircuitBreaker:
 
         if detect_usage_limit(result.raw_output):
             return "provider usage limit reached; pausing instead of looping"
+
+        # Dead-on-arrival: the CLI exited non-zero having produced nothing
+        # (0 tokens, empty output). The same-error rule (5 loops) can never
+        # catch this before max_iterations under default budgets, so trip
+        # fast on a short consecutive streak (test_run1.md follow-up 1).
+        if (
+            result.exit_code != 0
+            and result.tokens_used == 0
+            and not result.raw_output.strip()
+        ):
+            self._instant_failure_streak += 1
+            if self._instant_failure_streak >= cfg.instant_failure_cap:
+                return (
+                    f"circuit open: {self._instant_failure_streak} consecutive "
+                    "dead-on-arrival stage results (exit!=0, 0 tokens, no output)"
+                )
+        else:
+            self._instant_failure_streak = 0
 
         self._denials_total += result.permission_denials
         if self._denials_total >= cfg.permission_denials:
