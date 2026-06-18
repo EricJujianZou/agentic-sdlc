@@ -304,3 +304,52 @@ def test_trivial_order_test_failure_loops_back_to_implement(tmp_path):
     assert outcome.outcome == "done"
     assert (2, "implement") in calls
     assert "plan" not in [stage for _, stage in calls]
+
+
+# --- deterministic test-evidence gate (S-010) ---
+
+
+def test_test_evidence_green_completes(tmp_path):
+    calls = []
+
+    def verify():
+        calls.append("verify")
+        return True, ""
+
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path, verify_fn=verify)
+    assert outcome.outcome == "done"
+    assert calls == ["verify"]  # ran exactly once, after the gate
+    assert "document" in outcome.stages_run
+
+
+def test_test_evidence_red_blocks_done_and_skips_document(tmp_path):
+    def verify():
+        return False, "1 failed, 130 passed"
+
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path, verify_fn=verify)
+    assert outcome.outcome == "blocked"
+    assert "1 failed" in outcome.reason
+    assert "document" not in outcome.stages_run
+    state = load_state(tmp_path / "state.json")
+    assert "1 failed" in state.last_failure
+
+
+def test_test_evidence_not_run_until_completion(tmp_path):
+    calls = []
+
+    def verify():
+        calls.append("verify")
+        return True, ""
+
+    def invoke(stage, state, story):
+        return ok(stage)  # no exit_signal anywhere -> never completes
+
+    outcome = run(invoke, tmp_path, verify_fn=verify, max_iterations=1)
+    assert outcome.outcome == "halted"
+    assert calls == []  # never reached the gate, so never re-ran the suite

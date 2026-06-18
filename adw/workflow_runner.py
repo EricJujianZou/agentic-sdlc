@@ -52,6 +52,30 @@ def _commit_bookkeeping(message: str) -> None:
         _git("commit", "-m", message)
 
 
+def _make_verify_fn(budgets: dict):
+    """Build the deterministic test-evidence runner the orchestrator calls
+    after the dual gate (improvements C3). Command and timeout are budgets
+    knobs; a non-zero exit or a timeout counts as 'not verified', so a
+    failing tree can never be accepted as done."""
+    command = budgets.get("test_evidence_command") or ["uv", "run", "pytest", "-q"]
+    timeout_seconds = budgets.get("test_evidence_timeout_minutes", 10) * 60
+
+    def verify() -> tuple[bool, str]:
+        try:
+            proc = subprocess.run(
+                command, cwd=REPO_ROOT, capture_output=True, text=True,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired:
+            return False, f"test-evidence run timed out after {timeout_seconds}s"
+        if proc.returncode == 0:
+            return True, ""
+        detail = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return False, detail[-800:] if detail else f"pytest exited {proc.returncode}"
+
+    return verify
+
+
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file with the ticket and state context."""
     command_file = COMMANDS_DIR / f"{stage.upper()}.md"
@@ -173,6 +197,7 @@ def run_workflow(
         state_path=STATE_PATH,
         max_iterations=max_iterations,
         breaker=CircuitBreaker(SafetyConfig.from_budgets(BUDGETS_PATH)),
+        verify_fn=_make_verify_fn(budgets),
     )
 
     prd = load_prd(PRD_PATH)

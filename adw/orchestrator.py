@@ -23,6 +23,13 @@ DOCUMENT_STAGE = "document"
 # testable without spawning real agents.
 InvokeFn = Callable[[str, State, Story], StageResult]
 
+# verify_fn() -> (passed, detail). The orchestrator's own deterministic
+# test-evidence re-run after the dual gate passes — NOT a stage agent's
+# self-report (improvements C3). Injected so the loop is testable without
+# spawning the real suite; defaults to None (no extra check), the same way
+# breaker defaults to a no-op.
+VerifyFn = Callable[[], "tuple[bool, str]"]
+
 
 class Breaker(Protocol):
     """Circuit-breaker interface; the real one is adw/safety.py."""
@@ -57,6 +64,7 @@ def run_ticket(
     state_path: str | Path,
     max_iterations: int = 5,
     breaker: Breaker | None = None,
+    verify_fn: VerifyFn | None = None,
     runs_root: str | Path = runlog.DEFAULT_RUNS_ROOT,
 ) -> TicketOutcome:
     """Drive one ticket through its `stage_order` (plan -> implement -> test
@@ -111,6 +119,18 @@ def run_ticket(
             ):
                 state.last_failure = None
                 save_state(state, state_path)
+                # Deterministic test-evidence gate (improvements C3): the
+                # orchestrator re-runs the suite itself before accepting the
+                # agents' "done". A red suite blocks the ticket and the
+                # document stage never runs — the agents cannot self-certify
+                # a failing tree as done.
+                if verify_fn is not None:
+                    passed, detail = verify_fn()
+                    if not passed:
+                        reason = f"test-evidence re-run failed: {detail}"
+                        state.last_failure = reason
+                        save_state(state, state_path)
+                        return _finish(story, state, "blocked", reason, stages_run)
                 warning = _run_document_stage(
                     story, state, invoke_fn,
                     state_path=state_path,
