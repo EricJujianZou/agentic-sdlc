@@ -6,7 +6,10 @@ assert the exit code maps to pass/fail and a timeout counts as a failure.
 """
 import subprocess
 
-from adw.workflow_runner import _make_verify_fn
+import adw.workflow_runner as workflow_runner
+from adw.github import GitHubError
+from adw.tickets import Story
+from adw.workflow_runner import _make_verify_fn, _notify_github
 
 
 class _Proc:
