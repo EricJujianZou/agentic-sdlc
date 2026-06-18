@@ -141,6 +141,42 @@
       "skill_match": null,
       "passes": true,
       "status": "done"
+    },
+    {
+      "id": "S-009",
+      "type": "system-repair",
+      "priority": 8,
+      "title": "CI gate: GitHub Actions pytest on every PR + branch protection on main",
+      "description": "Add an independent, agent-proof correctness gate that lives OUTSIDE the harness's trust boundary. Today the only test signal is the in-loop test stage's self-report plus the dual exit gate - all produced by the same stage agents that wrote the code, so a subtly-wrong agent can write a trivially-passing test, skip a failing one, or self-report green. Add a GitHub Actions workflow that runs `uv run pytest -q` on every pull request targeting main, so the same suite runs where no stage agent can edit, skip, or misreport it. This is the precondition that makes any future auto-merge defensible (S-010 / improvements C3 is the in-harness mirror; this is the out-of-harness one). NOTE: the file goes in .github/workflows/ci.yml - this is GitHub's CI directory and is distinct from the repo-root workflows/ directory that holds the harness orchestrators; do not put CI yaml in workflows/. Branch protection itself (requiring the check before merge to main) is a one-time human repo-admin action - agents cannot change repo settings or push to main - so the agent-runnable scope is the workflow file plus README docs; enabling branch protection is a documented manual human step, explicitly out of agent scope and never a blocker to report.",
+      "acceptance_criteria": [
+        ".github/workflows/ci.yml triggers on pull_request targeting main, sets up Python 3.11 and uv, runs `uv sync` then `uv run pytest -q`, and fails the check on any test failure; it uses no secrets and no network beyond dependency install (the suite is offline per README)",
+        "The CI yaml lives in .github/workflows/ (GitHub's directory), never in the repo-root workflows/ directory that holds harness orchestrators",
+        "README documents the one-time manual branch-protection step (require the CI check to pass before merging to main) with exact gh api or UI instructions, and states this is the agent-proof gate that makes auto-merge defensible",
+        "The ticket's automatable scope is limited to the workflow file and README docs; branch-protection enablement is labeled a manual human/admin action and is explicitly out of agent scope, so a headless run neither attempts it nor reports blocked on it",
+        "When a PR is opened for the work branch, the CI workflow runs and passes (the suite is green under Actions, verified at the merge gate, not in-stage)",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "S-010",
+      "type": "system-repair",
+      "priority": 9,
+      "title": "Deterministic test-evidence re-run in the orchestrator before accepting done",
+      "description": "From improvements C3 (frankbria/ralph-claude-code pattern), promoted out of task.md ideas. Today adw/orchestrator.py run_ticket accepts a ticket as done on the dual gate alone (review outcome=success AND exit_signal=true), which trusts the test stage's self-reported green suite. Add a deterministic re-run of `uv run pytest -q` inside run_ticket itself - the orchestrator's own subprocess, not a stage agent's self-report - after the dual gate passes and BEFORE the document stage runs. A non-zero result prevents done: the outcome downgrades to blocked/halted with the failing summary captured in state.json last_failure, and the document stage does not run. A green result lets the existing done path (document stage, then done) proceed unchanged. This is the in-harness mirror of S-009's CI gate and the prerequisite for auto-merging trivial tickets without a human reading the diff.",
+      "acceptance_criteria": [
+        "run_ticket, after the dual gate passes and before invoking the document stage, runs `uv run pytest -q` via subprocess and inspects the exit code - the orchestrator's own check, never a stage self-report",
+        "A non-zero pytest result prevents done: outcome becomes blocked (or halted), the captured failing summary is written to state.json last_failure, and the document stage is not invoked",
+        "A green pytest result lets the existing document-then-done path proceed unchanged",
+        "The pytest command and its timeout are configs/budgets.json knobs, not hardcoded",
+        "Unit tests with a stubbed subprocess runner cover: green re-run still yields done, red re-run blocks done with the failure recorded; no real pytest is spawned in the unit test",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
     }
   ]
 }
