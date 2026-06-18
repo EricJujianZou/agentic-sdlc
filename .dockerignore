@@ -1,0 +1,9 @@
+# The image holds only the toolchain; the repo is bind-mounted at run time,
+# never copied in. Keep the build context tiny so `docker build` is fast.
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+observability/runs
+node_modules

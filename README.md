@@ -74,6 +74,7 @@ fail → bounded loop back to plan (circuit breaker watching)
 | `--ticket S-NNN` | Run a specific story | highest-priority `open` story with `passes: false` |
 | `--max-iterations N` | Cap on plan→review loops | `max_iterations_default` in `configs/budgets.json` (5) |
 | `--override-cooldown` | Start despite an active circuit-breaker cooldown | off — refusing is the default; overriding is a human judgment call |
+| `--isolate` | Run each stage session inside a docker container (= `ADW_ISOLATION=1`); see [Container isolation](#container-isolation) | off — stages run on the host |
 
 Exit code 0 = ticket done; 1 = blocked/halted (reason printed, also in
 `state.json.last_failure`).
@@ -113,7 +114,62 @@ FYIs / sharp edges:
   Edit/Write/Bash; PowerShell is deliberately not in scope on any stage).
 - Runs assume the safety floor in `claude-code-harness-repos.md`: never
   expose production credentials to the loop; prefer container isolation
-  for fully unattended operation (planned, `plans/improvements.md` C1).
+  for fully unattended operation (see [Container isolation](#container-isolation)).
+
+## Container isolation
+
+By default stages run on the bare host. For unattended operation the safety
+floor (`plans/safety_plan.md` §5) wants each stage session confined to a
+container: the host filesystem outside the repo is unreachable, no host
+credentials cross the boundary beyond a scoped git token (and the API key
+the CLI needs), and `--dangerously-skip-permissions` becomes defensible
+because it is contained.
+
+**Enable it** with `--isolate` (or `ADW_ISOLATION=1`). When on, `adw/invoke.py`
+wraps the same `claude -p …` argv in `docker run` (`adw/isolation.py`);
+when off, the host path runs exactly as before — that is the documented
+fallback, and the full test suite exercises the off path.
+
+**Setup (one time):**
+
+```bash
+# 1. Build the sandbox image (toolchain only; the repo is mounted, not copied):
+docker build -t adw-sandbox:latest -f docker/Dockerfile .
+
+# 2. Give the container its own scoped credentials (never the host's):
+export ANTHROPIC_API_KEY=sk-...        # a key scoped to this use
+export ADW_GIT_TOKEN=ghp_...           # a PAT with push to this repo only
+
+# 3. Run a ticket with stages isolated:
+uv run python workflows/feat_full_cycle.py --ticket S-NNN --isolate
+```
+
+At run time `adw` mounts only the repo at `/workspace` (`--mount`, so Windows
+paths parse), sets `--workdir /workspace`, and forwards **only**
+`ADW_TICKET_RUN`/`ADW_STAGE` plus the allowlisted secrets above via `-e NAME`
+(by name, so values never land in the argv). The host credential store,
+`~/.claude` session, and `~/.gitconfig` are never mounted. Hooks keep working
+because `.claude/settings.json` and `hooks/*.py` live in the mounted repo and
+the image carries `uv`/python/git. Knobs: `ADW_SANDBOX_IMAGE` (default
+`adw-sandbox:latest`), `ADW_SANDBOX_NETWORK` (default `bridge`), `ADW_DOCKER_BIN`
+(default `docker`).
+
+**Limits (read before trusting it):**
+
+- **Verify the live container by hand.** The offline test suite only asserts
+  the shape of the `docker run` argv and the on/off dispatch — it cannot run a
+  container. Confirm real isolation on your host: that a stage cannot read a
+  file outside the repo, that `printenv` inside shows no host secrets beyond
+  the two above, and that the autocommit/guard/stop hooks fire in-container.
+- **Network is bridged egress, not an allowlist.** `bridge` permits any
+  outbound connection (needed for `api.anthropic.com` and `github.com`).
+  Restricting egress to just those hosts (a proxy or `--network` policy) is a
+  follow-up, not delivered here.
+- **In-container CLI auth is your responsibility.** The image ships no
+  credentials; if `ANTHROPIC_API_KEY` is unset the stage will fail to
+  authenticate inside the container.
+- **Docker Desktop must be running.** With the daemon down, `--isolate` fails
+  at `docker run`; the host fallback (omit the flag) always works.
 
 ## CI gate and branch protection
 

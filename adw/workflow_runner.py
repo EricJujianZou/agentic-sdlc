@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from adw import runlog
+from adw import isolation, runlog
 from adw.github import (
     GitHubError,
     comment_on_issue,
@@ -262,7 +263,16 @@ def run_workflow(
         action="store_true",
         help="start despite an active circuit cooldown (human judgment call)",
     )
+    parser.add_argument(
+        "--isolate",
+        action="store_true",
+        help="run stage sessions inside a docker container (plans/safety_plan.md §5); "
+        "equivalent to setting ADW_ISOLATION=1. Requires a running Docker daemon "
+        "and the adw-sandbox image — see README 'Container isolation'.",
+    )
     args = parser.parse_args()
+    if args.isolate:
+        os.environ[isolation.ISOLATION_ENV] = "1"
 
     cooldown_msg = check_cooldown(STATE_PATH)
     if cooldown_msg and not args.override_cooldown:
