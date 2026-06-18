@@ -242,3 +242,65 @@ def test_document_breaker_halt_becomes_warning(tmp_path):
     assert outcome.outcome == "done"
     assert outcome.warning is not None
     assert "breaker" in outcome.warning
+
+
+# --- bug / trivial workflow stage orders (S-004) ---
+
+BUG_STAGE_ORDER = ("plan", "implement", "test")
+TRIVIAL_STAGE_ORDER = ("implement", "test")
+
+
+def test_bug_order_completes_on_test_success_without_review(tmp_path):
+    seen = []
+
+    def invoke(stage, state, story):
+        seen.append(stage)
+        return ok(stage)  # no exit_signal anywhere; test success is the gate
+
+    outcome = run(invoke, tmp_path, stage_order=BUG_STAGE_ORDER)
+    assert outcome.outcome == "done"
+    assert "review" not in seen
+    assert seen[:3] == ["plan", "implement", "test"]
+    assert outcome.stages_run[-1] == "document"  # doc stage still runs post-gate
+
+
+def test_trivial_order_runs_implement_then_test(tmp_path):
+    seen = []
+
+    def invoke(stage, state, story):
+        seen.append(stage)
+        return ok(stage)
+
+    outcome = run(invoke, tmp_path, stage_order=TRIVIAL_STAGE_ORDER)
+    assert outcome.outcome == "done"
+    assert seen[:2] == ["implement", "test"]
+    assert "plan" not in seen and "review" not in seen
+
+
+def test_bug_order_test_failure_loops_back_to_plan(tmp_path):
+    calls = []
+
+    def invoke(stage, state, story):
+        calls.append((state.iteration, stage))
+        if state.iteration == 1 and stage == "test":
+            return fail(stage)
+        return ok(stage)
+
+    outcome = run(invoke, tmp_path, stage_order=BUG_STAGE_ORDER)
+    assert outcome.outcome == "done"
+    assert (2, "plan") in calls
+
+
+def test_trivial_order_test_failure_loops_back_to_implement(tmp_path):
+    calls = []
+
+    def invoke(stage, state, story):
+        calls.append((state.iteration, stage))
+        if state.iteration == 1 and stage == "test":
+            return fail(stage)
+        return ok(stage)
+
+    outcome = run(invoke, tmp_path, stage_order=TRIVIAL_STAGE_ORDER)
+    assert outcome.outcome == "done"
+    assert (2, "implement") in calls
+    assert "plan" not in [stage for _, stage in calls]

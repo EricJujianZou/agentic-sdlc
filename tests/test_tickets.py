@@ -120,3 +120,19 @@ def test_next_story_id_handles_empty_and_gaps():
     assert next_story_id(Prd(project="p")) == "S-001"
     prd = Prd(project="p", stories=[story(id="S-007")])
     assert next_story_id(prd) == "S-008"
+
+
+def test_pick_next_story_filters_by_type():
+    prd = Prd(
+        project="p",
+        stories=[
+            story(id="S-001", type="feat", priority=1),
+            story(id="S-002", type="bug", priority=2),
+            story(id="S-003", type="chore", priority=3),
+        ],
+    )
+    assert pick_next_story(prd, types=("bug",)).id == "S-002"
+    assert pick_next_story(prd, types=("chore",)).id == "S-003"
+    assert pick_next_story(prd, types=("feat", "system-repair")).id == "S-001"
+    assert pick_next_story(prd, types=("system-repair",)) is None  # no match
+    assert pick_next_story(prd).id == "S-001"  # default: any type, by priority
