@@ -17,6 +17,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from adw import runlog
+from adw.github import (
+    GitHubError,
+    comment_on_issue,
+    get_token,
+    open_or_update_pr,
+    outcome_comment_body,
+    pr_body,
+    repo_slug,
+    source_issue_number,
+)
 from adw.invoke import invoke_stage
 from adw.orchestrator import STAGE_ORDER, TicketOutcome, run_ticket
 from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
