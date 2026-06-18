@@ -46,3 +46,73 @@ def test_verify_treats_timeout_as_failure(monkeypatch):
     passed, detail = verify()
     assert passed is False
     assert "timed out" in detail
+
+
+def _story(story_id="S-006"):
+    return Story(
+        id=story_id, type="feat", priority=1, title="t",
+        description="d", acceptance_criteria=["a"],
+    )
+
+
+def test_notify_github_with_issue_id_opens_pr_and_comments(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(workflow_runner, "_push_branch", lambda branch: True)
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(
+        workflow_runner, "open_or_update_pr",
+        lambda *a, **k: calls.setdefault("pr", (a, k)),
+    )
+    monkeypatch.setattr(
+        workflow_runner, "comment_on_issue",
+        lambda *a, **k: calls.setdefault("comment", (a, k)),
+    )
+    _notify_github(_story("GH-42"), "done", "")
+    assert "pr" in calls
+    assert calls["pr"][1]["head"] == "adw/GH-42"
+    assert calls["pr"][1]["base"] == "main"
+    assert "comment" in calls
+
+
+def test_notify_github_without_issue_id_skips_comment(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(workflow_runner, "_push_branch", lambda branch: True)
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(
+        workflow_runner, "open_or_update_pr",
+        lambda *a, **k: calls.setdefault("pr", (a, k)),
+    )
+    monkeypatch.setattr(
+        workflow_runner, "comment_on_issue",
+        lambda *a, **k: calls.setdefault("comment", (a, k)),
+    )
+    _notify_github(_story("S-006"), "done", "")
+    assert "pr" in calls
+    assert "comment" not in calls
+
+
+def test_notify_github_swallows_github_error(monkeypatch):
+    monkeypatch.setattr(workflow_runner, "_push_branch", lambda branch: True)
+
+    def boom():
+        raise GitHubError("offline")
+
+    monkeypatch.setattr(workflow_runner, "get_token", boom)
+    # should not raise
+    _notify_github(_story("S-006"), "blocked", "reason")
+
+
+def test_notify_github_still_tries_pr_after_push_failure(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(workflow_runner, "_push_branch", lambda branch: False)
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(
+        workflow_runner, "open_or_update_pr",
+        lambda *a, **k: calls.setdefault("pr", (a, k)),
+    )
+    monkeypatch.setattr(workflow_runner, "comment_on_issue", lambda *a, **k: None)
+    _notify_github(_story("S-006"), "done", "")
+    assert "pr" in calls
