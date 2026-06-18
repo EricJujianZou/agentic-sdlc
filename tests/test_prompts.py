@@ -47,6 +47,20 @@ def test_feat_stage_spec_exists(stage):
     assert (REPO_ROOT / "stage_specs" / f"{stage}_feat.md").exists()
 
 
+HEADLESS_STAGE_COMMANDS = ("PLAN", "IMPLEMENT", "TEST", "REVIEW")
+
+
+@pytest.mark.parametrize("name", HEADLESS_STAGE_COMMANDS)
+def test_headless_rule_present_in_stage_commands(name):
+    """S-002: every loop-stage command must state it runs headless and that
+    blockers go in the status block, never as a question to a human. Pins the
+    rule so it cannot silently regress (evidence: test_run1.md follow-up 2)."""
+    text = (REPO_ROOT / "commands" / f"{name}.md").read_text(encoding="utf-8").lower()
+    assert "running headless" in text, f"{name}.md missing the headless framing"
+    assert "no human will ever answer" in text, f"{name}.md missing the no-human rule"
+    assert '"blocked"' in text, f"{name}.md must route blockers to outcome=blocked"
+
+
 def _load_workflow():
     spec = importlib.util.spec_from_file_location(
         "feat_full_cycle", REPO_ROOT / "workflows" / "feat_full_cycle.py"
