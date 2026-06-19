@@ -24,14 +24,27 @@ def issue_story_id(issue: dict) -> str:
     return f"GH-{issue['number']}"
 
 
+# Phone/paste often prefixes every line with a quote bar (Markdown '>', or the
+# block glyphs ▎ ┃ a renderer inserts). Strip those so a quoted body still
+# parses its heading and bullets (motivating case: issue #16).
+_QUOTE_PREFIX = re.compile(r"^[ \t]*(?:[>▎┃|][ \t]?)+")
+
+
+def _dequote(text: str) -> str:
+    return "\n".join(_QUOTE_PREFIX.sub("", line) for line in text.splitlines())
+
+
 def parse_issue_body(body: str) -> tuple[str, list[str]]:
     """Split issue body into (description, acceptance_criteria).
 
-    Looks for a heading matching /^#+\\s*acceptance criteria/i.
-    Description = everything before it; criteria = non-empty bullet lines after it.
+    Tolerates leading quote bars/indentation, then looks for a heading matching
+    /^#+\\s*acceptance criteria/i. Description = everything before it; criteria =
+    non-empty bullet lines after it. A body with no such heading yields empty
+    criteria (the decompose stage fills them in later).
     """
     if not body:
         return "", []
+    body = _dequote(body)
     parts = re.split(r"(?im)^#+\s*acceptance criteria\s*$", body, maxsplit=1)
     description = parts[0].strip()
     if len(parts) < 2:
@@ -48,14 +61,18 @@ def parse_issue_body(body: str) -> tuple[str, list[str]]:
 
 
 def skip_reason(issue: dict) -> str | None:
-    """Return a reason string if the issue should be skipped, else None."""
+    """Return a reason string if the issue should be skipped, else None.
+
+    Missing acceptance criteria is NOT a skip (S-013): a terse issue is
+    accepted criteria-less and the decompose stage expands it. Only a wrong
+    type label or a genuinely empty issue (no title and no body) is skipped.
+    """
     labels = {lb["name"] for lb in issue.get("labels", [])}
     type_labels = labels & _TYPE_LABELS
     if len(type_labels) != 1:
         return f"expected exactly one type label ({_TYPE_LABELS}), got {sorted(type_labels)}"
-    _, criteria = parse_issue_body(issue.get("body") or "")
-    if not criteria:
-        return "no acceptance criteria found in issue body"
+    if not (issue.get("title") or "").strip() and not (issue.get("body") or "").strip():
+        return "issue has no title or body to build a story from"
     return None
 
 

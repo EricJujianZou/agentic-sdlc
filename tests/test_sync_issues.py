@@ -71,11 +71,35 @@ def test_skip_reason_two_type_labels():
     assert "type label" in reason
 
 
-def test_skip_reason_no_acceptance_criteria():
+def test_skip_reason_accepts_criteria_less_issue():
+    # S-013: a terse issue with no criteria heading is accepted (decompose
+    # will expand it), not skipped.
     issue = _issue(body="Just a description with no criteria heading.")
+    assert skip_reason(issue) is None
+
+
+def test_skip_reason_skips_genuinely_empty_issue():
+    issue = _issue(title="", body="")
     reason = skip_reason(issue)
     assert reason is not None
-    assert "acceptance criteria" in reason
+    assert "no title or body" in reason
+
+
+def test_parse_issue_body_tolerates_quote_bars():
+    # The issue-#16 shape: every line prefixed with a quote bar.
+    body = "▎ Intro line.\n▎\n▎ ## Acceptance Criteria\n▎ - one\n▎ - two"
+    desc, criteria = parse_issue_body(body)
+    assert "Intro line." in desc
+    assert criteria == ["one", "two"]
+
+
+def test_sync_accepts_terse_issue_with_empty_criteria():
+    terse = _issue(body="Add a dark mode toggle.")  # no AC heading
+    prd = Prd(project="test", stories=[])
+    added, skipped = sync_issues(prd, [terse])
+    assert len(added) == 1
+    assert added[0].acceptance_criteria == []  # decompose fills these later
+    assert added[0].type == "feat"
 
 
 def test_skip_reason_none_for_valid_issue():

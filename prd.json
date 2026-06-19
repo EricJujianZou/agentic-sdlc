@@ -229,8 +229,8 @@
         "Unit tests cover: decompose runs only when criteria absent, criteria persisted to prd, sync accepts a terse/quote-barred issue; full suite uv run pytest -q stays green"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "blocked"
+      "passes": true,
+      "status": "done"
     },
     {
       "id": "S-014",

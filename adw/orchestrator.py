@@ -14,10 +14,12 @@ from typing import Callable, Protocol
 from adw import runlog
 from adw.invoke import StageResult
 from adw.state import State, new_state, save_state
+from adw.status import _candidate_objects
 from adw.tickets import Story
 
 STAGE_ORDER = ("plan", "implement", "test", "review")
 DOCUMENT_STAGE = "document"
+DECOMPOSE_STAGE = "decompose"
 
 # invoke_fn(stage, state, story) -> StageResult. Injected so the loop is
 # testable without spawning real agents.
@@ -191,6 +193,60 @@ def _finish(
         stages_run=stages_run,
         warning=warning,
     )
+
+
+def parse_decompose_criteria(text: str) -> list[str] | None:
+    """Extract the acceptance_criteria array the decompose stage emits in its
+    status block. Returns the cleaned non-empty list, or None if absent/empty.
+    Reuses the same last-object-wins JSON scan the status parser uses."""
+    for obj in _candidate_objects(text):
+        ac = obj.get("acceptance_criteria")
+        if isinstance(ac, list):
+            cleaned = [c.strip() for c in ac if isinstance(c, str) and c.strip()]
+            if cleaned:
+                return cleaned
+    return None
+
+
+def run_decompose(
+    story: Story,
+    invoke_fn: InvokeFn,
+    *,
+    state_path: str | Path,
+    runs_root: str | Path | None = None,
+) -> tuple[list[str] | None, str | None]:
+    """Expand a criteria-less ticket into acceptance criteria via the read-only
+    decompose stage (S-013). Returns (criteria, problem): the proposed criteria
+    on success, else a problem string the caller blocks on. The decompose agent
+    only proposes — the caller persists the result to prd.json, never the agent.
+    """
+    state = State(ticket_id=story.id, stage=DECOMPOSE_STAGE)
+    save_state(state, state_path)
+    result = invoke_fn(DECOMPOSE_STAGE, state, story)
+    runlog.write_stage_log(
+        story.id,
+        stage=DECOMPOSE_STAGE,
+        iteration=state.iteration,
+        payload={
+            "stage": DECOMPOSE_STAGE,
+            "outcome": result.status.outcome if result.status else None,
+            "summary": result.status.summary if result.status else None,
+            "parse_error": result.parse_error,
+            "timed_out": result.timed_out,
+            "tokens_used": result.tokens_used,
+            "exit_code": result.exit_code,
+            "stderr_head": result.stderr[:500],
+        },
+        runs_root=runs_root,
+    )
+    if result.status is None:
+        return None, f"decompose: {result.parse_error or 'no status block'}"
+    if result.status.outcome != "success":
+        return None, result.status.failure_reason or f"decompose {result.status.outcome}"
+    criteria = parse_decompose_criteria(result.raw_output)
+    if not criteria:
+        return None, "decompose succeeded but emitted no acceptance_criteria"
+    return criteria, None
 
 
 def _run_document_stage(
