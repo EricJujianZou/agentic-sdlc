@@ -30,6 +30,9 @@ STAGE_TOOLS: dict[str, list[str]] = {
     "implement": ["Read", "Glob", "Grep", "Edit", "Write", "Bash"],
     "test": ["Read", "Glob", "Grep", "Bash", "mcp__playwright"],
     "review": ["Read", "Glob", "Grep", "mcp__playwright", *_GIT_READONLY],
+    # observe runs read-only on a non-done ticket to diagnose root cause across
+    # the whole repo (self-heal lens); it proposes, never edits or commits.
+    "observe": ["Read", "Glob", "Grep", *_GIT_READONLY],
     "document": ["Read", "Glob", "Grep", "Write", *_GIT_READONLY, "Bash(git add:*)", "Bash(git commit:*)"],
 }
 
