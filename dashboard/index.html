@@ -47,6 +47,9 @@
     }
 
     .column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       font-size: 0.75rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -54,6 +57,19 @@
       margin-bottom: 0.75rem;
       padding-bottom: 0.5rem;
       border-bottom: 1px solid #2d3149;
+    }
+
+    .column-count {
+      background: #334155;
+      color: #f1f5f9;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      margin-left: 0.4rem;
+      display: inline-block;
+      text-transform: none;
+      letter-spacing: normal;
     }
 
     .col-open    .column-header { color: #94a3b8; }
