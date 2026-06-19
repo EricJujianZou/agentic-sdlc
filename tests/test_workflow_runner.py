@@ -19,9 +19,18 @@ class _Proc:
         self.stderr = stderr
 
 
-def test_verify_passes_on_zero_exit(monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Proc(0, "131 passed"))
+def test_verify_passes_on_zero_exit_and_reports_count(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Proc(0, "131 passed in 4.2s"))
     verify = _make_verify_fn({"test_evidence_command": ["x"], "test_evidence_timeout_minutes": 1})
+    passed, detail = verify()
+    assert passed is True
+    # On green, the pass count is surfaced for the outcome comment to report.
+    assert detail == "131 passed"
+
+
+def test_verify_passes_with_no_parseable_count(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Proc(0, "ok"))
+    verify = _make_verify_fn({})
     passed, detail = verify()
     assert passed is True
     assert detail == ""
@@ -147,3 +156,57 @@ def test_progress_fn_swallows_github_error(monkeypatch):
     monkeypatch.setattr(workflow_runner, "get_token", boom)
     fn = workflow_runner._make_progress_fn(_story("GH-42"))
     fn("plan", "success")  # must not raise
+
+
+def test_progress_fn_includes_summary(monkeypatch):
+    posted = {}
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(
+        workflow_runner, "comment_on_issue",
+        lambda owner, repo, token, num, body: posted.update(body=body),
+    )
+    fn = workflow_runner._make_progress_fn(_story("GH-42"))
+    fn("test", "success", "209 passed, all acceptance criteria verified")
+    assert "209 passed" in posted["body"]
+    assert "test" in posted["body"]
+
+
+# --- _set_run_label (S-014 follow-up) ---------------------------------------
+
+def test_set_run_label_swaps_labels_for_issue(monkeypatch):
+    added, removed = [], []
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(
+        workflow_runner, "remove_label",
+        lambda owner, repo, token, num, label: removed.append((num, label)),
+    )
+    monkeypatch.setattr(
+        workflow_runner, "add_labels",
+        lambda owner, repo, token, num, labels: added.append((num, labels)),
+    )
+    workflow_runner._set_run_label(
+        _story("GH-42"),
+        remove=(workflow_runner.RUN_LABEL_IN_PROGRESS,),
+        add=(workflow_runner.RUN_LABEL_DONE,),
+    )
+    assert removed == [(42, "in-progress")]
+    assert added == [(42, ["done"])]
+
+
+def test_set_run_label_noop_for_plain_story(monkeypatch):
+    def fail(*a, **k):
+        raise AssertionError("must not touch GitHub for a non-issue story")
+
+    monkeypatch.setattr(workflow_runner, "get_token", fail)
+    workflow_runner._set_run_label(_story("S-006"), add=(workflow_runner.RUN_LABEL_DONE,))
+
+
+def test_set_run_label_swallows_github_error(monkeypatch):
+    def boom():
+        raise GitHubError("offline")
+
+    monkeypatch.setattr(workflow_runner, "get_token", boom)
+    # Must not raise — a relabel failure can never change a ticket's outcome.
+    workflow_runner._set_run_label(_story("GH-42"), add=(workflow_runner.RUN_LABEL_DONE,))

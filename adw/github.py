@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -149,6 +150,30 @@ def comment_on_issue(owner: str, repo: str, token: str, number: int, body: str) 
     )
 
 
+def add_labels(owner: str, repo: str, token: str, number: int, labels: list[str]) -> Any:
+    """Add labels to an issue. GitHub creates any label that doesn't exist yet,
+    so a fresh repo needs no label setup. Idempotent — re-adding is a no-op."""
+    return api_request(
+        "POST",
+        f"/repos/{owner}/{repo}/issues/{number}/labels",
+        token,
+        {"labels": list(labels)},
+    )
+
+
+def remove_label(owner: str, repo: str, token: str, number: int, label: str) -> None:
+    """Remove one label from an issue. A 404 (the label isn't on the issue) is
+    not an error — relabeling must be safe to call from any prior state."""
+    quoted = urllib.parse.quote(label, safe="")
+    try:
+        api_request(
+            "DELETE", f"/repos/{owner}/{repo}/issues/{number}/labels/{quoted}", token
+        )
+    except GitHubError as exc:
+        if "HTTP 404" not in str(exc):
+            raise
+
+
 def source_issue_number(story_id: str) -> int | None:
     """Return the GitHub issue number for a GH-<n> story id, else None."""
     if story_id.startswith("GH-") and story_id[3:].isdigit():
@@ -158,15 +183,26 @@ def source_issue_number(story_id: str) -> int | None:
 
 def pr_body(story: Any, outcome: str) -> str:
     reason = getattr(story, "description", "")
-    return (
+    body = (
         f"## Outcome: {outcome}\n\n"
         f"**Ticket:** {story.id} — {story.title}\n\n"
         f"{reason}\n"
     )
+    # On a done ticket, link the source issue so merging this PR closes it —
+    # that is the human merge gate doubling as the issue's close event, which
+    # lets the harness leave the issue OPEN (only relabeled) until work lands.
+    number = source_issue_number(story.id)
+    if number is not None and outcome == "done":
+        body += f"\nCloses #{number}\n"
+    return body
 
 
-def outcome_comment_body(story: Any, outcome: str, reason: str = "") -> str:
+def outcome_comment_body(
+    story: Any, outcome: str, reason: str = "", test_evidence: str | None = None
+) -> str:
     lines = [f"**{outcome.upper()}** — {story.id}: {story.title}"]
+    if test_evidence:
+        lines.append(f"\nLocal tests: {test_evidence} — cross-check against CI.")
     if reason:
         lines.append(f"\nReason: {reason}")
     return "\n".join(lines)

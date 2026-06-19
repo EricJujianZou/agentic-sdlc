@@ -60,13 +60,52 @@ def test_progress_fn_called_once_per_stage(tmp_path):
     def invoke(stage, state, story):
         return ok(stage, exit_signal=(stage == "review"))
 
-    run(invoke, tmp_path, progress_fn=lambda stage, outcome: events.append((stage, outcome)))
-    # One event per loop stage, in order, with the stage outcome (document
-    # runs post-gate and is not a progress stage).
+    run(invoke, tmp_path, progress_fn=lambda stage, outcome, summary="": events.append((stage, outcome)))
+    # One event per stage, in order — including document, which runs post-gate
+    # and is now reported too so the phone log covers every stage.
     assert events == [
         ("plan", "success"), ("implement", "success"),
-        ("test", "success"), ("review", "success"),
+        ("test", "success"), ("review", "success"), ("document", "success"),
     ]
+
+
+def test_progress_fn_receives_stage_summary(tmp_path):
+    events = []
+
+    def invoke(stage, state, story):
+        return StageResult(
+            status=StatusBlock(
+                stage=stage, ticket_id="S-001", outcome="success",
+                exit_signal=(stage == "review"), summary=f"{stage} did its thing",
+            ),
+            exit_code=0, tokens_used=1,
+        )
+
+    run(invoke, tmp_path, progress_fn=lambda s, o, summary="": events.append((s, summary)))
+    # Each stage's own one-line summary reaches the notifier verbatim.
+    assert ("plan", "plan did its thing") in events
+    assert ("review", "review did its thing") in events
+
+
+def test_progress_fn_forwards_failure_reason(tmp_path):
+    events = []
+
+    def invoke(stage, state, story):
+        if stage == "implement":
+            return StageResult(
+                status=StatusBlock(
+                    stage="implement", ticket_id="S-001", outcome="failure",
+                    summary="tried to add the endpoint",
+                    failure_reason="import cycle between adw.foo and adw.bar",
+                ),
+                exit_code=0, tokens_used=1,
+            )
+        return ok(stage, exit_signal=(stage == "review"))
+
+    run(invoke, tmp_path, progress_fn=lambda s, o, detail="": events.append((s, o, detail)))
+    # A failing stage surfaces the structured failure_reason, not the vaguer
+    # summary, so the phone shows the actionable cause.
+    assert ("implement", "failure", "import cycle between adw.foo and adw.bar") in events
 
 
 def test_progress_fn_reports_blocked_outcome(tmp_path):
@@ -81,7 +120,7 @@ def test_progress_fn_reports_blocked_outcome(tmp_path):
             )
         return ok(stage)
 
-    run(invoke, tmp_path, progress_fn=lambda s, o: events.append((s, o)))
+    run(invoke, tmp_path, progress_fn=lambda s, o, summary="": events.append((s, o)))
     assert ("test", "blocked") in events
     assert ("review", "success") not in events  # blocked before reaching review
 

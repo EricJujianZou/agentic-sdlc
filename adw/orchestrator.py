@@ -32,13 +32,15 @@ InvokeFn = Callable[[str, State, Story], StageResult]
 # breaker defaults to a no-op.
 VerifyFn = Callable[[], "tuple[bool, str]"]
 
-# progress_fn(stage, outcome_label) -> None. Best-effort, side-channel
+# progress_fn(stage, outcome_label, summary) -> None. Best-effort, side-channel
 # notification of stage transitions (S-014) — e.g. a comment on the source
-# GitHub issue so the phone gets a running log. The orchestrator is the only
-# thing that calls it; stage agents never touch the outside world. Injected and
-# defaulting to None; it must never raise (the caller swallows failures), so a
-# notification problem can never change a ticket's outcome.
-ProgressFn = Callable[[str, str], None]
+# GitHub issue so the phone gets a running log. `summary` is the stage's own
+# one-line self-report from its status block, so the phone sees what each stage
+# did, not just a bare outcome. The orchestrator is the only thing that calls
+# it; stage agents never touch the outside world. Injected and defaulting to
+# None; it must never raise (the caller swallows failures), so a notification
+# problem can never change a ticket's outcome.
+ProgressFn = Callable[[str, str, str], None]
 
 
 class Breaker(Protocol):
@@ -58,6 +60,7 @@ class TicketOutcome:
     tokens_used: int = 0
     stages_run: list[str] = field(default_factory=list)
     warning: str | None = None
+    test_evidence: str | None = None  # deterministic local pytest count on done
 
 
 @dataclass
@@ -121,11 +124,21 @@ def run_ticket(
 
             # One progress notification per stage transition (S-014). Bounded:
             # exactly one per stage execution, never per iteration-internal step.
+            # The detail line is the most actionable thing the phone can show:
+            # the structured failure_reason on a failure/blocked stage (so the
+            # phone sees *why*, not just that it failed), else the summary, else
+            # the parse error when the stage emitted no status block at all.
             if progress_fn is not None:
-                progress_fn(
-                    stage,
-                    result.status.outcome if result.status is not None else "no-status",
-                )
+                if result.status is not None:
+                    outcome_label = result.status.outcome
+                    if result.status.outcome in ("failure", "blocked"):
+                        detail = result.status.failure_reason or result.status.summary
+                    else:
+                        detail = result.status.summary
+                else:
+                    outcome_label = "no-status"
+                    detail = result.parse_error or ""
+                progress_fn(stage, outcome_label, detail)
 
             # Completion outranks the breaker: the gate stage passing means
             # the ticket is done, and a cumulative counter (e.g. permission
@@ -143,6 +156,7 @@ def run_ticket(
                 # agents' "done". A red suite blocks the ticket and the
                 # document stage never runs — the agents cannot self-certify
                 # a failing tree as done.
+                test_evidence: str | None = None
                 if verify_fn is not None:
                     passed, detail = verify_fn()
                     if not passed:
@@ -150,14 +164,22 @@ def run_ticket(
                         state.last_failure = reason
                         save_state(state, state_path)
                         return _finish(story, state, "blocked", reason, stages_run)
+                    # On a green re-run the detail carries the local pass count
+                    # (e.g. "209 passed"); surface it so the outcome comment can
+                    # report a deterministic number to cross-check against CI.
+                    test_evidence = detail or None
                 warning = _run_document_stage(
                     story, state, invoke_fn,
                     state_path=state_path,
                     runs_root=runs_root,
                     stages_run=stages_run,
                     breaker=breaker,
+                    progress_fn=progress_fn,
                 )
-                return _finish(story, state, "done", None, stages_run, warning=warning)
+                return _finish(
+                    story, state, "done", None, stages_run,
+                    warning=warning, test_evidence=test_evidence,
+                )
 
             halt_reason = breaker.record(state, result)
             if halt_reason is not None:
@@ -200,6 +222,7 @@ def _finish(
     stages_run: list[str],
     *,
     warning: str | None = None,
+    test_evidence: str | None = None,
 ) -> TicketOutcome:
     return TicketOutcome(
         ticket_id=story.id,
@@ -209,6 +232,7 @@ def _finish(
         tokens_used=state.budget_used_tokens,
         stages_run=stages_run,
         warning=warning,
+        test_evidence=test_evidence,
     )
 
 
@@ -275,9 +299,12 @@ def _run_document_stage(
     runs_root: str | Path,
     stages_run: list[str],
     breaker: Breaker,
+    progress_fn: ProgressFn | None = None,
 ) -> str | None:
     """Run the document stage once with one retry. Returns None on success,
-    or a warning string if both attempts fail or the breaker fires."""
+    or a warning string if both attempts fail or the breaker fires. Reports
+    its outcome through progress_fn too, so the phone log covers every stage —
+    document included — not just the plan->review loop."""
     state.stage = DOCUMENT_STAGE
     last_problem: str = "unknown failure"
     for _attempt in (1, 2):
@@ -304,8 +331,12 @@ def _run_document_stage(
         save_state(state, state_path)
         halt_reason = breaker.record(state, result)
         if halt_reason is not None:
+            if progress_fn is not None:
+                progress_fn(DOCUMENT_STAGE, "failure", f"breaker: {halt_reason}")
             return f"document stage warning (breaker): {halt_reason}"
         if result.status is not None and result.status.outcome == "success":
+            if progress_fn is not None:
+                progress_fn(DOCUMENT_STAGE, "success", result.status.summary)
             return None
         if result.timed_out:
             last_problem = "timed out"
@@ -313,4 +344,6 @@ def _run_document_stage(
             last_problem = result.status.failure_reason
         else:
             last_problem = result.parse_error or f"outcome={result.status.outcome if result.status else 'no status block'}"
+    if progress_fn is not None:
+        progress_fn(DOCUMENT_STAGE, "failure", last_problem)
     return f"document stage warning: {last_problem}"

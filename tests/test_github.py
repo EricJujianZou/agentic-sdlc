@@ -13,10 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from adw.github import (
     GitHubError,
+    add_labels,
     comment_on_issue,
     open_or_update_pr,
     outcome_comment_body,
     pr_body,
+    remove_label,
     repo_slug,
     source_issue_number,
 )
@@ -55,6 +57,16 @@ def test_pr_body_contains_outcome():
     assert "My feature" in body
 
 
+def test_pr_body_closes_source_issue_on_done():
+    body = pr_body(_story(id="GH-42"), "done")
+    assert "Closes #42" in body
+
+
+def test_pr_body_no_close_when_blocked_or_plain_story():
+    assert "Closes #" not in pr_body(_story(id="GH-42"), "blocked")
+    assert "Closes #" not in pr_body(_story(id="S-006"), "done")
+
+
 def test_outcome_comment_body_done():
     s = _story()
     text = outcome_comment_body(s, "done")
@@ -67,6 +79,12 @@ def test_outcome_comment_body_blocked_with_reason():
     text = outcome_comment_body(s, "blocked", "tests failed")
     assert "BLOCKED" in text
     assert "tests failed" in text
+
+
+def test_outcome_comment_body_includes_test_evidence():
+    text = outcome_comment_body(_story(), "done", test_evidence="209 passed")
+    assert "209 passed" in text
+    assert "CI" in text  # nudge to cross-check the local count against CI
 
 
 def test_repo_slug_https():
@@ -122,6 +140,36 @@ def test_open_or_update_pr_patches_on_422(monkeypatch):
     patch_call = next(c for c in calls if c[0] == "PATCH")
     assert "/pulls/7" in patch_call[1]
     assert patch_call[2]["body"] == "updated body"
+
+
+def test_add_labels_correct_shape(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "adw.github.api_request",
+        lambda method, path, token, payload=None: calls.append((method, path, payload)),
+    )
+    add_labels("owner", "repo", "tok", 42, ["in-progress"])
+    assert calls[0][0] == "POST"
+    assert "/issues/42/labels" in calls[0][1]
+    assert calls[0][2]["labels"] == ["in-progress"]
+
+
+def test_remove_label_swallows_404(monkeypatch):
+    def fake_api(method, path, token, payload=None):
+        raise GitHubError("HTTP 404 from DELETE: not labeled")
+
+    monkeypatch.setattr("adw.github.api_request", fake_api)
+    # A label that isn't on the issue must not raise — relabel is state-agnostic.
+    remove_label("owner", "repo", "tok", 42, "in-progress")
+
+
+def test_remove_label_reraises_non_404(monkeypatch):
+    def fake_api(method, path, token, payload=None):
+        raise GitHubError("HTTP 500 from DELETE: server error")
+
+    monkeypatch.setattr("adw.github.api_request", fake_api)
+    with pytest.raises(GitHubError, match="500"):
+        remove_label("owner", "repo", "tok", 42, "in-progress")
 
 
 def test_comment_on_issue_correct_shape(monkeypatch):
