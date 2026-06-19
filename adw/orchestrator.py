@@ -20,6 +20,7 @@ from adw.tickets import Story
 STAGE_ORDER = ("plan", "implement", "test", "review")
 DOCUMENT_STAGE = "document"
 DECOMPOSE_STAGE = "decompose"
+OBSERVE_STAGE = "observe"
 
 # invoke_fn(stage, state, story) -> StageResult. Injected so the loop is
 # testable without spawning real agents.
@@ -288,6 +289,78 @@ def run_decompose(
     if not criteria:
         return None, "decompose succeeded but emitted no acceptance_criteria"
     return criteria, None
+
+
+@dataclass
+class ObserverResult:
+    """Outcome of the read-only observer (self-heal lens)."""
+    classification: str | None  # "ticket" | "harness" | None (not analyzed)
+    repair: dict | None         # {title, description, evidence}; only for harness
+    summary: str                # one-line diagnosis for the phone
+    problem: str | None = None  # set if the observer itself failed to analyze
+
+
+def parse_observer_proposal(text: str) -> tuple[str | None, dict | None]:
+    """Extract (classification, repair) from the observer's status block, using
+    the same last-object-wins scan as the status parser. classification is
+    normalized to 'ticket'/'harness' or None; repair is returned only when the
+    block carries it as a dict (harness case)."""
+    for obj in _candidate_objects(text):
+        if "classification" in obj:
+            cls = obj.get("classification")
+            cls = cls.strip().lower() if isinstance(cls, str) else None
+            if cls not in ("ticket", "harness"):
+                cls = None
+            repair = obj.get("repair")
+            return cls, (repair if isinstance(repair, dict) else None)
+    return None, None
+
+
+def run_observer(
+    story: Story,
+    invoke_fn: InvokeFn,
+    failure_reason: str,
+    *,
+    state_path: str | Path,
+    runs_root: str | Path | None = None,
+) -> ObserverResult:
+    """Run the read-only observer once on a non-done ticket (self-heal lens).
+
+    Returns its classification and, for a harness-level diagnosis, a proposed
+    repair. The observer only proposes — the caller (workflow_runner) decides
+    what to surface; the observer never files, edits, or commits anything. The
+    ticket's failure reason is threaded in as state.last_failure so the prompt
+    carries it.
+    """
+    state = State(ticket_id=story.id, stage=OBSERVE_STAGE)
+    state.last_failure = failure_reason
+    save_state(state, state_path)
+    result = invoke_fn(OBSERVE_STAGE, state, story)
+    runlog.write_stage_log(
+        story.id,
+        stage=OBSERVE_STAGE,
+        iteration=state.iteration,
+        payload={
+            "stage": OBSERVE_STAGE,
+            "outcome": result.status.outcome if result.status else None,
+            "summary": result.status.summary if result.status else None,
+            "parse_error": result.parse_error,
+            "timed_out": result.timed_out,
+            "tokens_used": result.tokens_used,
+            "exit_code": result.exit_code,
+            "stderr_head": result.stderr[:500],
+        },
+        runs_root=runs_root,
+    )
+    if result.status is None:
+        return ObserverResult(None, None, "", problem=result.parse_error or "no status block")
+    if result.status.outcome != "success":
+        return ObserverResult(
+            None, None, result.status.summary,
+            problem=result.status.failure_reason or f"observer {result.status.outcome}",
+        )
+    classification, repair = parse_observer_proposal(result.raw_output)
+    return ObserverResult(classification, repair, result.status.summary)
 
 
 def _run_document_stage(

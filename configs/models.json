@@ -3,6 +3,7 @@
   "decompose": "claude-opus-4-8",
   "plan": "claude-opus-4-8",
   "review": "claude-opus-4-8",
+  "observe": "claude-opus-4-8",
   "implement": "sonnet",
   "test": "sonnet",
   "document": "sonnet",

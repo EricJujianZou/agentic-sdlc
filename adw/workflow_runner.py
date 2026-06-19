@@ -32,7 +32,14 @@ from adw.github import (
     source_issue_number,
 )
 from adw.invoke import invoke_stage
-from adw.orchestrator import STAGE_ORDER, TicketOutcome, run_decompose, run_ticket
+from adw.orchestrator import (
+    STAGE_ORDER,
+    ObserverResult,
+    TicketOutcome,
+    run_decompose,
+    run_observer,
+    run_ticket,
+)
 from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
 from adw.state import State
 from adw.tickets import Story, get_story, load_prd, mark_story, pick_next_story, save_prd
@@ -174,6 +181,74 @@ def _set_run_label(story: Story, *, add: tuple[str, ...] = (), remove: tuple[str
             add_labels(owner, repo, token, number, list(add))
     except GitHubError as exc:
         print(f"issue relabel skipped: {exc}")
+
+
+# Observer (self-heal lens) labels. A non-done ticket gets ONE of these so the
+# phone can tell, at a glance, whether the human should look at the harness or
+# at the ticket itself.
+SELF_HEAL_LABEL = "self-heal-suggested"   # harness-level: a system-repair is proposed
+CLARIFY_LABEL = "needs-clarification"     # ticket-level: refine the ticket and re-run
+
+
+def _post_observer(number: int, body: str, label: str) -> None:
+    """Best-effort: comment the observer's verdict on the issue and add a label.
+    Never raises — a notification failure can't change the ticket's outcome."""
+    try:
+        token = get_token()
+        owner, repo = repo_slug()
+        comment_on_issue(owner, repo, token, number, body)
+        add_labels(owner, repo, token, number, [label])
+    except GitHubError as exc:
+        print(f"observer comment skipped: {exc}")
+
+
+def _format_repair_comment(story: Story, result: ObserverResult) -> str:
+    """Render a harness-level diagnosis as a ready-to-file system-repair ticket
+    (human-gated): the human reviews and files/opens it if they agree."""
+    r = result.repair or {}
+    lines = [
+        f"🩺 `{story.id}` observer — **harness-level**: {result.summary}",
+        "",
+        "A harness defect may have caused this. Proposed system-repair ticket "
+        "(human-gated — review, then file/open if you agree):",
+        "",
+        f"**{r.get('title') or 'system-repair'}**",
+    ]
+    if r.get("description"):
+        lines += ["", str(r["description"])]
+    evidence = [e for e in (r.get("evidence") or []) if isinstance(e, str) and e.strip()]
+    if evidence:
+        lines += ["", "Acceptance criteria:"]
+        lines += [f"- {e}" for e in evidence]
+    return "\n".join(lines)
+
+
+def _observe_and_report(story: Story, invoke_fn, failure_reason: str) -> None:
+    """Run the read-only observer on a non-done ticket and surface its verdict
+    on the source issue (self-heal lens). Best-effort throughout: it never
+    raises and never changes the ticket's outcome. The observer only diagnoses;
+    it files/edits nothing — the human acts on the comment + label.
+
+    The whole-repo pass is the one place we deliberately spend big context, so
+    it runs only on a non-done outcome (bounded by failure frequency), once, and
+    can be switched off via budgets.observer_enabled.
+    """
+    number = source_issue_number(story.id)
+    result = run_observer(story, invoke_fn, failure_reason, state_path=paths.state_path())
+    if result.problem is not None:
+        print(f"observer skipped: {result.problem}")
+        return
+    if number is None:
+        return  # plain S-NNN: nothing to post to; the run log holds the analysis
+    if result.classification == "harness" and result.repair:
+        _post_observer(number, _format_repair_comment(story, result), SELF_HEAL_LABEL)
+    else:
+        body = (
+            f"🔎 `{story.id}` observer — **ticket-level**: {result.summary}\n\n"
+            "This looks specific to the ticket, not the harness. Clarify or "
+            "refine the issue, then re-run."
+        )
+        _post_observer(number, body, CLARIFY_LABEL)
 
 
 _PROGRESS_EMOJI = {"success": "✅", "failure": "⚠️", "blocked": "⛔", "halted": "⛔"}
@@ -318,6 +393,8 @@ def run_one_story(
             _set_run_label(
                 story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,)
             )
+            if budgets.get("observer_enabled", True):
+                _observe_and_report(story, invoke, problem)
             return TicketOutcome(
                 story.id, "blocked", reason=problem, stages_run=["decompose"]
             )
@@ -352,6 +429,11 @@ def run_one_story(
     else:
         _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,))
     _notify_github(story, outcome.outcome, outcome.reason or "", outcome.test_evidence)
+    # On a non-done outcome, run the whole-repo observer (self-heal lens): it
+    # diagnoses ticket- vs harness-level and surfaces a human-gated suggestion
+    # on the issue. Bounded to failures; disable via budgets.observer_enabled.
+    if outcome.outcome != "done" and budgets.get("observer_enabled", True):
+        _observe_and_report(story, invoke, outcome.reason or "")
     return outcome
 
 
