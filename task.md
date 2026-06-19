@@ -39,6 +39,26 @@ human-gate convention — flip to `open` when their turn comes.
   workflow-completion path settles (it edits `run_ticket`, overlapping
   S-005/S-006); the in-harness mirror of S-009 and the prerequisite for
   auto-merging trivial tickets.
+
+### Wave 2 — multi-repo + phone-facing operation (promoted 2026-06-18)
+
+The "use this to build my other projects, driven from my phone" wave.
+Suggested order S-011 → S-013 → S-014 → S-012. All `blocked` (human-gate
+convention; flip to `open` when their turn comes).
+
+- **S-011** — repo-agnostic engine: resolve a target repo from `ADW_REPO` /
+  git top-level so the harness can build *other* repos, not just itself —
+  `blocked`. The unlock for everything else in this wave.
+- **S-013** — `decompose` stage: terse/phone issues auto-expanded into
+  acceptance criteria; relax `sync_issues` to accept them — `blocked`.
+  Motivated live by issue #16 (quote-bar body → skipped).
+- **S-014** — per-stage progress comments on the source GitHub issue so the
+  phone gets a running log (S-006 only comments at the terminal outcome) —
+  `blocked`. Injects a progress callback into `run_ticket`.
+- **S-012** — one-shot `sync_issues`→`run_backlog` runner; **no daemon/cron**
+  (per the no-triggers decision), OS-scheduler wiring is a documented human
+  opt-in — `blocked`. Worth it only once S-011/13/14 smooth the round-trip.
+
 ## Ready
 
 *(empty — everything actionable is promoted)*
