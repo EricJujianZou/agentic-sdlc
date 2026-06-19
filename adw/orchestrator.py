@@ -124,12 +124,21 @@ def run_ticket(
 
             # One progress notification per stage transition (S-014). Bounded:
             # exactly one per stage execution, never per iteration-internal step.
+            # The detail line is the most actionable thing the phone can show:
+            # the structured failure_reason on a failure/blocked stage (so the
+            # phone sees *why*, not just that it failed), else the summary, else
+            # the parse error when the stage emitted no status block at all.
             if progress_fn is not None:
-                progress_fn(
-                    stage,
-                    result.status.outcome if result.status is not None else "no-status",
-                    result.status.summary if result.status is not None else "",
-                )
+                if result.status is not None:
+                    outcome_label = result.status.outcome
+                    if result.status.outcome in ("failure", "blocked"):
+                        detail = result.status.failure_reason or result.status.summary
+                    else:
+                        detail = result.status.summary
+                else:
+                    outcome_label = "no-status"
+                    detail = result.parse_error or ""
+                progress_fn(stage, outcome_label, detail)
 
             # Completion outranks the breaker: the gate stage passing means
             # the ticket is done, and a cumulative counter (e.g. permission

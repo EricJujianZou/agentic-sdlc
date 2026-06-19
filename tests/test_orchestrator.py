@@ -87,6 +87,27 @@ def test_progress_fn_receives_stage_summary(tmp_path):
     assert ("review", "review did its thing") in events
 
 
+def test_progress_fn_forwards_failure_reason(tmp_path):
+    events = []
+
+    def invoke(stage, state, story):
+        if stage == "implement":
+            return StageResult(
+                status=StatusBlock(
+                    stage="implement", ticket_id="S-001", outcome="failure",
+                    summary="tried to add the endpoint",
+                    failure_reason="import cycle between adw.foo and adw.bar",
+                ),
+                exit_code=0, tokens_used=1,
+            )
+        return ok(stage, exit_signal=(stage == "review"))
+
+    run(invoke, tmp_path, progress_fn=lambda s, o, detail="": events.append((s, o, detail)))
+    # A failing stage surfaces the structured failure_reason, not the vaguer
+    # summary, so the phone shows the actionable cause.
+    assert ("implement", "failure", "import cycle between adw.foo and adw.bar") in events
+
+
 def test_progress_fn_reports_blocked_outcome(tmp_path):
     events = []
 
