@@ -79,6 +79,30 @@ fail → bounded loop back to plan (circuit breaker watching)
 Exit code 0 = ticket done; 1 = blocked/halted (reason printed, also in
 `state.json.last_failure`).
 
+## Phone-facing backlog
+
+File tickets from your phone as **GitHub Issues labeled `adw`** (one type
+label — `feat`/`bug`/`chore`/`system-repair` — plus an optional `p<N>`
+priority). A terse one-liner is fine: the decompose stage expands it into
+acceptance criteria, and quote-bar/markdown noise from a phone paste is
+tolerated. As a ticket runs, it comments each stage transition back on the
+source issue (and opens a PR when done), so your phone gets a running log.
+
+- **Pull tickets in:** `uv run python workflows/sync_issues.py`
+- **Pull, then work the backlog in one pass:**
+  `uv run python workflows/poll_once.py [--max-tickets N]`
+
+`poll_once.py` is one launch = one pass: it syncs, then works the open backlog
+(honoring the circuit-breaker cooldown and `--max-tickets`, stopping on the
+first blocked/halted ticket). It is **not** a daemon — there is no loop or
+timer. For periodic pickup, point an OS scheduler at it on an always-on
+machine; that wiring is a human opt-in, outside the harness's authority:
+
+- **Windows Task Scheduler:** create a Basic Task on your interval whose
+  action runs `uv run python workflows/poll_once.py` in the repo directory.
+- **cron (Linux/macOS or a VM):**
+  `*/30 * * * * cd /path/to/repo && uv run python workflows/poll_once.py`
+
 ## Configuration
 
 | File | Knobs |

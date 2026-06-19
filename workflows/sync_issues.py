@@ -122,18 +122,26 @@ def sync_issues(prd: Prd, issues: list[dict]) -> tuple[list[Story], list[tuple[s
     return added, skipped
 
 
-def main() -> int:
-    try:
-        token = get_token()
-        owner, repo = repo_slug()
-        issues = list_adw_issues(owner, repo, token)
-    except GitHubError as exc:
-        print(f"github error: {exc}", file=sys.stderr)
-        return 1
-
+def pull_and_sync() -> tuple[list[Story], list[tuple[str, str]]]:
+    """Fetch open `adw` issues and merge them into the target prd.json.
+    Returns (added, skipped). Raises GitHubError if GitHub is unreachable —
+    the caller decides whether that is fatal (poll_once stops before the
+    backlog so it never runs on a stale sync)."""
+    token = get_token()
+    owner, repo = repo_slug()
+    issues = list_adw_issues(owner, repo, token)
     prd = load_prd(paths.prd_path())
     added, skipped = sync_issues(prd, issues)
     save_prd(prd, paths.prd_path())
+    return added, skipped
+
+
+def main() -> int:
+    try:
+        added, skipped = pull_and_sync()
+    except GitHubError as exc:
+        print(f"github error: {exc}", file=sys.stderr)
+        return 1
 
     print(f"added {len(added)} story(ies), skipped {len(skipped)}")
     for sid, reason in skipped:
