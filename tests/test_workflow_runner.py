@@ -116,3 +116,34 @@ def test_notify_github_still_tries_pr_after_push_failure(monkeypatch):
     monkeypatch.setattr(workflow_runner, "comment_on_issue", lambda *a, **k: None)
     _notify_github(_story("S-006"), "done", "")
     assert "pr" in calls
+
+
+# --- _make_progress_fn (S-014) ----------------------------------------------
+
+def test_progress_fn_is_none_for_plain_story():
+    # S-NNN has no source issue, so nothing is posted.
+    assert workflow_runner._make_progress_fn(_story("S-006")) is None
+
+
+def test_progress_fn_posts_to_source_issue(monkeypatch):
+    posted = {}
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(
+        workflow_runner, "comment_on_issue",
+        lambda owner, repo, token, num, body: posted.update(num=num, body=body),
+    )
+    fn = workflow_runner._make_progress_fn(_story("GH-42"))
+    assert fn is not None
+    fn("plan", "success")
+    assert posted["num"] == 42
+    assert "plan" in posted["body"] and "GH-42" in posted["body"]
+
+
+def test_progress_fn_swallows_github_error(monkeypatch):
+    def boom():
+        raise GitHubError("offline")
+
+    monkeypatch.setattr(workflow_runner, "get_token", boom)
+    fn = workflow_runner._make_progress_fn(_story("GH-42"))
+    fn("plan", "success")  # must not raise

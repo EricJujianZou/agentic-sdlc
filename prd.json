@@ -247,8 +247,8 @@
         "Unit tests with a fake GitHub client cover: per-stage comment for a GH story, none for S-NNN, failures swallowed; full suite uv run pytest -q stays green"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "blocked"
+      "passes": true,
+      "status": "done"
     }
   ]
 }
