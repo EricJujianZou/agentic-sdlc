@@ -193,8 +193,8 @@
         "Unit tests cover path resolution (env override, git-toplevel fallback, per-project config override) against a temp repo; full suite uv run pytest -q stays green"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "blocked"
+      "passes": true,
+      "status": "done"
     },
     {
       "id": "S-012",

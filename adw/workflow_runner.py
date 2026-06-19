@@ -17,7 +17,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from adw import isolation, runlog
+from adw import isolation, paths, runlog
 from adw.github import (
     GitHubError,
     comment_on_issue,
@@ -34,12 +34,10 @@ from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
 from adw.state import State
 from adw.tickets import Story, get_story, load_prd, mark_story, pick_next_story, save_prd
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-PRD_PATH = REPO_ROOT / "prd.json"
-STATE_PATH = REPO_ROOT / "state.json"
-MODELS_PATH = REPO_ROOT / "configs" / "models.json"
-BUDGETS_PATH = REPO_ROOT / "configs" / "budgets.json"
-COMMANDS_DIR = REPO_ROOT / "commands"
+# All repo paths resolve through adw/paths.py: prd.json/state.json/git/runs
+# land in the *target* repo (ADW_REPO, else the engine for self-hosting),
+# while commands/ and configs/ default to the engine. Resolved at call time so
+# a process honoring ADW_REPO operates entirely on the target.
 
 # Which stage pipeline each ticket type runs; the backlog runner dispatches
 # on this. feat/system-repair get the full cycle, bug skips review, chore
@@ -54,7 +52,7 @@ STAGE_ORDER_BY_TYPE: dict[str, tuple[str, ...]] = {
 
 def _git(*args: str) -> str:
     proc = subprocess.run(
-        ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ["git", *args], cwd=paths.target_root(), capture_output=True, text=True, check=True
     )
     return proc.stdout.strip()
 
@@ -86,7 +84,7 @@ def _make_verify_fn(budgets: dict):
     def verify() -> tuple[bool, str]:
         try:
             proc = subprocess.run(
-                command, cwd=REPO_ROOT, capture_output=True, text=True,
+                command, cwd=paths.target_root(), capture_output=True, text=True,
                 timeout=timeout_seconds,
             )
         except subprocess.TimeoutExpired:
@@ -105,7 +103,7 @@ def _push_branch(branch: str) -> bool:
     try:
         subprocess.run(
             ["git", "push", "-u", "origin", branch],
-            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+            cwd=paths.target_root(), capture_output=True, text=True, check=True,
         )
         return True
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
@@ -141,7 +139,7 @@ def _notify_github(story: Story, outcome: str, reason: str = "") -> None:
 
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file with the ticket and state context."""
-    command_file = COMMANDS_DIR / f"{stage.upper()}.md"
+    command_file = paths.commands_dir() / f"{stage.upper()}.md"
     if not command_file.exists():
         raise FileNotFoundError(
             f"{command_file} missing — stage entry commands are owned by "
@@ -200,9 +198,9 @@ def run_one_story(
     Shared by the single-ticket CLI (run_workflow) and the backlog runner."""
     timeout_seconds = budgets["stage_timeout_minutes"] * 60
     _ensure_work_branch(f"adw/{story.id}")
-    prd = load_prd(PRD_PATH)
+    prd = load_prd(paths.prd_path())
     mark_story(prd, story.id, status="in_progress")
-    save_prd(prd, PRD_PATH)
+    save_prd(prd, paths.prd_path())
     _commit_bookkeeping(f"chore: mark {story.id} in_progress")
     run_dir = runlog.run_dir(story.id)
 
@@ -212,7 +210,7 @@ def run_one_story(
             prompt_path,
             stage=stage,
             model=models[stage],
-            cwd=REPO_ROOT,
+            cwd=paths.target_root(),
             timeout_seconds=timeout_seconds,
         )
         output_path = run_dir / f"iter{state.iteration:02d}_{stage}_output.md"
@@ -226,18 +224,18 @@ def run_one_story(
         story,
         invoke,
         stage_order=stage_order,
-        state_path=STATE_PATH,
+        state_path=paths.state_path(),
         max_iterations=max_iterations,
-        breaker=CircuitBreaker(SafetyConfig.from_budgets(BUDGETS_PATH)),
+        breaker=CircuitBreaker(SafetyConfig.from_budgets(paths.budgets_path())),
         verify_fn=_make_verify_fn(budgets),
     )
 
-    prd = load_prd(PRD_PATH)
+    prd = load_prd(paths.prd_path())
     if outcome.outcome == "done":
         mark_story(prd, story.id, status="done", passes=True)
     else:
         mark_story(prd, story.id, status="blocked")
-    save_prd(prd, PRD_PATH)
+    save_prd(prd, paths.prd_path())
     _commit_bookkeeping(f"chore: record {story.id} outcome: {outcome.outcome}")
     _notify_github(story, outcome.outcome, outcome.reason or "")
     return outcome
@@ -274,17 +272,17 @@ def run_workflow(
     if args.isolate:
         os.environ[isolation.ISOLATION_ENV] = "1"
 
-    cooldown_msg = check_cooldown(STATE_PATH)
+    cooldown_msg = check_cooldown(paths.state_path())
     if cooldown_msg and not args.override_cooldown:
         print(f"refusing to start: {cooldown_msg}")
         print("pass --override-cooldown to start anyway")
         return 1
 
-    models = json.loads(MODELS_PATH.read_text(encoding="utf-8"))
-    budgets = json.loads(BUDGETS_PATH.read_text(encoding="utf-8"))
+    models = json.loads(paths.models_path().read_text(encoding="utf-8"))
+    budgets = json.loads(paths.budgets_path().read_text(encoding="utf-8"))
     max_iterations = args.max_iterations or budgets["max_iterations_default"]
 
-    prd = load_prd(PRD_PATH)
+    prd = load_prd(paths.prd_path())
     story = (
         get_story(prd, args.ticket)
         if args.ticket
@@ -319,8 +317,8 @@ def run_backlog_loop(
     run_story_fn,
     cooldown_fn,
     max_tickets: int,
-    prd_path=PRD_PATH,
-    state_path=STATE_PATH,
+    prd_path=None,
+    state_path=None,
 ) -> BacklogResult:
     """Outer loop over open stories (snarktank/ralph pattern). Picks the next
     open story, runs it via run_story_fn, and repeats until the backlog empties
@@ -328,6 +326,8 @@ def run_backlog_loop(
     and never overrides an active circuit cooldown. Adds no new authority — the
     inner safety model (run_ticket + breaker) is untouched. run_story_fn and
     cooldown_fn are injected so the loop is testable without real workflows."""
+    prd_path = paths.prd_path() if prd_path is None else prd_path
+    state_path = paths.state_path() if state_path is None else state_path
     count = 0
     while count < max_tickets:
         cooldown = cooldown_fn(state_path)
