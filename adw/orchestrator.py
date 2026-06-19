@@ -32,6 +32,14 @@ InvokeFn = Callable[[str, State, Story], StageResult]
 # breaker defaults to a no-op.
 VerifyFn = Callable[[], "tuple[bool, str]"]
 
+# progress_fn(stage, outcome_label) -> None. Best-effort, side-channel
+# notification of stage transitions (S-014) — e.g. a comment on the source
+# GitHub issue so the phone gets a running log. The orchestrator is the only
+# thing that calls it; stage agents never touch the outside world. Injected and
+# defaulting to None; it must never raise (the caller swallows failures), so a
+# notification problem can never change a ticket's outcome.
+ProgressFn = Callable[[str, str], None]
+
 
 class Breaker(Protocol):
     """Circuit-breaker interface; the real one is adw/safety.py."""
@@ -67,6 +75,7 @@ def run_ticket(
     max_iterations: int = 5,
     breaker: Breaker | None = None,
     verify_fn: VerifyFn | None = None,
+    progress_fn: ProgressFn | None = None,
     runs_root: str | Path | None = None,
 ) -> TicketOutcome:
     """Drive one ticket through its `stage_order` (plan -> implement -> test
@@ -109,6 +118,14 @@ def run_ticket(
                 },
                 runs_root=runs_root,
             )
+
+            # One progress notification per stage transition (S-014). Bounded:
+            # exactly one per stage execution, never per iteration-internal step.
+            if progress_fn is not None:
+                progress_fn(
+                    stage,
+                    result.status.outcome if result.status is not None else "no-status",
+                )
 
             # Completion outranks the breaker: the gate stage passing means
             # the ticket is done, and a cumulative counter (e.g. permission

@@ -54,6 +54,38 @@ def test_happy_path_one_iteration(tmp_path):
     assert outcome.tokens_used == 500
 
 
+def test_progress_fn_called_once_per_stage(tmp_path):
+    events = []
+
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    run(invoke, tmp_path, progress_fn=lambda stage, outcome: events.append((stage, outcome)))
+    # One event per loop stage, in order, with the stage outcome (document
+    # runs post-gate and is not a progress stage).
+    assert events == [
+        ("plan", "success"), ("implement", "success"),
+        ("test", "success"), ("review", "success"),
+    ]
+
+
+def test_progress_fn_reports_blocked_outcome(tmp_path):
+    events = []
+
+    def invoke(stage, state, story):
+        if stage == "test":
+            return StageResult(
+                status=StatusBlock(stage="test", ticket_id="S-001",
+                                   outcome="blocked", failure_reason="x"),
+                exit_code=0, tokens_used=10,
+            )
+        return ok(stage)
+
+    run(invoke, tmp_path, progress_fn=lambda s, o: events.append((s, o)))
+    assert ("test", "blocked") in events
+    assert ("review", "success") not in events  # blocked before reaching review
+
+
 def test_failure_loops_back_to_plan_then_succeeds(tmp_path):
     calls = []
 

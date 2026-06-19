@@ -137,6 +137,36 @@ def _notify_github(story: Story, outcome: str, reason: str = "") -> None:
         print(f"github notify skipped: {exc}")
 
 
+_PROGRESS_EMOJI = {"success": "✅", "failure": "⚠️", "blocked": "⛔", "halted": "⛔"}
+
+
+def _make_progress_fn(story: Story):
+    """A per-stage progress poster for a GH-sourced ticket, else None (S-014).
+
+    Returns a callable the orchestrator invokes on each stage transition; it
+    comments the stage outcome on the source issue so the phone gets a running
+    log. Best-effort: any GitHub/credential failure is printed and swallowed,
+    so a notification problem can never change the ticket's outcome. Stories
+    with no source issue (plain S-NNN) get None — nothing is posted."""
+    issue_number = source_issue_number(story.id)
+    if issue_number is None:
+        return None
+
+    def post(stage: str, outcome: str) -> None:
+        marker = _PROGRESS_EMOJI.get(outcome, "▶")
+        try:
+            token = get_token()
+            owner, repo = repo_slug()
+            comment_on_issue(
+                owner, repo, token, issue_number,
+                f"{marker} `{story.id}` — **{stage}**: {outcome}",
+            )
+        except GitHubError as exc:
+            print(f"progress comment skipped: {exc}")
+
+    return post
+
+
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file with the ticket and state context."""
     command_file = paths.commands_dir() / f"{stage.upper()}.md"
@@ -220,12 +250,18 @@ def run_one_story(
         output_path.write_text(output_text, encoding="utf-8")
         return result
 
+    # Progress poster: comments stage transitions on the source issue so a
+    # phone-filed ticket reports back live (S-014). None for plain S-NNN.
+    progress = _make_progress_fn(story)
+
     # Decompose first if the ticket arrived criteria-less (e.g. a terse phone
     # issue, S-013): the read-only decompose stage proposes acceptance criteria
     # and the orchestrator (here, not the agent) persists them to prd.json
     # before planning. A vague ticket that cannot be expanded blocks here.
     if not story.acceptance_criteria:
         criteria, problem = run_decompose(story, invoke, state_path=paths.state_path())
+        if progress is not None:
+            progress("decompose", "blocked" if problem is not None else "success")
         if problem is not None:
             prd = load_prd(paths.prd_path())
             mark_story(prd, story.id, status="blocked")
@@ -248,6 +284,7 @@ def run_one_story(
         max_iterations=max_iterations,
         breaker=CircuitBreaker(SafetyConfig.from_budgets(paths.budgets_path())),
         verify_fn=_make_verify_fn(budgets),
+        progress_fn=progress,
     )
 
     prd = load_prd(paths.prd_path())
