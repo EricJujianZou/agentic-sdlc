@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,11 +21,13 @@ from pathlib import Path
 from adw import isolation, paths, runlog
 from adw.github import (
     GitHubError,
+    add_labels,
     comment_on_issue,
     get_token,
     open_or_update_pr,
     outcome_comment_body,
     pr_body,
+    remove_label,
     repo_slug,
     source_issue_number,
 )
@@ -89,9 +92,14 @@ def _make_verify_fn(budgets: dict):
             )
         except subprocess.TimeoutExpired:
             return False, f"test-evidence run timed out after {timeout_seconds}s"
+        output = (proc.stdout or "") + (proc.stderr or "")
         if proc.returncode == 0:
-            return True, ""
-        detail = ((proc.stdout or "") + (proc.stderr or "")).strip()
+            # On green, surface the pass count (e.g. "209 passed") so the
+            # outcome comment can report a deterministic number to cross-check
+            # against CI. Absent a parseable count, success still returns "".
+            m = re.search(r"\d+ passed(?:, \d+ \w+)*", output)
+            return True, (m.group(0) if m else "")
+        detail = output.strip()
         return False, detail[-800:] if detail else f"pytest exited {proc.returncode}"
 
     return verify
@@ -111,7 +119,9 @@ def _push_branch(branch: str) -> bool:
         return False
 
 
-def _notify_github(story: Story, outcome: str, reason: str = "") -> None:
+def _notify_github(
+    story: Story, outcome: str, reason: str = "", test_evidence: str | None = None
+) -> None:
     """Best-effort outbound notification: push the work branch, open/update a
     PR for it, and comment the outcome on the source issue if one exists.
     Never raises — any GitHub/credential failure is printed and swallowed so
@@ -131,10 +141,39 @@ def _notify_github(story: Story, outcome: str, reason: str = "") -> None:
         if issue_number is not None:
             comment_on_issue(
                 owner, repo, token, issue_number,
-                outcome_comment_body(story, outcome, reason),
+                outcome_comment_body(story, outcome, reason, test_evidence),
             )
     except GitHubError as exc:
         print(f"github notify skipped: {exc}")
+
+
+# Issue-state labels (S-014 follow-up). GitHub's only native issue state is
+# open/closed, so "in progress" is expressed as a label: the issue stays OPEN
+# while it runs and after it's done (the PR's "Closes #N" closes it on merge —
+# the human gate), but its label tells the phone what state it's in, so a
+# backlog of issues no longer all look identical.
+RUN_LABEL_IN_PROGRESS = "in-progress"
+RUN_LABEL_DONE = "done"
+RUN_LABEL_BLOCKED = "blocked"
+
+
+def _set_run_label(story: Story, *, add: tuple[str, ...] = (), remove: tuple[str, ...] = ()) -> None:
+    """Best-effort issue relabel so a phone-filed ticket shows its run state.
+    No-op for plain S-NNN stories (no source issue). Never raises — like every
+    other outbound notification, a GitHub/credential failure is swallowed so it
+    can never change the ticket's outcome."""
+    number = source_issue_number(story.id)
+    if number is None:
+        return
+    try:
+        token = get_token()
+        owner, repo = repo_slug()
+        for label in remove:
+            remove_label(owner, repo, token, number, label)
+        if add:
+            add_labels(owner, repo, token, number, list(add))
+    except GitHubError as exc:
+        print(f"issue relabel skipped: {exc}")
 
 
 _PROGRESS_EMOJI = {"success": "✅", "failure": "⚠️", "blocked": "⛔", "halted": "⛔"}
@@ -152,15 +191,18 @@ def _make_progress_fn(story: Story):
     if issue_number is None:
         return None
 
-    def post(stage: str, outcome: str) -> None:
+    def post(stage: str, outcome: str, summary: str = "") -> None:
         marker = _PROGRESS_EMOJI.get(outcome, "▶")
+        body = f"{marker} `{story.id}` — **{stage}**: {outcome}"
+        # Append the stage's own one-line summary so the phone sees what each
+        # stage actually did (its plan, the tests it ran, the review verdict),
+        # not just a bare outcome word.
+        if summary and summary.strip():
+            body += f"\n\n{summary.strip()}"
         try:
             token = get_token()
             owner, repo = repo_slug()
-            comment_on_issue(
-                owner, repo, token, issue_number,
-                f"{marker} `{story.id}` — **{stage}**: {outcome}",
-            )
+            comment_on_issue(owner, repo, token, issue_number, body)
         except GitHubError as exc:
             print(f"progress comment skipped: {exc}")
 
@@ -232,6 +274,9 @@ def run_one_story(
     mark_story(prd, story.id, status="in_progress")
     save_prd(prd, paths.prd_path())
     _commit_bookkeeping(f"chore: mark {story.id} in_progress")
+    # Flag the source issue as running so a backlog of issues is distinguishable
+    # at a glance (best-effort; no-op for plain S-NNN).
+    _set_run_label(story, add=(RUN_LABEL_IN_PROGRESS,))
     run_dir = runlog.run_dir(story.id)
 
     def invoke(stage: str, state: State, story: Story):
@@ -261,12 +306,18 @@ def run_one_story(
     if not story.acceptance_criteria:
         criteria, problem = run_decompose(story, invoke, state_path=paths.state_path())
         if progress is not None:
-            progress("decompose", "blocked" if problem is not None else "success")
+            if problem is not None:
+                progress("decompose", "blocked", problem)
+            else:
+                progress("decompose", "success", f"{len(criteria)} acceptance criteria proposed")
         if problem is not None:
             prd = load_prd(paths.prd_path())
             mark_story(prd, story.id, status="blocked")
             save_prd(prd, paths.prd_path())
             _commit_bookkeeping(f"chore: record {story.id} outcome: blocked")
+            _set_run_label(
+                story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,)
+            )
             return TicketOutcome(
                 story.id, "blocked", reason=problem, stages_run=["decompose"]
             )
@@ -294,7 +345,13 @@ def run_one_story(
         mark_story(prd, story.id, status="blocked")
     save_prd(prd, paths.prd_path())
     _commit_bookkeeping(f"chore: record {story.id} outcome: {outcome.outcome}")
-    _notify_github(story, outcome.outcome, outcome.reason or "")
+    # Swap the in-progress label for the terminal one; the issue stays OPEN
+    # (label-only) so it closes on PR merge, the human gate.
+    if outcome.outcome == "done":
+        _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_DONE,))
+    else:
+        _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,))
+    _notify_github(story, outcome.outcome, outcome.reason or "", outcome.test_evidence)
     return outcome
 
 

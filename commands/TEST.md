@@ -36,7 +36,7 @@ message), with values filled in:
   "ticket_id": "<your ticket id>",
   "outcome": "success | failure | blocked",
   "exit_signal": false,
-  "summary": "one or two lines: what was run, what passed",
+  "summary": "one or two lines: what was run and the pass count (e.g. '209 passed'); this summary is posted to the source issue, so make it phone-readable",
   "failure_reason": null,
   "files_changed": 0,
   "suggested_tools": [],

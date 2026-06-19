@@ -86,7 +86,17 @@ label — `feat`/`bug`/`chore`/`system-repair` — plus an optional `p<N>`
 priority). A terse one-liner is fine: the decompose stage expands it into
 acceptance criteria, and quote-bar/markdown noise from a phone paste is
 tolerated. As a ticket runs, it comments each stage transition back on the
-source issue (and opens a PR when done), so your phone gets a running log.
+source issue — including that stage's own one-line summary (the plan, the
+test pass count, the review verdict) — and on completion posts the
+deterministic local pytest count to cross-check against CI. It also relabels
+the issue (`in-progress` → `done`/`blocked`) so a backlog of issues no longer
+all look identical, and opens a PR (whose `Closes #N` closes the issue when
+you merge — the human gate). So your phone gets a step-by-step running log.
+
+Note the trigger is **not** the phone: the phone only files the issue. An
+always-on machine running `poll_once.py` (below) is what picks it up — see the
+scheduling note. The engine is repo-agnostic, so one engine checkout can serve
+any target repo via its `origin` remote; you don't copy `poll_once.py` per repo.
 
 - **Pull tickets in:** `uv run python workflows/sync_issues.py`
 - **Pull, then work the backlog in one pass:**
