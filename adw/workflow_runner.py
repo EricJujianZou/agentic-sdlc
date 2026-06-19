@@ -29,7 +29,7 @@ from adw.github import (
     source_issue_number,
 )
 from adw.invoke import invoke_stage
-from adw.orchestrator import STAGE_ORDER, TicketOutcome, run_ticket
+from adw.orchestrator import STAGE_ORDER, TicketOutcome, run_decompose, run_ticket
 from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
 from adw.state import State
 from adw.tickets import Story, get_story, load_prd, mark_story, pick_next_story, save_prd
@@ -219,6 +219,26 @@ def run_one_story(
             output_text += f"\n\n## stage stderr\n\n```\n{result.stderr.strip()}\n```\n"
         output_path.write_text(output_text, encoding="utf-8")
         return result
+
+    # Decompose first if the ticket arrived criteria-less (e.g. a terse phone
+    # issue, S-013): the read-only decompose stage proposes acceptance criteria
+    # and the orchestrator (here, not the agent) persists them to prd.json
+    # before planning. A vague ticket that cannot be expanded blocks here.
+    if not story.acceptance_criteria:
+        criteria, problem = run_decompose(story, invoke, state_path=paths.state_path())
+        if problem is not None:
+            prd = load_prd(paths.prd_path())
+            mark_story(prd, story.id, status="blocked")
+            save_prd(prd, paths.prd_path())
+            _commit_bookkeeping(f"chore: record {story.id} outcome: blocked")
+            return TicketOutcome(
+                story.id, "blocked", reason=problem, stages_run=["decompose"]
+            )
+        story.acceptance_criteria = criteria
+        prd = load_prd(paths.prd_path())
+        get_story(prd, story.id).acceptance_criteria = criteria
+        save_prd(prd, paths.prd_path())
+        _commit_bookkeeping(f"chore: decompose {story.id} into acceptance criteria")
 
     outcome = run_ticket(
         story,

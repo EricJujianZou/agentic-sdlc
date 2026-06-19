@@ -49,10 +49,13 @@ def _validate_story(raw: dict, index: int, errors: list[str]) -> None:
     if not isinstance(raw.get("priority"), int):
         errors.append(f"{where}: priority must be an integer")
     criteria = raw.get("acceptance_criteria")
-    if not isinstance(criteria, list) or not criteria or not all(
+    # May be empty: a terse intake (e.g. a phone-filed GitHub issue) is stored
+    # criteria-less and the decompose stage (S-013) fills it in before plan.
+    # If present, every entry must still be a non-empty string.
+    if not isinstance(criteria, list) or not all(
         isinstance(c, str) and c.strip() for c in criteria
     ):
-        errors.append(f"{where}: acceptance_criteria must be a non-empty list of non-empty strings")
+        errors.append(f"{where}: acceptance_criteria must be a list of non-empty strings")
     if not isinstance(raw.get("passes", False), bool):
         errors.append(f"{where}: passes must be a boolean")
 

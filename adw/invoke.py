@@ -22,6 +22,10 @@ from adw.status import StatusBlock, StatusBlockError, parse_status_block
 # unscoped denial there trips the breaker's permission-denial counter.
 _GIT_READONLY = ["Bash(git status:*)", "Bash(git log:*)", "Bash(git diff:*)"]
 STAGE_TOOLS: dict[str, list[str]] = {
+    # decompose only reads the repo to expand a terse ticket into acceptance
+    # criteria; it never edits, and the orchestrator (not the agent) persists
+    # the result to prd.json.
+    "decompose": ["Read", "Glob", "Grep", *_GIT_READONLY],
     "plan": ["Read", "Glob", "Grep", *_GIT_READONLY],
     "implement": ["Read", "Glob", "Grep", "Edit", "Write", "Bash"],
     "test": ["Read", "Glob", "Grep", "Bash", "mcp__playwright"],
