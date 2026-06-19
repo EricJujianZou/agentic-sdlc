@@ -44,9 +44,10 @@ concurrently. The whole design is a **parent/worker split**:
    notifies). Keeps workers fully write-free and preserves decompose's
    block-on-vague behavior.
 4. Parent: mark all survivors `in_progress`, commit once.
-5. Parent: per story, `git worktree add <root>/<id> -b adw/<id> main`, spawn a
-   **worker thread** (work is subprocess-bound — `invoke_stage` — so threads
-   give real parallelism without process overhead).
+5. Parent: per story, `git worktree add ../.adw-worktrees/<id> -b adw/<id> main`
+   (a **sibling dir outside the target repo**, so the main working tree stays
+   pristine), spawn a **worker thread** (work is subprocess-bound —
+   `invoke_stage` — so threads give real parallelism without process overhead).
 6. **Worker(story, worktree_dir):** runs `run_ticket` with `cwd` + `state_path`
    scoped to the worktree. Per-stage progress comments still fire (per-issue,
    concurrency-safe). **No `prd.json` writes, no notify.** Returns the outcome.
@@ -62,7 +63,10 @@ concurrently. The whole design is a **parent/worker split**:
 ## Locked decisions
 
 Threads · `max_parallel = 3` · opt-in `--parallel` · parent owns all
-`prd.json` writes · parent-level cooldown check.
+`prd.json` writes · parent-level cooldown check · **worktree root = a sibling
+dir outside the repo (`../.adw-worktrees/<id>`)** · **decompose runs in the
+parent before dispatch** · **`--parallel` ships on `run_backlog` first;
+`poll_once` stays sequential until proven** (settled 2026-06-19).
 
 ## Hard parts / edge cases
 
@@ -103,7 +107,10 @@ Threads · `max_parallel = 3` · opt-in `--parallel` · parent owns all
   (prd flips, decompose persistence, notify, relabel, observer), so the
   sequential and parallel paths share one implementation.
 - **`workflows/run_backlog_parallel.py`** (new) or a `--parallel` flag on
-  `run_backlog`; `poll_once.py` threads the flag through.
+  `run_backlog` — this is where parallel ships first. `poll_once.py` stays
+  sequential until parallel is proven (no `--parallel` there yet).
+- **`adw/worktrees.py`** roots worktrees at `../.adw-worktrees/<id>` relative to
+  the resolved target repo.
 - **`configs/budgets.json`**: `max_parallel`.
 
 ## Incremental rollout (~3 PRs)
@@ -135,12 +142,18 @@ Threads · `max_parallel = 3` · opt-in `--parallel` · parent owns all
 - Shared-state races → parent-only `prd.json` writes, per-worktree `state.json`,
   serialized post-processing.
 
-## Open questions (decide before PR C)
+## Resolved decisions (settled 2026-06-19)
 
-1. **Worktree root** — sibling dir outside the repo (`../.adw-worktrees/<id>`,
-   leaning here — zero chance of polluting status/hooks) vs inside
-   (`.adw/worktrees/`, gitignored).
-2. **Decompose location** — in the parent before dispatch (leaning here — keeps
-   workers write-free) vs worker-returns-criteria for the parent to persist.
-3. **`--parallel` scope** — expose on `poll_once` (the scheduled entry) now, or
-   only on `run_backlog` until proven.
+1. **Worktree root** → a **sibling dir outside the target repo**
+   (`../.adw-worktrees/<id>`). Zero chance of a worktree polluting the main
+   working tree's `git status` or tripping hooks; chosen over an in-repo
+   gitignored dir.
+2. **Decompose location** → **in the parent, before dispatch**. The parent runs
+   decompose serially for criteria-less tickets, persists the criteria (or drops
+   the ticket as blocked + notifies) before marking `in_progress` and spawning
+   workers. Keeps the invariant that workers never touch `prd.json`; chosen over
+   worker-returns-criteria. Cost: decompose is serialized, acceptable because
+   it's read-only and `max_parallel` is small.
+3. **`--parallel` scope** → **`run_backlog` first; `poll_once` stays
+   sequential** until parallel is validated by manual runs. Keeps the scheduled,
+   unattended path on the conservative behavior.
