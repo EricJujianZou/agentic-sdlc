@@ -262,8 +262,8 @@
         "tests/test_dashboard.py still passes and the full suite stays green"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "in_progress"
+      "passes": true,
+      "status": "done"
     }
   ]
 }
