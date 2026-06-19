@@ -28,18 +28,35 @@ from adw.workflow_runner import (
     STAGE_ORDER_BY_TYPE,
     run_backlog_loop,
     run_one_story,
+    run_parallel_backlog,
 )
 
 DEFAULT_MAX_TICKETS = 20
 
 
-def run_backlog(max_tickets: int, max_iterations: int | None = None) -> BacklogResult:
+def run_backlog(
+    max_tickets: int, max_iterations: int | None = None, *, parallel: bool = False
+) -> BacklogResult:
     """Work the open backlog ticket-by-ticket (one pass, bounded by max_tickets).
     Factored out of main() so the one-shot intake runner (workflows/poll_once.py)
-    can reuse the exact same per-ticket dispatch and stop conditions."""
+    can reuse the exact same per-ticket dispatch and stop conditions.
+
+    With `parallel=True` (opt-in, #4) it instead runs up to budgets.max_parallel
+    tickets concurrently, each in its own git worktree, so one blocked ticket
+    halts only its worktree rather than the whole backlog. Sequential remains
+    the default until parallel is proven; poll_once never passes parallel=True."""
     models = json.loads(paths.models_path().read_text(encoding="utf-8"))
     budgets = json.loads(paths.budgets_path().read_text(encoding="utf-8"))
     max_iterations = max_iterations or budgets["max_iterations_default"]
+
+    if parallel:
+        return run_parallel_backlog(
+            max_tickets=max_tickets,
+            max_iterations=max_iterations,
+            max_parallel=budgets.get("max_parallel", 3),
+            models=models,
+            budgets=budgets,
+        )
 
     def run_story_fn(story: Story) -> TicketOutcome:
         stage_order = STAGE_ORDER_BY_TYPE.get(story.type)
@@ -66,8 +83,14 @@ def main() -> int:
         "--max-iterations", type=int, default=None,
         help="per-ticket plan->review cap (default from budgets.json)",
     )
+    parser.add_argument(
+        "--parallel", action="store_true",
+        help="run up to budgets.max_parallel tickets concurrently, each in its own "
+        "git worktree (#4, opt-in). A blocked ticket halts only its worktree, not "
+        "the backlog. Default is sequential, stop-on-block.",
+    )
     args = parser.parse_args()
-    result = run_backlog(args.max_tickets, args.max_iterations)
+    result = run_backlog(args.max_tickets, args.max_iterations, parallel=args.parallel)
     print(f"backlog runner: ran {result.tickets_run} ticket(s); {result.stop_reason}")
     return 0 if result.clean else 1
 

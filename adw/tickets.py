@@ -120,6 +120,22 @@ def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story 
     return min(candidates, key=lambda s: (s.priority, s.id))
 
 
+def pick_next_stories(prd: Prd, n: int, *, types: tuple[str, ...] | None = None) -> list[Story]:
+    """The top `n` open stories by (priority, id) — the parallel batch (#4).
+
+    `pick_next_story` is the n=1 case; this returns up to `n` of the same
+    candidates (passes=false, status=open) in the same deterministic order, so
+    the parallel coordinator can run several independent tickets at once.
+    system-repair stories stay excluded (filed as 'blocked', human-gated)."""
+    candidates = [
+        s
+        for s in prd.stories
+        if not s.passes and s.status == "open" and (types is None or s.type in types)
+    ]
+    candidates.sort(key=lambda s: (s.priority, s.id))
+    return candidates[: max(0, n)]
+
+
 def get_story(prd: Prd, story_id: str) -> Story:
     for story in prd.stories:
         if story.id == story_id:

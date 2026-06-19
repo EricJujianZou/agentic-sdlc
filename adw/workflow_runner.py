@@ -15,10 +15,11 @@ import json
 import os
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-from adw import isolation, paths, runlog
+from adw import isolation, paths, runlog, worktrees
 from adw.github import (
     GitHubError,
     add_labels,
@@ -42,7 +43,15 @@ from adw.orchestrator import (
 )
 from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
 from adw.state import State
-from adw.tickets import Story, get_story, load_prd, mark_story, pick_next_story, save_prd
+from adw.tickets import (
+    Story,
+    get_story,
+    load_prd,
+    mark_story,
+    pick_next_stories,
+    pick_next_story,
+    save_prd,
+)
 
 # All repo paths resolve through adw/paths.py: prd.json/state.json/git/runs
 # land in the *target* repo (ADW_REPO, else the engine for self-hosting),
@@ -667,3 +676,184 @@ def run_backlog_loop(
                 count, f"stopped at {story.id}: {outcome.outcome} ({outcome.reason})", False
             )
     return BacklogResult(count, f"reached --max-tickets ({max_tickets})", True)
+
+
+# --- Parallel backlog coordinator (#4, Tier 1) ------------------------------
+
+
+def _safe_work(work_fn, story: Story, worktree_dir) -> TicketOutcome:
+    """Run one worker, turning ANY exception into a blocked outcome so a single
+    crashing worker never aborts the batch (failure isolation, #4)."""
+    try:
+        return work_fn(story, worktree_dir)
+    except Exception as exc:  # noqa: BLE001 — deliberately catch-all; the batch must survive
+        return TicketOutcome(
+            story.id, "blocked", reason=f"worker raised {exc.__class__.__name__}: {exc}"
+        )
+
+
+def run_backlog_parallel(
+    *,
+    prepare_fn,
+    work_fn,
+    finalize_fn,
+    block_fn,
+    cooldown_fn,
+    add_worktree_fn,
+    remove_worktree_fn,
+    max_tickets: int,
+    max_parallel: int,
+    prd_path=None,
+    state_path=None,
+) -> BacklogResult:
+    """Run the open backlog in parallel batches of up to `max_parallel` tickets,
+    each isolated in its own git worktree (plans/parallelization_plan.md). The
+    parent owns all shared state; workers only run the per-ticket work.
+
+    Per batch: check cooldown ONCE (workers never override it), pick the top N
+    open stories by (priority, id), `prepare` each serially (decompose + persist
+    + mark in_progress — a ticket that cannot be expanded blocks here via
+    `block_fn` and never reaches a worktree), add a worktree per survivor, run
+    the survivors' work concurrently in threads, then reconcile their outcomes
+    SERIALLY via `finalize_fn` (prd writes, notify, observer). Worktrees are
+    always removed in a `finally`. Unlike the sequential loop, a blocked ticket
+    halts only its own worktree — the batch and backlog continue.
+
+    The leaf operations are injected so the coordinator is testable without real
+    git, agents, or GitHub:
+      prepare_fn(story) -> str | None     (None = ready; str = blocked problem)
+      work_fn(story, worktree_dir) -> TicketOutcome   [runs in a worker thread]
+      finalize_fn(story, outcome, worktree_dir) -> None
+      block_fn(story, problem) -> TicketOutcome
+      add_worktree_fn(story) -> worktree_dir ; remove_worktree_fn(story) -> None
+    """
+    prd_path = paths.prd_path() if prd_path is None else prd_path
+    state_path = paths.state_path() if state_path is None else state_path
+    total = 0
+    while total < max_tickets:
+        cooldown = cooldown_fn(state_path)
+        if cooldown is not None:
+            return BacklogResult(total, f"circuit cooldown active; stopping: {cooldown}", False)
+        prd = load_prd(prd_path)
+        batch = pick_next_stories(prd, min(max_parallel, max_tickets - total))
+        if not batch:
+            return BacklogResult(total, "no open stories remain", True)
+        total += len(batch)
+
+        # Parent serial: prepare (decompose + persist + mark in_progress).
+        # A ticket that cannot be expanded is finalized blocked now and never
+        # gets a worktree; the rest survive to run.
+        survivors: list[Story] = []
+        for story in batch:
+            problem = prepare_fn(story)
+            if problem is not None:
+                block_fn(story, problem)
+            else:
+                survivors.append(story)
+        if not survivors:
+            continue
+
+        worktree_dirs: dict[str, object] = {}
+        try:
+            for story in survivors:
+                worktree_dirs[story.id] = add_worktree_fn(story)
+            # Concurrent work — threads, because the work is subprocess-bound
+            # (invoke_stage) so real parallelism needs no process overhead.
+            outcomes: dict[str, TicketOutcome] = {}
+            with ThreadPoolExecutor(max_workers=len(survivors)) as pool:
+                futures = {
+                    pool.submit(_safe_work, work_fn, story, worktree_dirs[story.id]): story
+                    for story in survivors
+                }
+                for fut in as_completed(futures):
+                    story = futures[fut]
+                    outcomes[story.id] = fut.result()
+            # Reconcile SERIALLY (deterministic order) — prd writes, notify, and
+            # the observer touch shared state or spend agent cost.
+            for story in survivors:
+                finalize_fn(story, outcomes[story.id], worktree_dirs[story.id])
+        finally:
+            for story in survivors:
+                remove_worktree_fn(story)
+
+    return BacklogResult(total, f"reached --max-tickets ({max_tickets})", True)
+
+
+def run_parallel_backlog(
+    *,
+    max_tickets: int,
+    max_iterations: int,
+    max_parallel: int,
+    models: dict,
+    budgets: dict,
+) -> BacklogResult:
+    """Wire the work/coordination helpers to the generic parallel coordinator
+    and run a bounded parallel backlog pass. The thin entry script
+    (workflows/run_backlog.py --parallel) supplies configs."""
+
+    def prepare(story: Story) -> str | None:
+        # Decompose runs in the parent (read-only, against the target repo) so
+        # workers only ever see fully-specified stories; then mark in_progress.
+        if not story.acceptance_criteria:
+            run_dir = runlog.run_dir(story.id)
+            invoke = _make_invoke(
+                story, run_dir, models=models, budgets=budgets, cwd=paths.target_root()
+            )
+            problem = _decompose_and_persist(
+                story, invoke, _make_progress_fn(story), state_path=paths.state_path()
+            )
+            if problem is not None:
+                return problem
+        _mark_in_progress(story)
+        return None
+
+    def work(story: Story, worktree_dir) -> TicketOutcome:
+        stage_order = STAGE_ORDER_BY_TYPE.get(story.type)
+        if stage_order is None:  # defensive: schema restricts type, but never dispatch blind
+            return TicketOutcome(story.id, "blocked", reason=f"no workflow for type {story.type!r}")
+        worktree_dir = Path(worktree_dir)
+        return run_ticket_work(
+            story, stage_order,
+            models=models, budgets=budgets, max_iterations=max_iterations,
+            cwd=worktree_dir,
+            state_path=worktree_dir / "state.json",
+            run_dir=runlog.run_dir(story.id),
+            progress_fn=_make_progress_fn(story),
+        )
+
+    def finalize(story: Story, outcome: TicketOutcome, worktree_dir) -> None:
+        # The observer (if it runs) sees the worktree — that is where this
+        # ticket's changes live; the worktree is removed only after finalize.
+        worktree_dir = Path(worktree_dir)
+        observer_invoke = _make_invoke(
+            story, runlog.run_dir(story.id), models=models, budgets=budgets, cwd=worktree_dir
+        )
+        _finalize_story(
+            story, outcome,
+            observer_invoke=observer_invoke,
+            observer_state_path=worktree_dir / "state.json",
+            budgets=budgets,
+        )
+
+    def block(story: Story, problem: str) -> TicketOutcome:
+        # Decompose-blocked: no worktree exists, so the observer runs against
+        # the target repo.
+        invoke = _make_invoke(
+            story, runlog.run_dir(story.id), models=models, budgets=budgets, cwd=paths.target_root()
+        )
+        return _finalize_decompose_block(
+            story, problem,
+            observer_invoke=invoke, observer_state_path=paths.state_path(), budgets=budgets,
+        )
+
+    return run_backlog_parallel(
+        prepare_fn=prepare,
+        work_fn=work,
+        finalize_fn=finalize,
+        block_fn=block,
+        cooldown_fn=check_cooldown,
+        add_worktree_fn=lambda story: worktrees.add_worktree(story.id),
+        remove_worktree_fn=lambda story: worktrees.remove_worktree(story.id),
+        max_tickets=max_tickets,
+        max_parallel=max_parallel,
+    )

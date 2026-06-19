@@ -9,5 +9,6 @@
   "stage_timeout_minutes": 15,
   "test_evidence_command": ["uv", "run", "pytest", "-q"],
   "test_evidence_timeout_minutes": 10,
-  "observer_enabled": true
+  "observer_enabled": true,
+  "max_parallel": 3
 }
