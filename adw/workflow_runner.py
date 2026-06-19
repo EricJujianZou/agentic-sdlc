@@ -83,18 +83,24 @@ def _commit_bookkeeping(message: str) -> None:
         _git("commit", "-m", message)
 
 
-def _make_verify_fn(budgets: dict):
+def _make_verify_fn(budgets: dict, cwd: str | Path | None = None):
     """Build the deterministic test-evidence runner the orchestrator calls
     after the dual gate (improvements C3). Command and timeout are budgets
     knobs; a non-zero exit or a timeout counts as 'not verified', so a
-    failing tree can never be accepted as done."""
+    failing tree can never be accepted as done.
+
+    `cwd` is where the suite runs: the target repo by default, but a parallel
+    worker passes its worktree dir so the re-run exercises the worktree's
+    changes, not the pristine main tree (#4). Resolved at call time so an
+    unset cwd still honors ADW_REPO."""
     command = budgets.get("test_evidence_command") or ["uv", "run", "pytest", "-q"]
     timeout_seconds = budgets.get("test_evidence_timeout_minutes", 10) * 60
 
     def verify() -> tuple[bool, str]:
+        run_cwd = cwd if cwd is not None else paths.target_root()
         try:
             proc = subprocess.run(
-                command, cwd=paths.target_root(), capture_output=True, text=True,
+                command, cwd=run_cwd, capture_output=True, text=True,
                 timeout=timeout_seconds,
             )
         except subprocess.TimeoutExpired:
@@ -223,18 +229,28 @@ def _format_repair_comment(story: Story, result: ObserverResult) -> str:
     return "\n".join(lines)
 
 
-def _observe_and_report(story: Story, invoke_fn, failure_reason: str) -> None:
+def _observe_and_report(
+    story: Story, invoke_fn, failure_reason: str, *, state_path: str | Path | None = None
+) -> None:
     """Run the read-only observer on a non-done ticket and surface its verdict
     on the source issue (self-heal lens). Best-effort throughout: it never
     raises and never changes the ticket's outcome. The observer only diagnoses;
     it files/edits nothing — the human acts on the comment + label.
+
+    `state_path` (and the `invoke_fn`'s cwd) target the tree the work happened
+    in: the main repo for the sequential path, but a worker's worktree for a
+    parallel ticket so the diagnosis sees that ticket's changes (#4). Defaults
+    to the target repo's state.json.
 
     The whole-repo pass is the one place we deliberately spend big context, so
     it runs only on a non-done outcome (bounded by failure frequency), once, and
     can be switched off via budgets.observer_enabled.
     """
     number = source_issue_number(story.id)
-    result = run_observer(story, invoke_fn, failure_reason, state_path=paths.state_path())
+    result = run_observer(
+        story, invoke_fn, failure_reason,
+        state_path=state_path if state_path is not None else paths.state_path(),
+    )
     if result.problem is not None:
         print(f"observer skipped: {result.problem}")
         return
@@ -333,26 +349,30 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
     return prompt_path
 
 
-def run_one_story(
-    story: Story,
-    stage_order: tuple[str, ...],
-    *,
-    models: dict,
-    budgets: dict,
-    max_iterations: int,
-) -> TicketOutcome:
-    """Run one story through `stage_order` and record its outcome in prd.json.
-    Shared by the single-ticket CLI (run_workflow) and the backlog runner."""
+# --- Work / coordination split (#4) -----------------------------------------
+#
+# run_one_story is factored into a per-ticket WORK half and a COORDINATION
+# half so the sequential path and each parallel worker share one work
+# implementation (plans/parallelization_plan.md):
+#
+#   WORK (worktree-scoped, NO shared-state writes): run_ticket_work — drives
+#     the story through its stages in a given `cwd`/`state_path`. A parallel
+#     worker runs this in its own worktree and returns a TicketOutcome.
+#
+#   COORDINATION (parent-only, owns prd.json/GitHub): _mark_in_progress,
+#     _decompose_and_persist, _finalize_story, _finalize_decompose_block.
+#     ONLY these write prd.json, push branches, relabel, or run the observer,
+#     so workers never touch shared state and post-processing stays serial.
+#
+# The sequential run_one_story composes them back-to-back; the parallel
+# coordinator (run_backlog_parallel) calls the same pieces across threads.
+
+
+def _make_invoke(story: Story, run_dir: Path, *, models: dict, budgets: dict, cwd: str | Path):
+    """Build the stage-invocation closure, bound to `cwd` (the tree the agent
+    operates on) and `run_dir` (where its prompt/output land). The sequential
+    path passes the target repo; a parallel worker passes its worktree (#4)."""
     timeout_seconds = budgets["stage_timeout_minutes"] * 60
-    _ensure_work_branch(f"adw/{story.id}")
-    prd = load_prd(paths.prd_path())
-    mark_story(prd, story.id, status="in_progress")
-    save_prd(prd, paths.prd_path())
-    _commit_bookkeeping(f"chore: mark {story.id} in_progress")
-    # Flag the source issue as running so a backlog of issues is distinguishable
-    # at a glance (best-effort; no-op for plain S-NNN).
-    _set_run_label(story, add=(RUN_LABEL_IN_PROGRESS,))
-    run_dir = runlog.run_dir(story.id)
 
     def invoke(stage: str, state: State, story: Story):
         prompt_path = compose_stage_prompt(stage, state, story, run_dir)
@@ -360,7 +380,7 @@ def run_one_story(
             prompt_path,
             stage=stage,
             model=models[stage],
-            cwd=paths.target_root(),
+            cwd=cwd,
             timeout_seconds=timeout_seconds,
         )
         output_path = run_dir / f"iter{state.iteration:02d}_{stage}_output.md"
@@ -370,51 +390,89 @@ def run_one_story(
         output_path.write_text(output_text, encoding="utf-8")
         return result
 
-    # Progress poster: comments stage transitions on the source issue so a
-    # phone-filed ticket reports back live (S-014). None for plain S-NNN.
-    progress = _make_progress_fn(story)
+    return invoke
 
-    # Decompose first if the ticket arrived criteria-less (e.g. a terse phone
-    # issue, S-013): the read-only decompose stage proposes acceptance criteria
-    # and the orchestrator (here, not the agent) persists them to prd.json
-    # before planning. A vague ticket that cannot be expanded blocks here.
-    if not story.acceptance_criteria:
-        criteria, problem = run_decompose(story, invoke, state_path=paths.state_path())
-        if progress is not None:
-            if problem is not None:
-                progress("decompose", "blocked", problem)
-            else:
-                progress("decompose", "success", f"{len(criteria)} acceptance criteria proposed")
+
+def _mark_in_progress(story: Story) -> None:
+    """Coordination: flip the story to in_progress in prd.json, commit, and flag
+    the source issue as running (best-effort; no-op for plain S-NNN)."""
+    prd = load_prd(paths.prd_path())
+    mark_story(prd, story.id, status="in_progress")
+    save_prd(prd, paths.prd_path())
+    _commit_bookkeeping(f"chore: mark {story.id} in_progress")
+    _set_run_label(story, add=(RUN_LABEL_IN_PROGRESS,))
+
+
+def _decompose_and_persist(story: Story, invoke_fn, progress, *, state_path: str | Path) -> str | None:
+    """Coordination: expand a criteria-less ticket and persist the proposed
+    acceptance criteria to prd.json (the orchestrator persists, never the
+    agent — S-013). Returns a problem string to block on, or None when criteria
+    were persisted and `story.acceptance_criteria` was updated in place.
+
+    Always runs in the parent (read-only, against the target repo) so workers
+    only ever see fully-specified stories (#4)."""
+    criteria, problem = run_decompose(story, invoke_fn, state_path=state_path)
+    if progress is not None:
         if problem is not None:
-            prd = load_prd(paths.prd_path())
-            mark_story(prd, story.id, status="blocked")
-            save_prd(prd, paths.prd_path())
-            _commit_bookkeeping(f"chore: record {story.id} outcome: blocked")
-            _set_run_label(
-                story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,)
-            )
-            if budgets.get("observer_enabled", True):
-                _observe_and_report(story, invoke, problem)
-            return TicketOutcome(
-                story.id, "blocked", reason=problem, stages_run=["decompose"]
-            )
-        story.acceptance_criteria = criteria
-        prd = load_prd(paths.prd_path())
-        get_story(prd, story.id).acceptance_criteria = criteria
-        save_prd(prd, paths.prd_path())
-        _commit_bookkeeping(f"chore: decompose {story.id} into acceptance criteria")
+            progress("decompose", "blocked", problem)
+        else:
+            progress("decompose", "success", f"{len(criteria)} acceptance criteria proposed")
+    if problem is not None:
+        return problem
+    story.acceptance_criteria = criteria
+    prd = load_prd(paths.prd_path())
+    get_story(prd, story.id).acceptance_criteria = criteria
+    save_prd(prd, paths.prd_path())
+    _commit_bookkeeping(f"chore: decompose {story.id} into acceptance criteria")
+    return None
 
-    outcome = run_ticket(
+
+def run_ticket_work(
+    story: Story,
+    stage_order: tuple[str, ...],
+    *,
+    models: dict,
+    budgets: dict,
+    max_iterations: int,
+    cwd: str | Path,
+    state_path: str | Path,
+    run_dir: Path,
+    progress_fn=None,
+) -> TicketOutcome:
+    """The per-ticket WORK: drive `story` through `stage_order` inside `cwd`,
+    writing stage state to `state_path` and logs to `run_dir`. Performs NO
+    shared-state writes (no prd.json, no GitHub) — the parent coordinator owns
+    those. Shared by the sequential path (cwd = target repo) and each parallel
+    worker (cwd = its worktree, with a worktree-local state.json)."""
+    invoke = _make_invoke(story, run_dir, models=models, budgets=budgets, cwd=cwd)
+    return run_ticket(
         story,
         invoke,
         stage_order=stage_order,
-        state_path=paths.state_path(),
+        state_path=state_path,
         max_iterations=max_iterations,
         breaker=CircuitBreaker(SafetyConfig.from_budgets(paths.budgets_path())),
-        verify_fn=_make_verify_fn(budgets),
-        progress_fn=progress,
+        verify_fn=_make_verify_fn(budgets, cwd=cwd),
+        progress_fn=progress_fn,
     )
 
+
+def _finalize_story(
+    story: Story,
+    outcome: TicketOutcome,
+    *,
+    observer_invoke,
+    observer_state_path: str | Path,
+    budgets: dict,
+) -> None:
+    """Coordination: record a finished ticket's outcome in prd.json, swap its
+    issue label, notify GitHub (push + PR + comment), and, on a non-done
+    outcome, run the whole-repo observer (self-heal lens). Parent-only and
+    serialized, so prd writes never race and the observer's agent cost is never
+    multiplied across N tickets (#4).
+
+    `observer_invoke`/`observer_state_path` target the tree the work happened
+    in — the worktree for a parallel ticket, the target repo for sequential."""
     prd = load_prd(paths.prd_path())
     if outcome.outcome == "done":
         mark_story(prd, story.id, status="done", passes=True)
@@ -429,11 +487,80 @@ def run_one_story(
     else:
         _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,))
     _notify_github(story, outcome.outcome, outcome.reason or "", outcome.test_evidence)
-    # On a non-done outcome, run the whole-repo observer (self-heal lens): it
-    # diagnoses ticket- vs harness-level and surfaces a human-gated suggestion
-    # on the issue. Bounded to failures; disable via budgets.observer_enabled.
     if outcome.outcome != "done" and budgets.get("observer_enabled", True):
-        _observe_and_report(story, invoke, outcome.reason or "")
+        _observe_and_report(
+            story, observer_invoke, outcome.reason or "", state_path=observer_state_path
+        )
+
+
+def _finalize_decompose_block(
+    story: Story,
+    problem: str,
+    *,
+    observer_invoke,
+    observer_state_path: str | Path,
+    budgets: dict,
+) -> TicketOutcome:
+    """Coordination: a ticket that could not be expanded into acceptance
+    criteria blocks here, before any worktree/work. Mark it blocked, relabel,
+    and run the observer. No GitHub PR notify — nothing was implemented, so
+    there is no work branch to open (matches the original sequential path)."""
+    prd = load_prd(paths.prd_path())
+    mark_story(prd, story.id, status="blocked")
+    save_prd(prd, paths.prd_path())
+    _commit_bookkeeping(f"chore: record {story.id} outcome: blocked")
+    _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,))
+    if budgets.get("observer_enabled", True):
+        _observe_and_report(
+            story, observer_invoke, problem, state_path=observer_state_path
+        )
+    return TicketOutcome(story.id, "blocked", reason=problem, stages_run=["decompose"])
+
+
+def run_one_story(
+    story: Story,
+    stage_order: tuple[str, ...],
+    *,
+    models: dict,
+    budgets: dict,
+    max_iterations: int,
+) -> TicketOutcome:
+    """Run one story through `stage_order` and record its outcome in prd.json.
+    Shared by the single-ticket CLI (run_workflow) and the sequential backlog
+    runner. Composes the work + coordination halves back-to-back against the
+    target repo; the parallel coordinator wires the same halves across worktrees.
+    """
+    _ensure_work_branch(f"adw/{story.id}")
+    _mark_in_progress(story)
+    run_dir = runlog.run_dir(story.id)
+    target = paths.target_root()
+    state_path = paths.state_path()
+    invoke = _make_invoke(story, run_dir, models=models, budgets=budgets, cwd=target)
+    # Progress poster: comments stage transitions on the source issue so a
+    # phone-filed ticket reports back live (S-014). None for plain S-NNN.
+    progress = _make_progress_fn(story)
+
+    # Decompose first if the ticket arrived criteria-less (e.g. a terse phone
+    # issue, S-013): the read-only decompose stage proposes acceptance criteria
+    # and the orchestrator (here, not the agent) persists them to prd.json
+    # before planning. A vague ticket that cannot be expanded blocks here.
+    if not story.acceptance_criteria:
+        problem = _decompose_and_persist(story, invoke, progress, state_path=state_path)
+        if problem is not None:
+            return _finalize_decompose_block(
+                story, problem,
+                observer_invoke=invoke, observer_state_path=state_path, budgets=budgets,
+            )
+
+    outcome = run_ticket_work(
+        story, stage_order,
+        models=models, budgets=budgets, max_iterations=max_iterations,
+        cwd=target, state_path=state_path, run_dir=run_dir, progress_fn=progress,
+    )
+    _finalize_story(
+        story, outcome,
+        observer_invoke=invoke, observer_state_path=state_path, budgets=budgets,
+    )
     return outcome
 
 

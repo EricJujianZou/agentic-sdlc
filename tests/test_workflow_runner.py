@@ -46,6 +46,22 @@ def test_verify_fails_on_nonzero_exit_and_keeps_detail(monkeypatch):
     assert "1 failed" in detail
 
 
+def test_verify_runs_in_given_cwd(monkeypatch):
+    # A parallel worker passes its worktree dir so the re-run exercises that
+    # tree's changes, not the pristine main tree (#4).
+    seen = {}
+
+    def record(*a, **k):
+        seen["cwd"] = k.get("cwd")
+        return _Proc(0, "5 passed")
+
+    monkeypatch.setattr(subprocess, "run", record)
+    verify = _make_verify_fn({}, cwd="/tmp/.adw-worktrees/S-001")
+    passed, _ = verify()
+    assert passed is True
+    assert seen["cwd"] == "/tmp/.adw-worktrees/S-001"
+
+
 def test_verify_treats_timeout_as_failure(monkeypatch):
     def boom(*a, **k):
         raise subprocess.TimeoutExpired(cmd="pytest", timeout=1)
