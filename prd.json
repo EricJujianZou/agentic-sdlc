@@ -177,6 +177,78 @@
       "skill_match": null,
       "passes": true,
       "status": "done"
+    },
+    {
+      "id": "S-011",
+      "type": "system-repair",
+      "priority": 10,
+      "title": "Repo-agnostic engine: run the harness against any target repo",
+      "description": "Every module hardcodes REPO_ROOT = Path(__file__).parent.parent, so the harness only operates on its own repo. Make the engine resolve a target repo from ADW_REPO (else the git top-level of cwd, else the engine repo for self-hosting). Per-project mutable state (prd.json, state.json, run logs, .claude/settings.json) lives in the target repo; prompt/command assets and configs/ default to the engine but a target-side .adw/ override wins if present. Package the engine so it is installable and invokable from any repo. This is the unlock for using the harness to build other projects.",
+      "acceptance_criteria": [
+        "A single resolver (e.g. adw/paths.py) returns the target root from ADW_REPO, else `git rev-parse --show-toplevel`, else the engine repo; all modules use it instead of the hardcoded REPO_ROOT",
+        "prd.json, state.json, and run logs are read/written in the target repo; commands/ and configs/ resolve from the engine unless a target .adw/commands or .adw/configs exists, which takes precedence",
+        "Running ADW_REPO=/path/to/project against a workflow operates entirely on that project (branch, commits, logs land there) and leaves the engine repo untouched",
+        "With ADW_REPO unset and cwd in the engine repo, behavior is unchanged (self-hosting preserved)",
+        "A documented .adw/ skeleton (prd.json, configs, .claude/settings.json) turns a fresh repo into a target with no code copied",
+        "Unit tests cover path resolution (env override, git-toplevel fallback, per-project config override) against a temp repo; full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
+    },
+    {
+      "id": "S-012",
+      "type": "system-repair",
+      "priority": 13,
+      "title": "One-shot intake to backlog runner (manual; no daemon or triggers)",
+      "description": "Honoring the no-triggers decision, the harness adds no scheduler. Add workflows/poll_once.py: one pass that runs sync_issues (ingest adw-labeled GitHub issues into prd.json), then run_backlog over the open stories with the existing cooldown and breaker gates and a --max-tickets bound. One launch equals one pass: no loop, no timer, no background thread. README documents how a human can optionally wire it to Windows Task Scheduler or cron, explicitly outside the harness authority.",
+      "acceptance_criteria": [
+        "workflows/poll_once.py runs sync_issues then run_backlog in one process; a sync failure (e.g. offline) stops before the backlog with a clear message and never runs on a partial sync",
+        "It adds no daemon, timer, or background thread: exactly one pass per invocation",
+        "--max-tickets and the cooldown gate are honored; an active cooldown stops the pass without overriding it",
+        "README documents optional OS-scheduler wiring as a human opt-in, clearly out of harness scope",
+        "Unit tests cover sync-then-backlog ordering, stop-on-sync-failure, and the max-tickets bound with injected fakes (no live API)",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
+    },
+    {
+      "id": "S-013",
+      "type": "system-repair",
+      "priority": 11,
+      "title": "decompose stage: terse/phone tickets auto-expanded into acceptance criteria",
+      "description": "Phone-filed issues are painful to write with full acceptance criteria (issue #16 came in with quote-bar formatting and was skipped). Wire the currently-vestigial decompose model entry into a real read-only stage that, for a ticket lacking acceptance criteria, expands its title and body into structured criteria before the plan stage. Relax sync_issues so a terse issue (no Acceptance Criteria heading, leading quote bars or indentation tolerated) is accepted with empty criteria instead of skipped; the workflow runs decompose first and the orchestrator persists the proposed criteria to prd.json (agents never self-write prd).",
+      "acceptance_criteria": [
+        "commands/DECOMPOSE.md plus a stage_specs contract and STAGE_TOOLS[decompose] (read-only: Read, Glob, Grep, and the read-only git rules) are registered; configs/models.json already maps decompose",
+        "A story with empty acceptance_criteria triggers the decompose stage before plan; the orchestrator writes the proposed criteria into the story in prd.json",
+        "A story that already has acceptance_criteria skips decompose entirely (no behavior change for fully-specified tickets)",
+        "sync_issues accepts an issue with no Acceptance Criteria section and tolerates leading quote bars/indentation, instead of skipping; a genuinely empty issue (no title and no body) is still skipped with a printed reason",
+        "Decompose obeys the headless rule: too-vague input is reported as outcome=blocked, never asked; its output is bounded",
+        "Unit tests cover: decompose runs only when criteria absent, criteria persisted to prd, sync accepts a terse/quote-barred issue; full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
+    },
+    {
+      "id": "S-014",
+      "type": "system-repair",
+      "priority": 12,
+      "title": "Per-stage progress comments on the source GitHub issue",
+      "description": "S-006 comments on the source issue only once, at the terminal outcome (done/blocked) when it opens the PR. For the phone-facing taskboard the human wants to watch progress live. Add per-stage progress comments: as a GH-sourced ticket advances stages, post a concise comment on the issue so the phone gets a running log. Best-effort (never affects outcome), bounded (one comment per stage transition, not per iteration), and only for GH-sourced stories (S-NNN have no source issue). Implemented by injecting a progress callback into adw/orchestrator.py run_ticket, like verify_fn, so the orchestrator remains the only component that posts to GitHub; stage agents never call GitHub directly.",
+      "acceptance_criteria": [
+        "For a GH-<n> story, the orchestrator posts a progress comment on each stage transition (stage started/finished with outcome); S-NNN stories post nothing",
+        "Comments are best-effort: any GitHub, credential, or offline failure is printed and swallowed, never changing the outcome or halting the run",
+        "Comment volume is bounded: at most one comment per stage transition (no per-iteration spam)",
+        "The S-006 terminal done/blocked comment and PR are preserved, not duplicated",
+        "The progress poster is injected into run_ticket; agents never call GitHub directly and the orchestrator stays the sole authority",
+        "Unit tests with a fake GitHub client cover: per-stage comment for a GH story, none for S-NNN, failures swallowed; full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
     }
   ]
 }
