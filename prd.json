@@ -249,6 +249,21 @@
       "skill_match": null,
       "passes": true,
       "status": "done"
+    },
+    {
+      "id": "GH-16",
+      "type": "feat",
+      "priority": 5,
+      "title": "Dashboard: show ticket count badge on each status col",
+      "description": "Body:\nThe dashboard renders columns (open / in_progress / blocked / done) but\ndoesn't show how many tickets are in each. Add a small count badge to each\ncolumn header so the backlog size is visible at a glance.",
+      "acceptance_criteria": [
+        "Each column header shows a numeric badge with the count of cards in it",
+        "The badge updates correctly when prd.json has zero cards in a column (shows 0)",
+        "tests/test_dashboard.py still passes and the full suite stays green"
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
     }
   ]
 }
