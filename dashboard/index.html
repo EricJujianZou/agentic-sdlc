@@ -277,7 +277,16 @@
 
         const header = document.createElement("div");
         header.className = "column-header";
-        header.textContent = LABELS[status] + " (" + buckets[status].length + ")";
+
+        const headerLabel = document.createElement("span");
+        headerLabel.textContent = LABELS[status];
+        header.appendChild(headerLabel);
+
+        const headerCount = document.createElement("span");
+        headerCount.className = "column-count";
+        headerCount.textContent = String(buckets[status].length);
+        header.appendChild(headerCount);
+
         col.appendChild(header);
 
         if (buckets[status].length === 0) {
