@@ -65,7 +65,7 @@ def run_ticket(
     max_iterations: int = 5,
     breaker: Breaker | None = None,
     verify_fn: VerifyFn | None = None,
-    runs_root: str | Path = runlog.DEFAULT_RUNS_ROOT,
+    runs_root: str | Path | None = None,
 ) -> TicketOutcome:
     """Drive one ticket through its `stage_order` (plan -> implement -> test
     -> review for feat; the bug/trivial workflows pass shorter orders).

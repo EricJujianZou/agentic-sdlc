@@ -19,12 +19,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from adw import paths
 from adw.orchestrator import TicketOutcome
 from adw.safety import check_cooldown
 from adw.tickets import Story
 from adw.workflow_runner import (
-    BUDGETS_PATH,
-    MODELS_PATH,
     STAGE_ORDER_BY_TYPE,
     run_backlog_loop,
     run_one_story,
@@ -45,8 +44,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    models = json.loads(MODELS_PATH.read_text(encoding="utf-8"))
-    budgets = json.loads(BUDGETS_PATH.read_text(encoding="utf-8"))
+    models = json.loads(paths.models_path().read_text(encoding="utf-8"))
+    budgets = json.loads(paths.budgets_path().read_text(encoding="utf-8"))
     max_iterations = args.max_iterations or budgets["max_iterations_default"]
 
     def run_story_fn(story: Story) -> TicketOutcome:

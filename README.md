@@ -87,6 +87,11 @@ Exit code 0 = ticket done; 1 = blocked/halted (reason printed, also in
 | `configs/models.json` | model per stage — opus for plan/review/decompose, sonnet for implement/test, haiku for trivial |
 | `.claude/settings.json` | hook wiring (don't remove; the hooks are the hard guarantees) |
 
+By default the harness operates on its own repo. To build a *different* repo,
+set `ADW_REPO=/path/to/project` (or run from inside it): `prd.json`, state,
+git, and run logs resolve against that target while prompts/configs default to
+the engine. See `docs/using-on-another-repo.md` for the `.adw/` skeleton.
+
 ## Safety model (what protects you during unattended runs)
 
 - **Hooks are law** (`hooks/`): `pretooluse_guard.py` denies force-push,

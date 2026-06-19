@@ -8,13 +8,14 @@ import re
 import sys
 from pathlib import Path
 
+# REPO_ROOT here is the ENGINE root, used only to import the adw package; the
+# repo we sync into is the *target* (adw/paths.py), which may differ.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from adw import paths
 from adw.github import GitHubError, get_token, list_adw_issues, repo_slug
 from adw.tickets import Prd, Story, load_prd, save_prd
-
-PRD_PATH = REPO_ROOT / "prd.json"
 
 _TYPE_LABELS = {"feat", "bug", "chore", "system-repair"}
 
@@ -113,9 +114,9 @@ def main() -> int:
         print(f"github error: {exc}", file=sys.stderr)
         return 1
 
-    prd = load_prd(PRD_PATH)
+    prd = load_prd(paths.prd_path())
     added, skipped = sync_issues(prd, issues)
-    save_prd(prd, PRD_PATH)
+    save_prd(prd, paths.prd_path())
 
     print(f"added {len(added)} story(ies), skipped {len(skipped)}")
     for sid, reason in skipped:

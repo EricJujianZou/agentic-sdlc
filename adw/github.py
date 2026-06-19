@@ -13,7 +13,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from adw import paths
+
 API_BASE = "https://api.github.com"
 
 
@@ -41,8 +42,11 @@ def get_token(host: str = "github.com") -> str:
     )
 
 
-def repo_slug(repo_root: Path | str = REPO_ROOT) -> tuple[str, str]:
-    """Return (owner, repo) by parsing `git remote get-url origin`."""
+def repo_slug(repo_root: Path | str | None = None) -> tuple[str, str]:
+    """Return (owner, repo) by parsing `git remote get-url origin` of the
+    target repo (adw/paths.py), so a cross-repo run reads the target's remote."""
+    if repo_root is None:
+        repo_root = paths.target_root()
     try:
         proc = subprocess.run(
             ["git", "remote", "get-url", "origin"],

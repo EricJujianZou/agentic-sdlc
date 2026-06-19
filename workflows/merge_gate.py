@@ -18,15 +18,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+# REPO_ROOT here is the ENGINE root, used only to import the adw package; the
+# repo being finalized is the *target* (adw/paths.py).
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from adw import runlog
+from adw import paths, runlog
 from adw.tickets import get_story, load_prd
-
-PRD_PATH = REPO_ROOT / "prd.json"
-HISTORY_PATH = REPO_ROOT / "observability" / "history.md"
-RUNS_ROOT = REPO_ROOT / "observability" / "runs"
 
 
 class MergeGateError(RuntimeError):
@@ -37,17 +35,21 @@ def finalize(
     ticket_id: str,
     summary: str,
     *,
-    prd_path: str | Path = PRD_PATH,
-    history_path: str | Path = HISTORY_PATH,
-    runs_root: str | Path = RUNS_ROOT,
+    prd_path: str | Path | None = None,
+    history_path: str | Path | None = None,
+    runs_root: str | Path | None = None,
     force: bool = False,
 ) -> list[str]:
     """Append the history line and delete run logs for a merged ticket.
 
     Idempotent: an existing history line for the ticket is never duplicated,
     and cleanup of already-deleted run logs is a no-op. Returns the list of
-    actions taken, for the caller to print.
+    actions taken, for the caller to print. Paths default to the target repo
+    (adw/paths.py); tests pass them explicitly.
     """
+    prd_path = paths.prd_path() if prd_path is None else prd_path
+    history_path = paths.history_path() if history_path is None else history_path
+    runs_root = paths.runs_root() if runs_root is None else runs_root
     prd = load_prd(prd_path)
     try:
         story = get_story(prd, ticket_id)
@@ -83,13 +85,13 @@ def _branch_merged_into_main(branch: str) -> bool | None:
     branch no longer exists (already deleted after merge)."""
     exists = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", branch],
-        cwd=REPO_ROOT, capture_output=True,
+        cwd=paths.target_root(), capture_output=True,
     ).returncode == 0
     if not exists:
         return None
     return subprocess.run(
         ["git", "merge-base", "--is-ancestor", branch, "main"],
-        cwd=REPO_ROOT, capture_output=True,
+        cwd=paths.target_root(), capture_output=True,
     ).returncode == 0
 
 
