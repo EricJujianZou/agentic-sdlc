@@ -211,8 +211,8 @@
         "Full suite uv run pytest -q stays green"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "blocked"
+      "passes": true,
+      "status": "done"
     },
     {
       "id": "S-013",
