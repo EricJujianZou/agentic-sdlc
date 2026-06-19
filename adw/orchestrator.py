@@ -23,6 +23,13 @@ DOCUMENT_STAGE = "document"
 # testable without spawning real agents.
 InvokeFn = Callable[[str, State, Story], StageResult]
 
+# verify_fn() -> (passed, detail). The orchestrator's own deterministic
+# test-evidence re-run after the dual gate passes — NOT a stage agent's
+# self-report (improvements C3). Injected so the loop is testable without
+# spawning the real suite; defaults to None (no extra check), the same way
+# breaker defaults to a no-op.
+VerifyFn = Callable[[], "tuple[bool, str]"]
+
 
 class Breaker(Protocol):
     """Circuit-breaker interface; the real one is adw/safety.py."""
@@ -53,24 +60,32 @@ def run_ticket(
     story: Story,
     invoke_fn: InvokeFn,
     *,
+    stage_order: tuple[str, ...] = STAGE_ORDER,
     state_path: str | Path,
     max_iterations: int = 5,
     breaker: Breaker | None = None,
+    verify_fn: VerifyFn | None = None,
     runs_root: str | Path = runlog.DEFAULT_RUNS_ROOT,
 ) -> TicketOutcome:
-    """Drive one ticket through plan -> implement -> test -> review.
+    """Drive one ticket through its `stage_order` (plan -> implement -> test
+    -> review for feat; the bug/trivial workflows pass shorter orders).
 
-    Ticket completion is the dual gate (plans/safety_plan.md §1): the review
-    stage must report outcome=success AND exit_signal=true (test-stage
-    verification of acceptance criteria is part of the test contract).
+    Completion is the success of the gate stage — the last stage in
+    `stage_order`. When that gate is the review stage the dual gate applies
+    (plans/safety_plan.md §1): review must report outcome=success AND
+    exit_signal=true. For orders that end at test (bug/trivial) the test
+    stage's success is the gate; there is no exit_signal to assert. Stage
+    order is owned by the workflow scripts, never by prompts.
     """
     breaker = breaker or _NullBreaker()
+    gate_stage = stage_order[-1]
+    require_exit_signal = gate_stage == "review"
     state = new_state(story.id)
     save_state(state, state_path)
     stages_run: list[str] = []
 
     while state.iteration <= max_iterations:
-        for stage in STAGE_ORDER:
+        for stage in stage_order:
             state.stage = stage
             save_state(state, state_path)
             result = invoke_fn(stage, state, story)
@@ -93,17 +108,29 @@ def run_ticket(
                 runs_root=runs_root,
             )
 
-            # Completion outranks the breaker: the dual gate passing means
+            # Completion outranks the breaker: the gate stage passing means
             # the ticket is done, and a cumulative counter (e.g. permission
             # denials earlier in the run) must not veto finished work.
             if (
-                stage == "review"
+                stage == gate_stage
                 and result.status is not None
                 and result.status.outcome == "success"
-                and result.status.exit_signal
+                and (result.status.exit_signal or not require_exit_signal)
             ):
                 state.last_failure = None
                 save_state(state, state_path)
+                # Deterministic test-evidence gate (improvements C3): the
+                # orchestrator re-runs the suite itself before accepting the
+                # agents' "done". A red suite blocks the ticket and the
+                # document stage never runs — the agents cannot self-certify
+                # a failing tree as done.
+                if verify_fn is not None:
+                    passed, detail = verify_fn()
+                    if not passed:
+                        reason = f"test-evidence re-run failed: {detail}"
+                        state.last_failure = reason
+                        save_state(state, state_path)
+                        return _finish(story, state, "blocked", reason, stages_run)
                 warning = _run_document_stage(
                     story, state, invoke_fn,
                     state_path=state_path,
@@ -131,9 +158,9 @@ def run_ticket(
             if result.status.outcome == "failure":
                 state.last_failure = result.status.failure_reason or f"{stage} failed"
                 break
-            # success (review success WITH exit_signal already returned above)
+            # success (gate success WITH exit_signal already returned above)
             state.last_failure = None
-            if stage == "review":
+            if stage == gate_stage and require_exit_signal:
                 # Review succeeded but did not assert completion — loop.
                 state.last_failure = "review success without exit_signal"
                 break

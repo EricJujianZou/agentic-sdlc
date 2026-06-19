@@ -98,14 +98,20 @@ def save_prd(prd: Prd, path: str | Path) -> None:
     Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def pick_next_story(prd: Prd) -> Story | None:
+def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story | None:
     """Highest-priority story with passes=false and status=open.
 
-    system-repair stories are filed as 'blocked' (human-gated, see
-    plans/tickets_plan.md §5), so they are never picked until a human
+    If `types` is given, only stories of those types are considered, so each
+    workflow auto-picks only the ticket types it is built for (feat vs bug
+    vs chore). system-repair stories are filed as 'blocked' (human-gated,
+    see plans/tickets_plan.md §5), so they are never picked until a human
     flips them to 'open'.
     """
-    candidates = [s for s in prd.stories if not s.passes and s.status == "open"]
+    candidates = [
+        s
+        for s in prd.stories
+        if not s.passes and s.status == "open" and (types is None or s.type in types)
+    ]
     if not candidates:
         return None
     return min(candidates, key=lambda s: (s.priority, s.id))

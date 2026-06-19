@@ -242,3 +242,114 @@ def test_document_breaker_halt_becomes_warning(tmp_path):
     assert outcome.outcome == "done"
     assert outcome.warning is not None
     assert "breaker" in outcome.warning
+
+
+# --- bug / trivial workflow stage orders (S-004) ---
+
+BUG_STAGE_ORDER = ("plan", "implement", "test")
+TRIVIAL_STAGE_ORDER = ("implement", "test")
+
+
+def test_bug_order_completes_on_test_success_without_review(tmp_path):
+    seen = []
+
+    def invoke(stage, state, story):
+        seen.append(stage)
+        return ok(stage)  # no exit_signal anywhere; test success is the gate
+
+    outcome = run(invoke, tmp_path, stage_order=BUG_STAGE_ORDER)
+    assert outcome.outcome == "done"
+    assert "review" not in seen
+    assert seen[:3] == ["plan", "implement", "test"]
+    assert outcome.stages_run[-1] == "document"  # doc stage still runs post-gate
+
+
+def test_trivial_order_runs_implement_then_test(tmp_path):
+    seen = []
+
+    def invoke(stage, state, story):
+        seen.append(stage)
+        return ok(stage)
+
+    outcome = run(invoke, tmp_path, stage_order=TRIVIAL_STAGE_ORDER)
+    assert outcome.outcome == "done"
+    assert seen[:2] == ["implement", "test"]
+    assert "plan" not in seen and "review" not in seen
+
+
+def test_bug_order_test_failure_loops_back_to_plan(tmp_path):
+    calls = []
+
+    def invoke(stage, state, story):
+        calls.append((state.iteration, stage))
+        if state.iteration == 1 and stage == "test":
+            return fail(stage)
+        return ok(stage)
+
+    outcome = run(invoke, tmp_path, stage_order=BUG_STAGE_ORDER)
+    assert outcome.outcome == "done"
+    assert (2, "plan") in calls
+
+
+def test_trivial_order_test_failure_loops_back_to_implement(tmp_path):
+    calls = []
+
+    def invoke(stage, state, story):
+        calls.append((state.iteration, stage))
+        if state.iteration == 1 and stage == "test":
+            return fail(stage)
+        return ok(stage)
+
+    outcome = run(invoke, tmp_path, stage_order=TRIVIAL_STAGE_ORDER)
+    assert outcome.outcome == "done"
+    assert (2, "implement") in calls
+    assert "plan" not in [stage for _, stage in calls]
+
+
+# --- deterministic test-evidence gate (S-010) ---
+
+
+def test_test_evidence_green_completes(tmp_path):
+    calls = []
+
+    def verify():
+        calls.append("verify")
+        return True, ""
+
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path, verify_fn=verify)
+    assert outcome.outcome == "done"
+    assert calls == ["verify"]  # ran exactly once, after the gate
+    assert "document" in outcome.stages_run
+
+
+def test_test_evidence_red_blocks_done_and_skips_document(tmp_path):
+    def verify():
+        return False, "1 failed, 130 passed"
+
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path, verify_fn=verify)
+    assert outcome.outcome == "blocked"
+    assert "1 failed" in outcome.reason
+    assert "document" not in outcome.stages_run
+    state = load_state(tmp_path / "state.json")
+    assert "1 failed" in state.last_failure
+
+
+def test_test_evidence_not_run_until_completion(tmp_path):
+    calls = []
+
+    def verify():
+        calls.append("verify")
+        return True, ""
+
+    def invoke(stage, state, story):
+        return ok(stage)  # no exit_signal anywhere -> never completes
+
+    outcome = run(invoke, tmp_path, verify_fn=verify, max_iterations=1)
+    assert outcome.outcome == "halted"
+    assert calls == []  # never reached the gate, so never re-ran the suite

@@ -12,6 +12,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from adw import isolation
 from adw.status import StatusBlock, StatusBlockError, parse_status_block
 
 # Per-stage tool scoping: plan is read-only; implement gets edit+bash;
@@ -50,17 +51,22 @@ def build_command(
     *,
     stage: str,
     model: str,
+    claude_bin: str | None = None,
 ) -> list[str]:
     """Argv for one headless stage. The prompt is NOT in the argv: it goes
     to the CLI via stdin, because the Windows npm shim (claude.cmd) routes
-    argv through cmd.exe, which mangles multi-line arguments."""
+    argv through cmd.exe, which mangles multi-line arguments.
+
+    `claude_bin` overrides how the CLI is located: the host path defaults to
+    the PATHEXT-resolved shim, but the containerized path passes a bare
+    "claude" so it resolves against the image's PATH, not the host's."""
     if stage not in STAGE_TOOLS:
         raise ValueError(f"stage must be one of {tuple(STAGE_TOOLS)}, got {stage!r}")
     # On Windows the CLI is an npm shim (claude.cmd), which CreateProcess
     # cannot resolve from a bare name with shell=False; which() returns the
     # full PATHEXT-resolved path on every platform.
     return [
-        shutil.which("claude") or "claude",
+        claude_bin or shutil.which("claude") or "claude",
         "-p",
         "--output-format",
         "json",
@@ -109,11 +115,25 @@ def invoke_stage(
     prompt_path = Path(prompt_path)
     if not prompt_path.exists():
         raise FileNotFoundError(f"stage prompt not found: {prompt_path}")
-    cmd = build_command(stage=stage, model=model)
+    # Isolation off (default) is the documented fallback: build and run the
+    # stage on the bare host exactly as before. Isolation on wraps the same
+    # CLI argv in `docker run`, mounting only the repo (cwd) and passing only
+    # scoped env across the boundary (plans/safety_plan.md §5, adw/isolation.py).
+    if isolation.isolation_enabled():
+        cmd = isolation.build_run_command(
+            build_command(stage=stage, model=model, claude_bin="claude"),
+            repo_dir=cwd,
+            stage=stage,
+        )
+    else:
+        cmd = build_command(stage=stage, model=model)
     # ADW_TICKET_RUN switches the hooks (hooks/*.py) into enforcement mode:
     # harness-file edit denial, Stop checklist, auto-commit. ADW_STAGE lets
     # stage-aware hooks skip checks a stage cannot satisfy (a read-only
     # planner cannot commit, so the clean-tree gate must not bind it).
+    # Under isolation these are also injected into the container via -e so the
+    # in-container hooks see them; setting them here too is harmless and keeps
+    # the host path unchanged.
     env = {**os.environ, "ADW_TICKET_RUN": "1", "ADW_STAGE": stage}
     try:
         proc = subprocess.run(

@@ -1,0 +1,31 @@
+# CI gate (S-009): runs the test suite on every PR to main, OUTSIDE the
+# harness's trust boundary, so a stage agent can neither skip nor misreport
+# it. This is the agent-proof half of the safety model; S-010 (improvements
+# C3) is the in-harness mirror. Turning this check into a *required* gate is
+# a one-time manual branch-protection step documented in README.md.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read # least privilege: no secrets, no write scope
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and Python 3.11
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run the test suite
+        run: uv run pytest -q

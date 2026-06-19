@@ -46,6 +46,17 @@ def result(
     )
 
 
+def doa_result(stage: str = "plan") -> StageResult:
+    """A dead-on-arrival result: non-zero exit, 0 tokens, no output."""
+    return StageResult(
+        status=None,
+        exit_code=1,
+        tokens_used=0,
+        raw_output="",
+        parse_error="no status block",
+    )
+
+
 def test_no_change_implement_loops_open_circuit():
     breaker = CircuitBreaker()
     s = state("implement")
@@ -144,6 +155,41 @@ def test_token_budget_exceeded_opens_circuit():
     assert reason is not None and "token budget exceeded" in reason
 
 
+def test_instant_failure_trips_after_two_dead_on_arrival():
+    breaker = CircuitBreaker()
+    s = state("plan")
+    assert breaker.record(s, doa_result("plan")) is None
+    reason = breaker.record(s, doa_result("plan"))
+    assert reason is not None and "dead-on-arrival" in reason
+    assert s.cooldown_until is not None
+
+
+def test_live_result_resets_instant_failure_streak():
+    breaker = CircuitBreaker()
+    s = state("plan")
+    assert breaker.record(s, doa_result("plan")) is None
+    # exit_code 0 -> a live result resets the streak even with short output
+    assert breaker.record(s, result("plan", raw_output="x" * 100)) is None
+    # back to a single instant failure: must not trip at the cap of 2
+    assert breaker.record(s, doa_result("plan")) is None
+
+
+def test_instant_failure_cap_is_configurable():
+    breaker = CircuitBreaker(SafetyConfig(instant_failure_cap=3))
+    s = state("plan")
+    assert breaker.record(s, doa_result("plan")) is None
+    assert breaker.record(s, doa_result("plan")) is None
+    reason = breaker.record(s, doa_result("plan"))
+    assert reason is not None and "dead-on-arrival" in reason
+
+
+def test_from_budgets_reads_instant_failure_cap(tmp_path):
+    budgets = tmp_path / "budgets.json"
+    budgets.write_text('{"instant_failure_cap": 4}', encoding="utf-8")
+    cfg = SafetyConfig.from_budgets(budgets)
+    assert cfg.instant_failure_cap == 4
+
+
 def test_usage_limit_detection():
     assert detect_usage_limit("Claude AI usage limit reached|1718000000")
     assert detect_usage_limit("You have hit your 5-hour limit, try again later")
@@ -172,6 +218,7 @@ def test_config_from_budgets(tmp_path):
     assert cfg.per_ticket_token_budget == 5000
     assert cfg.cooldown_minutes == 45
     assert cfg.no_change_loops == 3  # defaults untouched
+    assert cfg.instant_failure_cap == 2  # default when key absent
 
 
 def test_cooldown_remaining_and_check(tmp_path):
