@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 STORY_TYPES = ("feat", "bug", "chore", "system-repair")
-STORY_STATUSES = ("open", "in_progress", "blocked", "done")
+STORY_STATUSES = ("open", "in_progress", "blocked", "quotad", "done")
 
 
 class PrdValidationError(ValueError):
