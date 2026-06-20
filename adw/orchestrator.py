@@ -188,6 +188,7 @@ def run_ticket(
                     stages_run=stages_run,
                     breaker=breaker,
                     progress_fn=progress_fn,
+                    stage_fn=stage_fn,
                 )
                 return _finish(
                     story, state, "done", None, stages_run,
