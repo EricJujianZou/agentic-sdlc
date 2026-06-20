@@ -376,7 +376,13 @@
       "priority": 5,
       "title": "Add a --count flag to poll once that prints the open backlog size",
       "description": "Add --count flag to workflows/poll_once.py that prints number of open stories in backlog and exits without syncing or running anything. Just ohone test",
-      "acceptance_criteria": [],
+      "acceptance_criteria": [
+        "workflows/poll_once.py accepts a --count flag via argparse, documented in its --help output",
+        "When --count is passed, poll_once prints the number of open stories (status 'open' in prd.json) and exits with code 0 without calling sync or run_backlog",
+        "With --count, neither the sync step nor the backlog runner is invoked (no GitHub sync, no ticket execution, no poll-log pass entry)",
+        "A pytest test in tests/ covers --count: it asserts the printed count matches the open-story count and that sync/backlog are not run",
+        "The full suite uv run pytest -q stays green"
+      ],
       "skill_match": null,
       "passes": false,
       "status": "in_progress"
