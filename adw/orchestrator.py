@@ -126,12 +126,14 @@ def run_ticket(
     breaker = breaker or _NullBreaker()
     gate_stage = stage_order[-1]
     require_exit_signal = gate_stage == "review"
-    state = new_state(story.id)
+    resumed = _resume_state(story.id, state_path, stage_order)
+    state = resumed if resumed is not None else new_state(story.id)
     save_state(state, state_path)
     stages_run: list[str] = []
+    resume_index = stage_order.index(state.stage) if resumed is not None else 0
 
     while state.iteration <= max_iterations:
-        for stage in stage_order:
+        for stage in stage_order[resume_index:]:
             state.stage = stage
             save_state(state, state_path)
             if stage_fn is not None:
