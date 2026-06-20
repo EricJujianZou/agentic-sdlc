@@ -108,12 +108,16 @@ def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story 
     workflow auto-picks only the ticket types it is built for (feat vs bug
     vs chore). system-repair stories are filed as 'blocked' (human-gated,
     see plans/tickets_plan.md §5), so they are never picked until a human
-    flips them to 'open'.
+    flips them to 'open'. A 'quotad' story (halted only by a provider usage
+    limit, S-015) is picked alongside 'open' so it auto-resumes once its
+    cooldown elapses; 'blocked' stays human-gated and excluded.
     """
     candidates = [
         s
         for s in prd.stories
-        if not s.passes and s.status == "open" and (types is None or s.type in types)
+        if not s.passes
+        and s.status in ("open", "quotad")
+        and (types is None or s.type in types)
     ]
     if not candidates:
         return None
