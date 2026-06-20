@@ -33,6 +33,45 @@ def detect_usage_limit(text: str) -> bool:
     return any(p.search(text) for p in _USAGE_LIMIT_PATTERNS)
 
 
+# The one halt-reason string a real quota cut-off returns from `_evaluate`.
+# `record`'s cooldown branch and `orchestrator.run_ticket`'s outcome branch
+# both compare against this constant (not against `detect_usage_limit`
+# directly) so they classify exactly what the breaker decided, never drifting
+# from each other or re-detecting text the breaker already gated on success.
+USAGE_LIMIT_HALT_REASON = "provider usage limit reached; pausing instead of looping"
+
+# Layer 2-4 reset-time hints, per ralph_loop.sh: a trailing Unix-epoch-seconds
+# value (the real Claude CLI "usage limit reached|<epoch>" form) or an
+# ISO-8601 timestamp anywhere in the message.
+_EPOCH_SUFFIX_RE = re.compile(r"\|(\d{9,})\b")
+_ISO_TIMESTAMP_RE = re.compile(
+    r"\b(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\b"
+)
+
+
+def _parse_usage_reset(text: str, now: _dt.datetime | None = None) -> _dt.datetime | None:
+    """Absolute UTC reset instant parsed out of a usage-limit message, or None
+    if no parseable reset is present, or if the parsed instant is not in the
+    future (a stale/test epoch must not stamp an already-expired cooldown)."""
+    now = now or _utcnow()
+    match = _EPOCH_SUFFIX_RE.search(text)
+    if match:
+        candidate = _dt.datetime.fromtimestamp(int(match.group(1)), tz=_dt.timezone.utc)
+        if candidate > now:
+            return candidate
+    match = _ISO_TIMESTAMP_RE.search(text)
+    if match:
+        try:
+            candidate = _dt.datetime.fromisoformat(match.group(1).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if candidate.tzinfo is None:
+            candidate = candidate.replace(tzinfo=_dt.timezone.utc)
+        if candidate > now:
+            return candidate
+    return None
+
+
 @dataclass
 class SafetyConfig:
     """Thresholds per plans/safety_plan.md §2 table and §3 budgets."""
