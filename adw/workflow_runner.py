@@ -177,6 +177,7 @@ def _notify_github(
 RUN_LABEL_IN_PROGRESS = "in-progress"
 RUN_LABEL_DONE = "done"
 RUN_LABEL_BLOCKED = "blocked"
+RUN_LABEL_QUOTAD = "quotad"
 
 
 def _set_run_label(story: Story, *, add: tuple[str, ...] = (), remove: tuple[str, ...] = ()) -> None:
