@@ -107,16 +107,24 @@ File one `adw`-labeled issue per primitive on **design-system's** GitHub
 Each should follow the `Button` pattern, ship a test + story, keep the suite
 green. Watch the phone for the stage trail + PR, review/merge per component.
 
-## Open questions / decisions to resolve before Phase 1
+## Decisions resolved 2026-06-20 (follow-up)
 
-1. **npm package name/scope** — e.g. `@ericjujianzou/design-system` (scoped;
-   needs an npm org or scoped publish) vs an unscoped name. Affects
-   `package.json` + publish + how projects import it.
-2. **Aesthetic direction for `DESIGN.md` v1** — light/dark default, font
-   choices (e.g. geometric sans vs humanist), accent color, density,
-   playful-vs-minimal. The human seeds this; start neutral if unspecified.
-3. **Registry** — publish to public npm vs GitHub Packages.
-4. **Storybook in v1 or v2.**
+- **Aesthetic:** *simple SaaS — blue & white, minimalist.* A ready starter
+  `DESIGN.md` (original values + Inter/OFL, conventional token structure, NOT
+  the brand spec it was discussed against) is in
+  `plans/design-system-DESIGN.starter.md` — drop it into the repo root as
+  `DESIGN.md` and refine.
+- **Publishing is deferrable.** Use **git-install** (`npm i
+  github:EricJujianZou/design-system`) during bootstrap — no registry setup
+  needed. When ready to publish: a **public scoped** package
+  `@<npm-username>/design-system` (`npm publish --access public`, free). Truly
+  *private* packages need a paid npm plan or a private repo; not needed for a
+  design system. So the package **name is not blocking Phase 1**.
+
+## Still open (pick at publish time, not before)
+
+- Final npm name/scope (only when you publish) and registry (public npm vs GitHub Packages).
+- Storybook in v1 or v2.
 
 ## Out-of-scope to-dos discussed this session (record, don't lose)
 
