@@ -869,6 +869,7 @@ def run_parallel_backlog(
             state_path=worktree_dir / "state.json",
             run_dir=runlog.run_dir(story.id),
             progress_fn=_make_progress_fn(story),
+            stage_fn=_make_stage_label_fn(story),
         )
 
     def finalize(story: Story, outcome: TicketOutcome, worktree_dir) -> None:
