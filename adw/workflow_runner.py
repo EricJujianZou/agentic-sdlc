@@ -483,6 +483,18 @@ def _finalize_story(
 
     `observer_invoke`/`observer_state_path` target the tree the work happened
     in — the worktree for a parallel ticket, the target repo for sequential."""
+    if outcome.outcome == "quotad":
+        # A quota cut-off interrupted otherwise-good work: no PR (work is
+        # incomplete) and no observer (spending a big agent call right when
+        # we just ran out of usage is the opposite of helpful, S-015). The
+        # story stays auto-resumable (adw/tickets.py pick_next_story) once
+        # its cooldown elapses, unlike 'blocked' which is human-gated.
+        prd = load_prd(paths.prd_path())
+        mark_story(prd, story.id, status="quotad")
+        save_prd(prd, paths.prd_path())
+        _commit_bookkeeping(f"chore: record {story.id} outcome: quotad")
+        _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_QUOTAD,))
+        return
     prd = load_prd(paths.prd_path())
     if outcome.outcome == "done":
         mark_story(prd, story.id, status="done", passes=True)
