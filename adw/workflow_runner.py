@@ -614,6 +614,7 @@ def run_one_story(
         story, stage_order,
         models=models, budgets=budgets, max_iterations=max_iterations,
         cwd=target, state_path=state_path, run_dir=run_dir, progress_fn=progress,
+        stage_fn=stage_label,
     )
     _finalize_story(
         story, outcome,
