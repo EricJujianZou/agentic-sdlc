@@ -187,7 +187,8 @@ def run_ticket(
             if halt_reason is not None:
                 state.last_failure = halt_reason
                 save_state(state, state_path)
-                return _finish(story, state, "halted", halt_reason, stages_run)
+                outcome = "quotad" if halt_reason == USAGE_LIMIT_HALT_REASON else "halted"
+                return _finish(story, state, outcome, halt_reason, stages_run)
 
             if result.status is None:
                 # Unparseable output is a stage failure, not a completion.
