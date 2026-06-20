@@ -244,7 +244,9 @@ def run_ticket(
                 state.last_failure = "review success without exit_signal"
                 break
         else:
+            resume_index = 0
             continue  # unreachable: review always breaks or returns
+        resume_index = 0
         state.iteration += 1
         save_state(state, state_path)
 
