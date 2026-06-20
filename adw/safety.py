@@ -86,6 +86,10 @@ class SafetyConfig:
     instant_failure_cap: int = 2
     per_ticket_token_budget: int | None = None
     cooldown_minutes: int = 30
+    # A usage-limit halt's reset is typically ~5h out, far longer than the
+    # generic circuit_cooldown_minutes; used only when no reset time can be
+    # parsed out of the halt text (see _parse_usage_reset).
+    usage_limit_cooldown_minutes: int = 300
 
     @classmethod
     def from_budgets(cls, path: str | Path) -> "SafetyConfig":
@@ -93,6 +97,9 @@ class SafetyConfig:
         return cls(
             per_ticket_token_budget=raw.get("per_ticket_token_budget"),
             cooldown_minutes=raw.get("circuit_cooldown_minutes", cls.cooldown_minutes),
+            usage_limit_cooldown_minutes=raw.get(
+                "usage_limit_cooldown_minutes", cls.usage_limit_cooldown_minutes
+            ),
             permission_denials=raw.get("permission_denial_cap", cls.permission_denials),
             instant_failure_cap=raw.get("instant_failure_cap", cls.instant_failure_cap),
         )
