@@ -59,7 +59,10 @@ jobs:
               return;
             }
 
-            const labels = (context.payload.issue.labels || []).map(l => l.name);
+            // Lower-cased so label case drift (e.g. a pre-existing `DONE`
+            // label vs the harness's `done`) still maps to the right column;
+            // the RULES below are all lowercase.
+            const labels = (context.payload.issue.labels || []).map(l => l.name.toLowerCase());
             if (!labels.includes('adw')) {
               core.info('issue is not adw-labeled; nothing to board.');
               return;
