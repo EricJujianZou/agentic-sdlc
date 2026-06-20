@@ -42,6 +42,32 @@ def test_load_save_roundtrip(tmp_path):
     assert load_prd(path) == prd
 
 
+def test_save_prd_leaves_no_temp_files(tmp_path):
+    # The atomic write goes through a sibling temp file; it must not linger.
+    save_prd(Prd(project="p", stories=[story()]), tmp_path / "prd.json")
+    assert [p.name for p in tmp_path.iterdir()] == ["prd.json"]
+
+
+def test_save_prd_failure_leaves_original_intact(tmp_path, monkeypatch):
+    # If the replace step fails mid-write, the existing prd.json must be
+    # untouched (no torn file) and the temp file must be cleaned up.
+    import adw.tickets as tickets
+
+    path = tmp_path / "prd.json"
+    save_prd(Prd(project="orig", stories=[story()]), path)
+    before = path.read_text(encoding="utf-8")
+
+    def boom(src, dst):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(tickets.os, "replace", boom)
+    with pytest.raises(OSError):
+        save_prd(Prd(project="new", stories=[]), path)
+
+    assert path.read_text(encoding="utf-8") == before
+    assert [p.name for p in tmp_path.iterdir()] == ["prd.json"]
+
+
 def test_load_rejects_missing_acceptance_criteria(tmp_path):
     path = write_prd(
         tmp_path,

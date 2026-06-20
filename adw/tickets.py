@@ -7,6 +7,8 @@ the picked story's content in their prompt.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -96,9 +98,35 @@ def load_prd(path: str | Path) -> Prd:
     )
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write `text` to `path` so a concurrent reader sees either the old file or
+    the new one in full, never a half-written one (plans/safety_plan.md).
+
+    A scheduled poll and a manual sync can race on prd.json with no lock: the
+    naive truncate-then-write left a window where the loser of that race read a
+    truncated/empty file and crashed `load_prd`. Writing to a temp file in the
+    SAME directory (so the rename is same-filesystem and atomic), flushing +
+    fsyncing it, then `os.replace`-ing over the target closes that window. On
+    any failure the temp file is cleaned up and the original is left intact.
+    """
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def save_prd(prd: Prd, path: str | Path) -> None:
     payload = {"project": prd.project, "stories": [asdict(s) for s in prd.stories]}
-    Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    _atomic_write_text(Path(path), json.dumps(payload, indent=2) + "\n")
 
 
 def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story | None:
