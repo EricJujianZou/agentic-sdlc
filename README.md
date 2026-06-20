@@ -113,6 +113,32 @@ machine; that wiring is a human opt-in, outside the harness's authority:
 - **cron (Linux/macOS or a VM):**
   `*/30 * * * * cd /path/to/repo && uv run python workflows/poll_once.py`
 
+### Lifecycle board (GitHub Projects setup, S-016)
+
+As a GH-sourced ticket advances stages, the orchestrator also sets a
+mutually-exclusive `stage:<x>` label on the source issue (`stage:plan`,
+`stage:implement`, `stage:test`, `stage:review`, `stage:document`) — the
+previous stage label is removed when the next is added, so exactly one is
+ever present. Unlike comments, label edits do not push phone notifications,
+so this adds board state without notification spam. Plain `S-NNN` stories
+(no source issue) get none of this.
+
+To turn these labels into a Plan/Do/Check/Review-gate/Blocked board, create a
+GitHub Project (classic or the new Projects) and add a column-mapping
+automation (or just drag cards) keyed on:
+
+| Label | Column |
+|---|---|
+| `stage:plan` | Plan |
+| `stage:implement` | Do |
+| `stage:test` | Check |
+| `stage:review` or `stage:document` | Review-gate |
+| `blocked` | Blocked |
+
+This is a **one-time, out-of-agent-scope human action** — no workflow ever
+creates or configures a Projects board, and a headless run never attempts it
+or reports `blocked` because it's missing.
+
 ## Configuration
 
 | File | Knobs |
