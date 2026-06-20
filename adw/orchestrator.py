@@ -56,7 +56,7 @@ class Breaker(Protocol):
 @dataclass
 class TicketOutcome:
     ticket_id: str
-    outcome: str  # "done" | "blocked" | "halted"
+    outcome: str  # "done" | "blocked" | "halted" | "quotad"
     reason: str | None = None
     iterations: int = 1
     tokens_used: int = 0
