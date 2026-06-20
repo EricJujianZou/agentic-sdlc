@@ -75,6 +75,10 @@ def configs_dir() -> Path:
     return _asset_dir("configs")
 
 
+def stage_specs_dir() -> Path:
+    return _asset_dir("stage_specs")
+
+
 def models_path() -> Path:
     return configs_dir() / "models.json"
 

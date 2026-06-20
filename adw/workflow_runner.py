@@ -341,14 +341,60 @@ def _make_stage_label_fn(story: Story):
     return set_stage
 
 
+def _read_asset(path: Path) -> str | None:
+    """Read an engine prompt asset, or None if it is absent/unreadable."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _stage_spec_name(stage: str) -> str | None:
+    """The stage spec filename for `stage`: `<stage>_feat.md` (plan/implement/
+    test/review/decompose/document) or `<stage>.md` (observe), whichever exists
+    in the resolved stage_specs dir."""
+    specs = paths.stage_specs_dir()
+    for name in (f"{stage}_feat.md", f"{stage}.md"):
+        if (specs / name).exists():
+            return name
+    return None
+
+
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
-    """Concatenate the stage's command file with the ticket and state context."""
+    """Concatenate the stage's command file, the inlined orientation + stage
+    spec, and the ticket/state context.
+
+    The orientation (commands/PRIME.md) and the stage spec (stage_specs/<x>) are
+    INLINED rather than left as "Read this file" instructions: when the harness
+    builds another repo (ADW_REPO), the stage agent's cwd is the *target*, where
+    those engine files don't exist, so a relative Read would 404. Inlining them
+    here — resolved from the engine via adw/paths.py — makes the prompt
+    self-contained regardless of which repo is being built. Self-hosting the
+    content is identical to what the agent used to Read for itself."""
     command_file = paths.commands_dir() / f"{stage.upper()}.md"
     if not command_file.exists():
         raise FileNotFoundError(
             f"{command_file} missing — stage entry commands are owned by "
             "plans/prompts_plan.md and must exist before workflows can run."
         )
+    sections = [command_file.read_text(encoding="utf-8")]
+
+    # Inline orientation + spec so a target-cwd agent gets them without a disk read.
+    prime = _read_asset(paths.commands_dir() / "PRIME.md")
+    spec_name = _stage_spec_name(stage)
+    spec_text = _read_asset(paths.stage_specs_dir() / spec_name) if spec_name else None
+    if prime or spec_text:
+        sections.append(
+            "---\n\n_The orientation and stage spec your command refers to are "
+            "inlined below in full — follow them from here; do **not** try to "
+            "`Read` them from disk (when this harness builds another repo they "
+            "are not in your working directory)._"
+        )
+    if prime:
+        sections.append("## Orientation — `commands/PRIME.md` (inlined)\n\n" + prime)
+    if spec_text:
+        sections.append(f"## Stage spec — `stage_specs/{spec_name}` (inlined)\n\n" + spec_text)
+
     ticket_context = json.dumps(
         {
             "ticket": {
@@ -368,12 +414,8 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
         },
         indent=2,
     )
-    prompt = (
-        command_file.read_text(encoding="utf-8")
-        + "\n\n## Your ticket and state\n\n```json\n"
-        + ticket_context
-        + "\n```\n"
-    )
+    sections.append("## Your ticket and state\n\n```json\n" + ticket_context + "\n```\n")
+    prompt = "\n\n".join(sections)
     # Prior stage outputs are the hand-off within a run (plans/harness_plan.md
     # §5): the plan stage is read-only, so its plan reaches implement/test/
     # review as a saved output file the agent can Read.

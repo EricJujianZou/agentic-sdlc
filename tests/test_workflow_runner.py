@@ -304,3 +304,27 @@ def test_stage_label_fn_swallows_github_error(monkeypatch):
     fn = workflow_runner._make_stage_label_fn(_story("GH-42"))
     # Must not raise — a label failure can never change a ticket's outcome.
     fn("plan")
+
+
+# --- compose_stage_prompt (cross-repo inline of PRIME + spec) ----------------
+
+def test_compose_stage_prompt_inlines_prime_and_spec(tmp_path):
+    # A stage agent whose cwd is the TARGET repo (when building another repo via
+    # ADW_REPO) has no engine files on disk, so PRIME + the stage spec must be
+    # inlined into the prompt rather than left as relative "Read this" lines.
+    from adw.state import State
+
+    story = Story(
+        id="GH-1", type="feat", priority=5, title="Input primitive",
+        description="add an Input", acceptance_criteria=["renders"],
+    )
+    path = workflow_runner.compose_stage_prompt(
+        "plan", State(ticket_id="GH-1", stage="plan"), story, tmp_path
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "/PLAN" in text                                      # command inlined
+    assert "Orientation — `commands/PRIME.md`" in text          # PRIME inlined
+    assert "Stage spec — `stage_specs/plan_feat.md`" in text    # spec inlined
+    assert "do **not** try to" in text                          # don't-Read note
+    assert "GH-1" in text and "Input primitive" in text         # ticket context
