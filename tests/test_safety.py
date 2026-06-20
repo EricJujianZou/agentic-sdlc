@@ -232,6 +232,79 @@ def test_usage_limit_text_in_successful_output_does_not_halt():
     assert s.cooldown_until is None
 
 
+def test_parse_usage_reset_future_epoch():
+    future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=3)
+    text = f"Claude AI usage limit reached|{int(future.timestamp())}"
+    parsed = _parse_usage_reset(text)
+    assert parsed is not None
+    assert abs((parsed - future).total_seconds()) < 2
+
+
+def test_parse_usage_reset_past_epoch_is_none():
+    # The existing detection-test fixture's epoch (1718000000) is in 2024.
+    assert _parse_usage_reset("Claude AI usage limit reached|1718000000") is None
+
+
+def test_parse_usage_reset_no_timestamp_is_none():
+    assert _parse_usage_reset("You have hit your 5-hour limit, try again later") is None
+
+
+def test_usage_limit_halt_uses_parsed_reset_for_cooldown():
+    future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
+    breaker = CircuitBreaker()
+    s = state("plan")
+    reason = breaker.record(
+        s,
+        result(
+            "plan",
+            raw_output=f"Claude AI usage limit reached|{int(future.timestamp())}",
+            parsed=False,
+        ),
+    )
+    assert reason == USAGE_LIMIT_HALT_REASON
+    until = datetime.datetime.fromisoformat(s.cooldown_until)
+    assert abs((until - future).total_seconds()) < 2
+
+
+def test_usage_limit_halt_falls_back_to_configurable_cooldown():
+    breaker = CircuitBreaker()
+    s = state("plan")
+    reason = breaker.record(
+        s,
+        result("plan", raw_output="You have hit your 5-hour limit, try again later", parsed=False),
+    )
+    assert reason == USAGE_LIMIT_HALT_REASON
+    until = datetime.datetime.fromisoformat(s.cooldown_until)
+    delta = until - datetime.datetime.now(datetime.timezone.utc)
+    assert delta > datetime.timedelta(minutes=200)  # far exceeds the generic 30 min
+
+
+def test_non_usage_halt_still_uses_generic_cooldown():
+    breaker = CircuitBreaker()
+    s = state("plan")
+    breaker.record(s, doa_result("plan"))
+    breaker.record(s, doa_result("plan"))
+    reason = breaker.record(s, doa_result("plan"))
+    assert reason is not None and reason != USAGE_LIMIT_HALT_REASON
+    until = datetime.datetime.fromisoformat(s.cooldown_until)
+    delta = until - datetime.datetime.now(datetime.timezone.utc)
+    assert delta < datetime.timedelta(minutes=35)
+
+
+def test_from_budgets_reads_usage_limit_cooldown_minutes(tmp_path):
+    budgets = tmp_path / "budgets.json"
+    budgets.write_text('{"usage_limit_cooldown_minutes": 120}', encoding="utf-8")
+    cfg = SafetyConfig.from_budgets(budgets)
+    assert cfg.usage_limit_cooldown_minutes == 120
+
+
+def test_from_budgets_defaults_usage_limit_cooldown_minutes(tmp_path):
+    budgets = tmp_path / "budgets.json"
+    budgets.write_text("{}", encoding="utf-8")
+    cfg = SafetyConfig.from_budgets(budgets)
+    assert cfg.usage_limit_cooldown_minutes == 300
+
+
 def test_config_from_budgets(tmp_path):
     budgets = tmp_path / "budgets.json"
     budgets.write_text(
