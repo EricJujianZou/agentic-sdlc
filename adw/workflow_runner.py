@@ -479,6 +479,7 @@ def run_ticket_work(
     state_path: str | Path,
     run_dir: Path,
     progress_fn=None,
+    stage_fn=None,
 ) -> TicketOutcome:
     """The per-ticket WORK: drive `story` through `stage_order` inside `cwd`,
     writing stage state to `state_path` and logs to `run_dir`. Performs NO
@@ -495,6 +496,7 @@ def run_ticket_work(
         breaker=CircuitBreaker(SafetyConfig.from_budgets(paths.budgets_path())),
         verify_fn=_make_verify_fn(budgets, cwd=cwd),
         progress_fn=progress_fn,
+        stage_fn=stage_fn,
     )
 
 
