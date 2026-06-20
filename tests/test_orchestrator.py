@@ -70,6 +70,17 @@ def test_progress_fn_called_once_per_stage(tmp_path):
     ]
 
 
+def test_stage_fn_called_at_entry_in_order(tmp_path):
+    events = []
+
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    run(invoke, tmp_path, stage_fn=lambda stage: events.append(stage))
+    # One call per stage at entry, in order — including document.
+    assert events == ["plan", "implement", "test", "review", "document"]
+
+
 def test_progress_fn_receives_stage_summary(tmp_path):
     events = []
 
