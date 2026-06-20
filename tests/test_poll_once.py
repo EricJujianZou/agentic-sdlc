@@ -2,8 +2,16 @@
 no live GitHub, no real workflows."""
 from __future__ import annotations
 
+import datetime
+
 from adw.workflow_runner import BacklogResult
-from workflows.poll_once import poll_once
+from workflows.poll_once import (
+    PollResult,
+    append_log,
+    default_log_path,
+    format_summary_line,
+    poll_once,
+)
 
 
 def _backlog(clean=True, ran=2, reason="reached --max-tickets (2)") -> BacklogResult:
@@ -61,3 +69,60 @@ def test_blocked_backlog_yields_nonzero_exit():
     )
     assert res.exit_code() == 1
     assert res.backlog.clean is False
+
+
+# --- self-logging (S-020) ---------------------------------------------------
+
+_T0 = datetime.datetime(2026, 6, 20, 5, 0, 0, tzinfo=datetime.timezone.utc)
+
+
+def test_log_line_for_synced_and_ran_pass():
+    res = PollResult(
+        synced=True,
+        sync_message="synced: +1 new story(ies), 0 skipped",
+        backlog=_backlog(ran=1, reason="reached --max-tickets (1)"),
+    )
+    line = format_summary_line(
+        res, started_at=_T0, finished_at=_T0 + datetime.timedelta(seconds=12.3)
+    )
+    assert "2026-06-20T05:00:00Z" in line
+    assert "12.3s" in line
+    assert "synced: +1 new story(ies), 0 skipped" in line
+    assert "ran 1 ticket(s)" in line
+    assert "reached --max-tickets (1)" in line
+    assert "\n" not in line  # one pass == one line
+
+
+def test_log_line_for_stop_before_backlog_pass():
+    res = PollResult(
+        synced=False,
+        sync_message="sync failed (offline or no credential?): boom",
+        backlog=None,
+    )
+    line = format_summary_line(
+        res, started_at=_T0, finished_at=_T0 + datetime.timedelta(seconds=0.4)
+    )
+    assert "sync failed" in line
+    assert "backlog skipped" in line
+    assert "0.4s" in line
+
+
+def test_append_log_writes_lines_and_creates_dirs(tmp_path):
+    log_path = tmp_path / "nested" / "poll.log"
+    append_log(log_path, "line one")
+    append_log(log_path, "line two")
+    contents = log_path.read_text(encoding="utf-8")
+    assert contents == "line one\nline two\n"
+
+
+def test_append_log_swallows_write_failure(tmp_path):
+    # A directory path can't be opened as a file -> OSError must be swallowed.
+    append_log(tmp_path, "should not raise")
+
+
+def test_default_log_path_is_outside_repo(monkeypatch, tmp_path):
+    monkeypatch.setenv("ADW_POLL_LOG", str(tmp_path / "custom.log"))
+    assert default_log_path() == tmp_path / "custom.log"
+    monkeypatch.delenv("ADW_POLL_LOG")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    assert default_log_path() == tmp_path / "local" / "adw" / "poll.log"

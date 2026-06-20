@@ -4,6 +4,7 @@ workflow_runner reporting that surfaces its verdict on the source issue.
 No live agents or GitHub: the invoke fn is stubbed and the GitHub poster is
 monkeypatched, same pattern as the rest of the suite.
 """
+import datetime
 from pathlib import Path
 
 import adw.workflow_runner as wr
@@ -96,6 +97,58 @@ def test_run_observer_reports_problem_on_no_status(tmp_path):
     assert res.problem is not None
 
 
+def test_run_observer_preserves_cooldown(tmp_path):
+    # After a halt that set cooldown_until, the observer's transient state write
+    # must NOT wipe the breaker's pause (S-019).
+    from adw.safety import check_cooldown, cooldown_remaining
+    from adw.state import State, load_state, save_state
+
+    state_path = tmp_path / "state.json"
+    future = (
+        datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=5)
+    ).isoformat()
+    save_state(
+        State(ticket_id="GH-7", stage="plan", last_failure="circuit open: boom",
+              cooldown_until=future),
+        state_path,
+    )
+
+    seen = {}
+
+    def invoke(stage, state, story):
+        seen["last_failure"] = state.last_failure
+        return _observe_result(raw=_HARNESS_RAW)
+
+    run_observer(_story(), invoke, "circuit open: boom",
+                 state_path=state_path, runs_root=tmp_path / "runs")
+
+    persisted = load_state(state_path)
+    assert persisted.cooldown_until == future  # cooldown carried forward, not wiped
+    assert cooldown_remaining(persisted) is not None
+    assert check_cooldown(state_path) is not None
+    # The observer still received the failure reason for its prompt.
+    assert seen["last_failure"] == "circuit open: boom"
+
+
+def test_run_observer_ignores_other_ticket_cooldown(tmp_path):
+    # A leftover state.json for a *different* ticket must not leak its cooldown
+    # onto this observe run.
+    from adw.state import State, load_state, save_state
+
+    state_path = tmp_path / "state.json"
+    future = (
+        datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=5)
+    ).isoformat()
+    save_state(State(ticket_id="S-999", stage="plan", cooldown_until=future), state_path)
+
+    run_observer(_story("GH-7"), lambda *a, **k: _observe_result(raw=_HARNESS_RAW),
+                 "x", state_path=state_path, runs_root=tmp_path / "runs")
+
+    persisted = load_state(state_path)
+    assert persisted.ticket_id == "GH-7"
+    assert persisted.cooldown_until is None
+
+
 # --- _observe_and_report ----------------------------------------------------
 
 def test_observe_and_report_harness_posts_self_heal(monkeypatch):
@@ -155,3 +208,14 @@ def test_observe_command_status_contract():
 
 def test_observe_spec_exists():
     assert (REPO_ROOT / "stage_specs" / "observe.md").exists()
+
+
+def test_observe_anchors_claims_in_git():
+    # The observer must anchor every claim in git, never fabricate committed work
+    # (dogfood 2026-06-20 hallucination). Guard both the spec and the command so
+    # the rule cannot silently regress.
+    spec = (REPO_ROOT / "stage_specs" / "observe.md").read_text(encoding="utf-8").lower()
+    cmd = (REPO_ROOT / "commands" / "OBSERVE.md").read_text(encoding="utf-8").lower()
+    assert "git diff" in spec and "git log" in spec
+    assert "anchor" in spec or "verify" in spec
+    assert "anchor every claim" in cmd

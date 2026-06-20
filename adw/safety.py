@@ -13,14 +13,19 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from adw.invoke import StageResult
 from adw.state import State, load_state
 
 # Provider 5-hour usage limit / extra-usage quota, per ralph_loop.sh layers
-# 2-4: the CLI's rate_limit_event JSON, then text fallbacks.
+# 2-4: the CLI's rate_limit_event JSON, then text fallbacks. The first text
+# pattern is the *real* subscription message captured 2026-06-20 ("You've hit
+# your session limit · resets 1:10am (America/Toronto)"); the older guessed
+# forms are kept as plausible API-billing / extra-usage variants (S-018).
 _USAGE_LIMIT_PATTERNS = (
     re.compile(r'"rate_limit_event"[\s\S]{0,300}?"status"\s*:\s*"rejected"'),
+    re.compile(r"\bsession limit\b", re.IGNORECASE),
     re.compile(r"5.?hour.{0,40}?limit", re.IGNORECASE),
     re.compile(r"usage.{0,20}?limit.{0,20}?reached", re.IGNORECASE),
     re.compile(r"limit.{0,40}?reached.{0,40}?try.{0,20}?back", re.IGNORECASE),
@@ -48,6 +53,48 @@ _ISO_TIMESTAMP_RE = re.compile(
     r"\b(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\b"
 )
 
+# The real subscription message's reset clause, e.g.
+# "resets 1:10am (America/Toronto)" — a 12-hour wall-clock time in a named
+# IANA zone (S-018). `\D{0,8}?` spans the single space (or a "· " separator)
+# between "resets" and the time without crossing into another number.
+_RESET_CLAUSE_RE = re.compile(
+    r"reset(?:s|ting)?\D{0,8}?(\d{1,2})(?::(\d{2}))?\s*([ap]m)\b\s*\(\s*([^)]+?)\s*\)",
+    re.IGNORECASE,
+)
+
+
+def _parse_reset_clause(text: str, now: _dt.datetime) -> _dt.datetime | None:
+    """Parse a "resets <h>[:<mm>] <am|pm> (<IANA tz>)" clause into the next
+    future UTC instant of that wall-clock time in the named zone, or None if
+    the clause is absent, the time is out of range, or the zone is unknown.
+    Session resets are <~5h out, so the *next* occurrence is the right one:
+    if the time has already passed today in that zone, roll to tomorrow.
+    Never raises — any failure returns None so the configured cooldown
+    fallback governs."""
+    match = _RESET_CLAUSE_RE.search(text)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2) or 0)
+    meridiem = match.group(3).lower()
+    tzname = match.group(4).strip()
+    if not (1 <= hour <= 12) or minute > 59:
+        return None
+    if meridiem == "am":
+        hour = 0 if hour == 12 else hour
+    else:
+        hour = 12 if hour == 12 else hour + 12
+    try:
+        tz = ZoneInfo(tzname)
+    except (ZoneInfoNotFoundError, ValueError, KeyError):
+        # No tz database (Windows without tzdata) or an unrecognized zone.
+        return None
+    local_now = now.astimezone(tz)
+    candidate = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate <= local_now:
+        candidate += _dt.timedelta(days=1)
+    return candidate.astimezone(_dt.timezone.utc)
+
 
 def _parse_usage_reset(text: str, now: _dt.datetime | None = None) -> _dt.datetime | None:
     """Absolute UTC reset instant parsed out of a usage-limit message, or None
@@ -69,7 +116,7 @@ def _parse_usage_reset(text: str, now: _dt.datetime | None = None) -> _dt.dateti
             candidate = candidate.replace(tzinfo=_dt.timezone.utc)
         if candidate > now:
             return candidate
-    return None
+    return _parse_reset_clause(text, now)
 
 
 @dataclass

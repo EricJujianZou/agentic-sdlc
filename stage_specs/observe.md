@@ -30,6 +30,21 @@ ticket be misled the same way by the same asset?
   fixed behavior — the same concrete, testable style as `prd.json` acceptance
   criteria. No "and/or" bundles.
 
+## Anchor every claim in git — never invent work
+
+Before you assert that **anything** was done — code written, files changed,
+tests added, "partial work committed" — confirm it against `git log` and
+`git diff` on the work branch. State only what those actually show. Do not
+describe commits, files, or changes you have not verified exist.
+
+A halted ticket very often implemented **nothing** (it stalled in plan, or the
+breaker tripped before implement landed a change). "No work was committed; git
+shows an empty diff against the base" is a correct, common, useful observation —
+write that, not a plausible-sounding fiction. Fabricating progress (e.g. the
+2026-06-20 dogfood's invented "tickets.py / budgets.json / tests committed"
+when `git log` held no such commit) actively misleads the human and is worse
+than saying nothing.
+
 ## Rules
 
 - Read before you blame.

@@ -1,4 +1,5 @@
 import datetime
+from zoneinfo import ZoneInfo
 
 from adw.invoke import StageResult, _parse_envelope
 from adw.orchestrator import run_ticket
@@ -200,6 +201,75 @@ def test_usage_limit_detection():
         '{"rate_limit_event": {"info": "x", "status": "rejected"}}'
     )
     assert not detect_usage_limit("all tests passed, no limits in sight")
+
+
+# --- real subscription session-limit message (S-018) ------------------------
+
+_SESSION_LIMIT_MSG = "You've hit your session limit · resets 1:10am (America/Toronto)"
+
+
+def test_session_limit_detection():
+    # The real subscription message captured 2026-06-20 must be recognized.
+    assert detect_usage_limit(_SESSION_LIMIT_MSG)
+    # The pre-existing patterns still match their samples.
+    assert detect_usage_limit("Claude AI usage limit reached|1718000000")
+    assert detect_usage_limit("You have hit your 5-hour limit, try again later")
+    assert detect_usage_limit("You're out of extra usage · resets 9pm")
+    assert detect_usage_limit('{"rate_limit_event": {"info": "x", "status": "rejected"}}')
+    # Benign prose still does not trip detection.
+    assert not detect_usage_limit("all tests passed, no limits in sight")
+
+
+def test_parse_reset_clause_future_today():
+    tz = ZoneInfo("America/Toronto")
+    # 00:30 Toronto -> the 1:10am reset is later the same day.
+    now = datetime.datetime(2026, 6, 20, 0, 30, tzinfo=tz).astimezone(datetime.timezone.utc)
+    parsed = _parse_usage_reset(_SESSION_LIMIT_MSG, now)
+    expected = datetime.datetime(2026, 6, 20, 1, 10, tzinfo=tz).astimezone(
+        datetime.timezone.utc
+    )
+    assert parsed == expected
+
+
+def test_parse_reset_clause_rolls_to_next_day_when_passed():
+    tz = ZoneInfo("America/Toronto")
+    # 05:00 Toronto -> 1:10am already passed today, so roll to tomorrow.
+    now = datetime.datetime(2026, 6, 20, 5, 0, tzinfo=tz).astimezone(datetime.timezone.utc)
+    parsed = _parse_usage_reset(_SESSION_LIMIT_MSG, now)
+    expected = datetime.datetime(2026, 6, 21, 1, 10, tzinfo=tz).astimezone(
+        datetime.timezone.utc
+    )
+    assert parsed == expected
+
+
+def test_parse_reset_clause_unknown_tz_is_none():
+    # An unrecognized zone degrades to None (fallback cooldown), never raises.
+    assert _parse_usage_reset("resets 1:10am (Mars/Phobos)") is None
+
+
+def test_parse_reset_clause_no_parseable_time_is_none():
+    assert _parse_usage_reset("your session limit will reset eventually") is None
+
+
+def test_session_limit_routes_to_quotad(tmp_path):
+    # A real session limit hit mid-stage (non-success, message in the output)
+    # must route through the quotad path, not output-decline/dead-on-arrival.
+    story = Story(id="S-001", type="feat", priority=1, title="t", description="d",
+                  acceptance_criteria=["c"])
+
+    def invoke(stage, state, story):
+        return result(stage, outcome="failure", raw_output=_SESSION_LIMIT_MSG, parsed=False)
+
+    outcome = run_ticket(
+        story, invoke, state_path=tmp_path / "state.json", max_iterations=3,
+        breaker=CircuitBreaker(), runs_root=tmp_path / "runs",
+    )
+    assert outcome.outcome == "quotad"
+    assert outcome.reason == USAGE_LIMIT_HALT_REASON
+    # The cooldown is stamped from the parsed reset, far beyond the generic 30m.
+    s = load_state(tmp_path / "state.json")
+    until = datetime.datetime.fromisoformat(s.cooldown_until)
+    assert until > datetime.datetime.now(datetime.timezone.utc)
 
 
 def test_usage_limit_halts_immediately():

@@ -372,6 +372,18 @@ def run_observer(
     carries it.
     """
     state = State(ticket_id=story.id, stage=OBSERVE_STAGE)
+    # Preserve the breaker's cooldown (S-019). The observer runs after a halt
+    # (every non-done, non-quotad outcome), and a fresh State has
+    # cooldown_until=None — writing that to the run's state.json would wipe the
+    # pause the breaker just set, letting an auto-retry start early. Carry the
+    # prior run's cooldown forward when the existing state belongs to this same
+    # ticket; otherwise there is no cooldown to keep.
+    try:
+        prior = load_state(state_path)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        prior = None
+    if prior is not None and prior.ticket_id == story.id:
+        state.cooldown_until = prior.cooldown_until
     state.last_failure = failure_reason
     save_state(state, state_path)
     result = invoke_fn(OBSERVE_STAGE, state, story)

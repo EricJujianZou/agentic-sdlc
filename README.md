@@ -110,8 +110,26 @@ machine; that wiring is a human opt-in, outside the harness's authority:
 
 - **Windows Task Scheduler:** create a Basic Task on your interval whose
   action runs `uv run python workflows/poll_once.py` in the repo directory.
+  (`scripts/register-poll-task.ps1` does this for you, with a redirected log.)
 - **cron (Linux/macOS or a VM):**
   `*/30 * * * * cd /path/to/repo && uv run python workflows/poll_once.py`
+
+**Self-log (S-020).** Every pass appends one bounded, timestamped summary line
+(start time, elapsed seconds, sync outcome, tickets run, stop reason) to a log
+**outside the repo** — default `%LOCALAPPDATA%/adw/poll.log` (override with
+`--log-path` or `$ADW_POLL_LOG`). This is independent of how the task is
+registered, so an unattended pass is always auditable even if the scheduled
+task has no stdout redirect, and it never dirties the working tree (a failure
+to write the log is swallowed and never affects the pass). A pass that spends
+real time is explained by its elapsed-seconds field, so a future long run is
+never the mystery the 29-minute 2026-06-20 run was.
+
+> Re-registering the scheduled task (e.g. via `scripts/register-poll-task.ps1`,
+> which adds its own redirect and a managed task path) is a **human/admin
+> action**, not something a headless run performs: modifying the live `\ADW\`
+> task needs elevation (it is ACL-locked), and the harness never touches the OS
+> scheduler. The self-log above means you get auditability without needing that
+> admin step first.
 
 ### Lifecycle board (GitHub Projects setup, S-016)
 
