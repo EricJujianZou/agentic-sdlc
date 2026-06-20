@@ -128,13 +128,17 @@ def pick_next_stories(prd: Prd, n: int, *, types: tuple[str, ...] | None = None)
     """The top `n` open stories by (priority, id) — the parallel batch (#4).
 
     `pick_next_story` is the n=1 case; this returns up to `n` of the same
-    candidates (passes=false, status=open) in the same deterministic order, so
-    the parallel coordinator can run several independent tickets at once.
-    system-repair stories stay excluded (filed as 'blocked', human-gated)."""
+    candidates (passes=false, status in open/quotad) in the same deterministic
+    order, so the parallel coordinator can run several independent tickets at
+    once. system-repair stories stay excluded (filed as 'blocked', human-gated).
+    A 'quotad' story is eligible alongside 'open' so it auto-resumes once its
+    cooldown elapses; 'blocked' stays human-gated and excluded."""
     candidates = [
         s
         for s in prd.stories
-        if not s.passes and s.status == "open" and (types is None or s.type in types)
+        if not s.passes
+        and s.status in ("open", "quotad")
+        and (types is None or s.type in types)
     ]
     candidates.sort(key=lambda s: (s.priority, s.id))
     return candidates[: max(0, n)]
