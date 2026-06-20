@@ -179,6 +179,11 @@ RUN_LABEL_DONE = "done"
 RUN_LABEL_BLOCKED = "blocked"
 RUN_LABEL_QUOTAD = "quotad"
 
+# Stage labels (S-016): a mutually-exclusive "currently in stage X" label so a
+# GitHub Projects board can show Plan/Do/Check/Review-gate columns without any
+# new frontend. The previous stage label is removed when the next is added.
+STAGE_LABEL_PREFIX = "stage:"
+
 
 def _set_run_label(story: Story, *, add: tuple[str, ...] = (), remove: tuple[str, ...] = ()) -> None:
     """Best-effort issue relabel so a phone-filed ticket shows its run state.
