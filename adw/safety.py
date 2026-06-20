@@ -125,7 +125,13 @@ class CircuitBreaker:
     def record(self, state: State, result: StageResult) -> str | None:
         reason = self._evaluate(state, result)
         if reason is not None:
-            until = _utcnow() + _dt.timedelta(minutes=self.config.cooldown_minutes)
+            if reason == USAGE_LIMIT_HALT_REASON:
+                until = _parse_usage_reset(f"{result.raw_output}\n{result.stderr}") or (
+                    _utcnow()
+                    + _dt.timedelta(minutes=self.config.usage_limit_cooldown_minutes)
+                )
+            else:
+                until = _utcnow() + _dt.timedelta(minutes=self.config.cooldown_minutes)
             state.cooldown_until = until.isoformat()
         return reason
 
