@@ -387,12 +387,15 @@ def _run_document_stage(
     stages_run: list[str],
     breaker: Breaker,
     progress_fn: ProgressFn | None = None,
+    stage_fn: StageLabelFn | None = None,
 ) -> str | None:
     """Run the document stage once with one retry. Returns None on success,
     or a warning string if both attempts fail or the breaker fires. Reports
     its outcome through progress_fn too, so the phone log covers every stage —
     document included — not just the plan->review loop."""
     state.stage = DOCUMENT_STAGE
+    if stage_fn is not None:
+        stage_fn(DOCUMENT_STAGE)
     last_problem: str = "unknown failure"
     for _attempt in (1, 2):
         save_state(state, state_path)
