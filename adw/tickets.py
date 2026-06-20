@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 STORY_TYPES = ("feat", "bug", "chore", "system-repair")
-STORY_STATUSES = ("open", "in_progress", "blocked", "done")
+STORY_STATUSES = ("open", "in_progress", "blocked", "quotad", "done")
 
 
 class PrdValidationError(ValueError):
@@ -108,16 +108,40 @@ def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story 
     workflow auto-picks only the ticket types it is built for (feat vs bug
     vs chore). system-repair stories are filed as 'blocked' (human-gated,
     see plans/tickets_plan.md §5), so they are never picked until a human
-    flips them to 'open'.
+    flips them to 'open'. A 'quotad' story (halted only by a provider usage
+    limit, S-015) is picked alongside 'open' so it auto-resumes once its
+    cooldown elapses; 'blocked' stays human-gated and excluded.
     """
     candidates = [
         s
         for s in prd.stories
-        if not s.passes and s.status == "open" and (types is None or s.type in types)
+        if not s.passes
+        and s.status in ("open", "quotad")
+        and (types is None or s.type in types)
     ]
     if not candidates:
         return None
     return min(candidates, key=lambda s: (s.priority, s.id))
+
+
+def pick_next_stories(prd: Prd, n: int, *, types: tuple[str, ...] | None = None) -> list[Story]:
+    """The top `n` open stories by (priority, id) — the parallel batch (#4).
+
+    `pick_next_story` is the n=1 case; this returns up to `n` of the same
+    candidates (passes=false, status in open/quotad) in the same deterministic
+    order, so the parallel coordinator can run several independent tickets at
+    once. system-repair stories stay excluded (filed as 'blocked', human-gated).
+    A 'quotad' story is eligible alongside 'open' so it auto-resumes once its
+    cooldown elapses; 'blocked' stays human-gated and excluded."""
+    candidates = [
+        s
+        for s in prd.stories
+        if not s.passes
+        and s.status in ("open", "quotad")
+        and (types is None or s.type in types)
+    ]
+    candidates.sort(key=lambda s: (s.priority, s.id))
+    return candidates[: max(0, n)]
 
 
 def get_story(prd: Prd, story_id: str) -> Story:

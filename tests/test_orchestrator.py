@@ -1,6 +1,7 @@
 from adw.invoke import StageResult
 from adw.orchestrator import run_ticket
-from adw.state import load_state
+from adw.safety import USAGE_LIMIT_HALT_REASON
+from adw.state import State, load_state, save_state
 from adw.status import StatusBlock
 from adw.tickets import Story
 
@@ -67,6 +68,17 @@ def test_progress_fn_called_once_per_stage(tmp_path):
         ("plan", "success"), ("implement", "success"),
         ("test", "success"), ("review", "success"), ("document", "success"),
     ]
+
+
+def test_stage_fn_called_at_entry_in_order(tmp_path):
+    events = []
+
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    run(invoke, tmp_path, stage_fn=lambda stage: events.append(stage))
+    # One call per stage at entry, in order — including document.
+    assert events == ["plan", "implement", "test", "review", "document"]
 
 
 def test_progress_fn_receives_stage_summary(tmp_path):
@@ -250,6 +262,19 @@ def test_breaker_still_halts_unfinished_work(tmp_path):
     assert "circuit open" in outcome.reason
 
 
+def test_breaker_usage_limit_halt_returns_quotad(tmp_path):
+    class UsageLimitBreaker:
+        def record(self, state, result):
+            return USAGE_LIMIT_HALT_REASON
+
+    def invoke(stage, state, story):
+        return ok(stage)  # no exit_signal anywhere
+
+    outcome = run(invoke, tmp_path, breaker=UsageLimitBreaker())
+    assert outcome.outcome == "quotad"
+    assert outcome.reason == USAGE_LIMIT_HALT_REASON
+
+
 # --- document stage tests ---
 
 
@@ -424,3 +449,101 @@ def test_test_evidence_not_run_until_completion(tmp_path):
     outcome = run(invoke, tmp_path, verify_fn=verify, max_iterations=1)
     assert outcome.outcome == "halted"
     assert calls == []  # never reached the gate, so never re-ran the suite
+
+
+# --- bounded checkpoint/resume from state.json (S-017) ---
+
+
+def test_resume_from_mid_pipeline_state_reenters_at_recorded_stage(tmp_path):
+    seen = []
+
+    def invoke(stage, state, story):
+        seen.append((state.iteration, stage))
+        return ok(stage, exit_signal=(stage == "review"))
+
+    state_path = tmp_path / "state.json"
+    save_state(State(ticket_id="S-001", stage="test", iteration=2), state_path)
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert outcome.iterations == 2
+    # plan/implement (already done before the interruption) are never re-invoked
+    first_pass_stages = [s for it, s in seen if it == 2]
+    assert first_pass_stages == ["test", "review", "document"]
+
+
+def test_resume_ignores_different_ticket_state(tmp_path):
+    seen = []
+
+    def invoke(stage, state, story):
+        seen.append(stage)
+        return ok(stage, exit_signal=(stage == "review"))
+
+    state_path = tmp_path / "state.json"
+    save_state(State(ticket_id="S-999", stage="test", iteration=3), state_path)
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert seen[:4] == ["plan", "implement", "test", "review"]
+    state = load_state(state_path)
+    assert state.ticket_id == "S-001"
+
+
+def test_resume_ignores_finished_state(tmp_path):
+    seen = []
+
+    def invoke(stage, state, story):
+        seen.append(stage)
+        return ok(stage, exit_signal=(stage == "review"))
+
+    state_path = tmp_path / "state.json"
+    save_state(State(ticket_id="S-001", stage="document", iteration=5), state_path)
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert seen[:4] == ["plan", "implement", "test", "review"]
+
+
+def test_resume_no_existing_state_starts_fresh(tmp_path):
+    seen = []
+
+    def invoke(stage, state, story):
+        seen.append(stage)
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert seen[:4] == ["plan", "implement", "test", "review"]
+
+
+def test_resume_loop_back_runs_full_order_on_next_iteration(tmp_path):
+    calls = []
+
+    def invoke(stage, state, story):
+        calls.append((state.iteration, stage))
+        if state.iteration == 2 and stage == "test":
+            return fail(stage)
+        return ok(stage, exit_signal=(stage == "review"))
+
+    state_path = tmp_path / "state.json"
+    save_state(State(ticket_id="S-001", stage="test", iteration=2), state_path)
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert outcome.iterations == 3
+    assert (2, "test") in calls
+    # the loop-back iteration runs the full order from plan, not a skipped one
+    assert (3, "plan") in calls and (3, "implement") in calls
+    assert (3, "review") in calls
+
+
+def test_resumed_run_still_halts_at_max_iterations(tmp_path):
+    def invoke(stage, state, story):
+        return fail(stage) if stage == "test" else ok(stage)
+
+    state_path = tmp_path / "state.json"
+    save_state(State(ticket_id="S-001", stage="test", iteration=1), state_path)
+
+    outcome = run(invoke, tmp_path, max_iterations=2)
+    assert outcome.outcome == "halted"
+    assert "max iterations (2)" in outcome.reason

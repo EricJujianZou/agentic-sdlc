@@ -13,14 +13,19 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from adw.invoke import StageResult
 from adw.state import State, load_state
 
 # Provider 5-hour usage limit / extra-usage quota, per ralph_loop.sh layers
-# 2-4: the CLI's rate_limit_event JSON, then text fallbacks.
+# 2-4: the CLI's rate_limit_event JSON, then text fallbacks. The first text
+# pattern is the *real* subscription message captured 2026-06-20 ("You've hit
+# your session limit · resets 1:10am (America/Toronto)"); the older guessed
+# forms are kept as plausible API-billing / extra-usage variants (S-018).
 _USAGE_LIMIT_PATTERNS = (
     re.compile(r'"rate_limit_event"[\s\S]{0,300}?"status"\s*:\s*"rejected"'),
+    re.compile(r"\bsession limit\b", re.IGNORECASE),
     re.compile(r"5.?hour.{0,40}?limit", re.IGNORECASE),
     re.compile(r"usage.{0,20}?limit.{0,20}?reached", re.IGNORECASE),
     re.compile(r"limit.{0,40}?reached.{0,40}?try.{0,20}?back", re.IGNORECASE),
@@ -31,6 +36,87 @@ _USAGE_LIMIT_PATTERNS = (
 def detect_usage_limit(text: str) -> bool:
     """True if the output signals the provider's usage limit was hit."""
     return any(p.search(text) for p in _USAGE_LIMIT_PATTERNS)
+
+
+# The one halt-reason string a real quota cut-off returns from `_evaluate`.
+# `record`'s cooldown branch and `orchestrator.run_ticket`'s outcome branch
+# both compare against this constant (not against `detect_usage_limit`
+# directly) so they classify exactly what the breaker decided, never drifting
+# from each other or re-detecting text the breaker already gated on success.
+USAGE_LIMIT_HALT_REASON = "provider usage limit reached; pausing instead of looping"
+
+# Layer 2-4 reset-time hints, per ralph_loop.sh: a trailing Unix-epoch-seconds
+# value (the real Claude CLI "usage limit reached|<epoch>" form) or an
+# ISO-8601 timestamp anywhere in the message.
+_EPOCH_SUFFIX_RE = re.compile(r"\|(\d{9,})\b")
+_ISO_TIMESTAMP_RE = re.compile(
+    r"\b(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\b"
+)
+
+# The real subscription message's reset clause, e.g.
+# "resets 1:10am (America/Toronto)" — a 12-hour wall-clock time in a named
+# IANA zone (S-018). `\D{0,8}?` spans the single space (or a "· " separator)
+# between "resets" and the time without crossing into another number.
+_RESET_CLAUSE_RE = re.compile(
+    r"reset(?:s|ting)?\D{0,8}?(\d{1,2})(?::(\d{2}))?\s*([ap]m)\b\s*\(\s*([^)]+?)\s*\)",
+    re.IGNORECASE,
+)
+
+
+def _parse_reset_clause(text: str, now: _dt.datetime) -> _dt.datetime | None:
+    """Parse a "resets <h>[:<mm>] <am|pm> (<IANA tz>)" clause into the next
+    future UTC instant of that wall-clock time in the named zone, or None if
+    the clause is absent, the time is out of range, or the zone is unknown.
+    Session resets are <~5h out, so the *next* occurrence is the right one:
+    if the time has already passed today in that zone, roll to tomorrow.
+    Never raises — any failure returns None so the configured cooldown
+    fallback governs."""
+    match = _RESET_CLAUSE_RE.search(text)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2) or 0)
+    meridiem = match.group(3).lower()
+    tzname = match.group(4).strip()
+    if not (1 <= hour <= 12) or minute > 59:
+        return None
+    if meridiem == "am":
+        hour = 0 if hour == 12 else hour
+    else:
+        hour = 12 if hour == 12 else hour + 12
+    try:
+        tz = ZoneInfo(tzname)
+    except (ZoneInfoNotFoundError, ValueError, KeyError):
+        # No tz database (Windows without tzdata) or an unrecognized zone.
+        return None
+    local_now = now.astimezone(tz)
+    candidate = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate <= local_now:
+        candidate += _dt.timedelta(days=1)
+    return candidate.astimezone(_dt.timezone.utc)
+
+
+def _parse_usage_reset(text: str, now: _dt.datetime | None = None) -> _dt.datetime | None:
+    """Absolute UTC reset instant parsed out of a usage-limit message, or None
+    if no parseable reset is present, or if the parsed instant is not in the
+    future (a stale/test epoch must not stamp an already-expired cooldown)."""
+    now = now or _utcnow()
+    match = _EPOCH_SUFFIX_RE.search(text)
+    if match:
+        candidate = _dt.datetime.fromtimestamp(int(match.group(1)), tz=_dt.timezone.utc)
+        if candidate > now:
+            return candidate
+    match = _ISO_TIMESTAMP_RE.search(text)
+    if match:
+        try:
+            candidate = _dt.datetime.fromisoformat(match.group(1).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if candidate.tzinfo is None:
+            candidate = candidate.replace(tzinfo=_dt.timezone.utc)
+        if candidate > now:
+            return candidate
+    return _parse_reset_clause(text, now)
 
 
 @dataclass
@@ -47,6 +133,10 @@ class SafetyConfig:
     instant_failure_cap: int = 2
     per_ticket_token_budget: int | None = None
     cooldown_minutes: int = 30
+    # A usage-limit halt's reset is typically ~5h out, far longer than the
+    # generic circuit_cooldown_minutes; used only when no reset time can be
+    # parsed out of the halt text (see _parse_usage_reset).
+    usage_limit_cooldown_minutes: int = 300
 
     @classmethod
     def from_budgets(cls, path: str | Path) -> "SafetyConfig":
@@ -54,6 +144,9 @@ class SafetyConfig:
         return cls(
             per_ticket_token_budget=raw.get("per_ticket_token_budget"),
             cooldown_minutes=raw.get("circuit_cooldown_minutes", cls.cooldown_minutes),
+            usage_limit_cooldown_minutes=raw.get(
+                "usage_limit_cooldown_minutes", cls.usage_limit_cooldown_minutes
+            ),
             permission_denials=raw.get("permission_denial_cap", cls.permission_denials),
             instant_failure_cap=raw.get("instant_failure_cap", cls.instant_failure_cap),
         )
@@ -79,15 +172,32 @@ class CircuitBreaker:
     def record(self, state: State, result: StageResult) -> str | None:
         reason = self._evaluate(state, result)
         if reason is not None:
-            until = _utcnow() + _dt.timedelta(minutes=self.config.cooldown_minutes)
+            if reason == USAGE_LIMIT_HALT_REASON:
+                until = _parse_usage_reset(f"{result.raw_output}\n{result.stderr}") or (
+                    _utcnow()
+                    + _dt.timedelta(minutes=self.config.usage_limit_cooldown_minutes)
+                )
+            else:
+                until = _utcnow() + _dt.timedelta(minutes=self.config.cooldown_minutes)
             state.cooldown_until = until.isoformat()
         return reason
 
     def _evaluate(self, state: State, result: StageResult) -> str | None:
         cfg = self.config
 
-        if detect_usage_limit(result.raw_output):
-            return "provider usage limit reached; pausing instead of looping"
+        # A genuine provider usage limit cuts the stage's turn off, so it can
+        # never also return a clean *successful* status block. Gate detection on
+        # a non-successful result: otherwise a stage whose very subject is usage
+        # limits (e.g. S-015) trips the matcher on its own prose and self-halts
+        # (dogfood 2026-06-19 false positive — the plan succeeded with 18k tokens
+        # yet "usage limit reached" in its plan text opened the circuit). The CLI
+        # surfaces a real limit in the result text and/or stderr; scan both, but
+        # only when the stage did not succeed.
+        stage_succeeded = result.status is not None and result.status.outcome == "success"
+        if not stage_succeeded and detect_usage_limit(
+            f"{result.raw_output}\n{result.stderr}"
+        ):
+            return USAGE_LIMIT_HALT_REASON
 
         # Dead-on-arrival: the CLI exited non-zero having produced nothing
         # (0 tokens, empty output). The same-error rule (5 loops) can never

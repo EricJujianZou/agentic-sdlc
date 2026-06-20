@@ -7,13 +7,16 @@ adw/safety.py (plans/safety_plan.md) and plugs in via `breaker`.
 """
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
 from adw import runlog
 from adw.invoke import StageResult
-from adw.state import State, new_state, save_state
+from adw.safety import USAGE_LIMIT_HALT_REASON
+from adw.state import State, load_state, new_state, save_state
 from adw.status import _candidate_objects
 from adw.tickets import Story
 
@@ -43,6 +46,14 @@ VerifyFn = Callable[[], "tuple[bool, str]"]
 # problem can never change a ticket's outcome.
 ProgressFn = Callable[[str, str, str], None]
 
+# stage_fn(stage) -> None. Best-effort, orchestrator-only notification fired
+# once at each stage's ENTRY (before the stage runs) — e.g. swapping a board
+# label on the source GitHub issue so a phone-facing lifecycle board (S-016)
+# shows the stage currently in flight, not the last one to finish. Entry-time
+# (vs. progress_fn's exit-time) is what makes "currently in stage X" correct.
+# Injected and defaulting to None; it must never raise.
+StageLabelFn = Callable[[str], None]
+
 
 class Breaker(Protocol):
     """Circuit-breaker interface; the real one is adw/safety.py."""
@@ -55,7 +66,7 @@ class Breaker(Protocol):
 @dataclass
 class TicketOutcome:
     ticket_id: str
-    outcome: str  # "done" | "blocked" | "halted"
+    outcome: str  # "done" | "blocked" | "halted" | "quotad"
     reason: str | None = None
     iterations: int = 1
     tokens_used: int = 0
@@ -70,6 +81,25 @@ class _NullBreaker:
         return None
 
 
+def _resume_state(
+    story_id: str, state_path: str | Path, stage_order: tuple[str, ...]
+) -> State | None:
+    """Return a persisted state to resume from, or None to start fresh
+    (S-017). Resumable means: the file exists, parses, belongs to the same
+    ticket, and was left mid-pipeline (a quota interruption) rather than
+    finished (document/decompose/observe) or absent. `last_failure` is
+    cleared so the re-entered stage sees a clean halt, not a quota message
+    mistaken for a stage failure to plan around."""
+    try:
+        prior = load_state(state_path)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        return None
+    if prior.ticket_id != story_id or prior.stage not in stage_order:
+        return None
+    prior.last_failure = None
+    return prior
+
+
 def run_ticket(
     story: Story,
     invoke_fn: InvokeFn,
@@ -80,6 +110,7 @@ def run_ticket(
     breaker: Breaker | None = None,
     verify_fn: VerifyFn | None = None,
     progress_fn: ProgressFn | None = None,
+    stage_fn: StageLabelFn | None = None,
     runs_root: str | Path | None = None,
 ) -> TicketOutcome:
     """Drive one ticket through its `stage_order` (plan -> implement -> test
@@ -95,14 +126,18 @@ def run_ticket(
     breaker = breaker or _NullBreaker()
     gate_stage = stage_order[-1]
     require_exit_signal = gate_stage == "review"
-    state = new_state(story.id)
+    resumed = _resume_state(story.id, state_path, stage_order)
+    state = resumed if resumed is not None else new_state(story.id)
     save_state(state, state_path)
     stages_run: list[str] = []
+    resume_index = stage_order.index(state.stage) if resumed is not None else 0
 
     while state.iteration <= max_iterations:
-        for stage in stage_order:
+        for stage in stage_order[resume_index:]:
             state.stage = stage
             save_state(state, state_path)
+            if stage_fn is not None:
+                stage_fn(stage)
             result = invoke_fn(stage, state, story)
             state.budget_used_tokens += result.tokens_used
             stages_run.append(stage)
@@ -176,6 +211,7 @@ def run_ticket(
                     stages_run=stages_run,
                     breaker=breaker,
                     progress_fn=progress_fn,
+                    stage_fn=stage_fn,
                 )
                 return _finish(
                     story, state, "done", None, stages_run,
@@ -186,7 +222,8 @@ def run_ticket(
             if halt_reason is not None:
                 state.last_failure = halt_reason
                 save_state(state, state_path)
-                return _finish(story, state, "halted", halt_reason, stages_run)
+                outcome = "quotad" if halt_reason == USAGE_LIMIT_HALT_REASON else "halted"
+                return _finish(story, state, outcome, halt_reason, stages_run)
 
             if result.status is None:
                 # Unparseable output is a stage failure, not a completion.
@@ -207,7 +244,9 @@ def run_ticket(
                 state.last_failure = "review success without exit_signal"
                 break
         else:
+            resume_index = 0
             continue  # unreachable: review always breaks or returns
+        resume_index = 0
         state.iteration += 1
         save_state(state, state_path)
 
@@ -333,6 +372,18 @@ def run_observer(
     carries it.
     """
     state = State(ticket_id=story.id, stage=OBSERVE_STAGE)
+    # Preserve the breaker's cooldown (S-019). The observer runs after a halt
+    # (every non-done, non-quotad outcome), and a fresh State has
+    # cooldown_until=None — writing that to the run's state.json would wipe the
+    # pause the breaker just set, letting an auto-retry start early. Carry the
+    # prior run's cooldown forward when the existing state belongs to this same
+    # ticket; otherwise there is no cooldown to keep.
+    try:
+        prior = load_state(state_path)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        prior = None
+    if prior is not None and prior.ticket_id == story.id:
+        state.cooldown_until = prior.cooldown_until
     state.last_failure = failure_reason
     save_state(state, state_path)
     result = invoke_fn(OBSERVE_STAGE, state, story)
@@ -373,12 +424,15 @@ def _run_document_stage(
     stages_run: list[str],
     breaker: Breaker,
     progress_fn: ProgressFn | None = None,
+    stage_fn: StageLabelFn | None = None,
 ) -> str | None:
     """Run the document stage once with one retry. Returns None on success,
     or a warning string if both attempts fail or the breaker fires. Reports
     its outcome through progress_fn too, so the phone log covers every stage —
     document included — not just the plan->review loop."""
     state.stage = DOCUMENT_STAGE
+    if stage_fn is not None:
+        stage_fn(DOCUMENT_STAGE)
     last_problem: str = "unknown failure"
     for _attempt in (1, 2):
         save_state(state, state_path)

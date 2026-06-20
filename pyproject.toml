@@ -3,7 +3,10 @@ name = "adw"
 version = "0.1.0"
 description = "Deterministic harness for the agentic SDLC pipeline: ticket/state schemas, orchestration, and safety bounds."
 requires-python = ">=3.11"
-dependencies = []
+# tzdata ships the IANA timezone database; zoneinfo has none on Windows, so
+# without it ZoneInfo("America/Toronto") raises and session-limit reset
+# parsing (adw/safety.py) cannot resolve the zone (S-018).
+dependencies = ["tzdata"]
 
 [dependency-groups]
 dev = ["pytest>=8"]

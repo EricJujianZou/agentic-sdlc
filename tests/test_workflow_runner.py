@@ -8,6 +8,7 @@ import subprocess
 
 import adw.workflow_runner as workflow_runner
 from adw.github import GitHubError
+from adw.orchestrator import TicketOutcome
 from adw.tickets import Story
 from adw.workflow_runner import _make_verify_fn, _notify_github
 
@@ -44,6 +45,22 @@ def test_verify_fails_on_nonzero_exit_and_keeps_detail(monkeypatch):
     passed, detail = verify()
     assert passed is False
     assert "1 failed" in detail
+
+
+def test_verify_runs_in_given_cwd(monkeypatch):
+    # A parallel worker passes its worktree dir so the re-run exercises that
+    # tree's changes, not the pristine main tree (#4).
+    seen = {}
+
+    def record(*a, **k):
+        seen["cwd"] = k.get("cwd")
+        return _Proc(0, "5 passed")
+
+    monkeypatch.setattr(subprocess, "run", record)
+    verify = _make_verify_fn({}, cwd="/tmp/.adw-worktrees/S-001")
+    passed, _ = verify()
+    assert passed is True
+    assert seen["cwd"] == "/tmp/.adw-worktrees/S-001"
 
 
 def test_verify_treats_timeout_as_failure(monkeypatch):
@@ -172,6 +189,46 @@ def test_progress_fn_includes_summary(monkeypatch):
     assert "test" in posted["body"]
 
 
+# --- _finalize_story quotad (S-015) -----------------------------------------
+
+
+def test_finalize_story_quotad_sets_status_label_skips_pr_and_observer(monkeypatch):
+    from adw.tickets import Prd
+
+    story = _story("S-006")
+    prd = Prd(project="p", stories=[story])
+    monkeypatch.setattr(workflow_runner, "load_prd", lambda path: prd)
+    monkeypatch.setattr(workflow_runner, "save_prd", lambda prd, path: None)
+    monkeypatch.setattr(workflow_runner, "_commit_bookkeeping", lambda message: None)
+
+    set_label_calls = []
+    monkeypatch.setattr(
+        workflow_runner,
+        "_set_run_label",
+        lambda story, **kwargs: set_label_calls.append(kwargs),
+    )
+
+    def boom_notify(*a, **k):
+        raise AssertionError("_notify_github must not be called for a quotad outcome")
+
+    def boom_observe(*a, **k):
+        raise AssertionError("_observe_and_report must not be called for a quotad outcome")
+
+    monkeypatch.setattr(workflow_runner, "_notify_github", boom_notify)
+    monkeypatch.setattr(workflow_runner, "_observe_and_report", boom_observe)
+
+    outcome = TicketOutcome(story.id, "quotad", reason="provider usage limit reached")
+    workflow_runner._finalize_story(
+        story, outcome, observer_invoke=None, observer_state_path="state.json", budgets={},
+    )
+
+    assert story.status == "quotad"
+    assert set_label_calls == [
+        {"remove": (workflow_runner.RUN_LABEL_IN_PROGRESS,),
+         "add": (workflow_runner.RUN_LABEL_QUOTAD,)}
+    ]
+
+
 # --- _set_run_label (S-014 follow-up) ---------------------------------------
 
 def test_set_run_label_swaps_labels_for_issue(monkeypatch):
@@ -210,3 +267,40 @@ def test_set_run_label_swallows_github_error(monkeypatch):
     monkeypatch.setattr(workflow_runner, "get_token", boom)
     # Must not raise — a relabel failure can never change a ticket's outcome.
     workflow_runner._set_run_label(_story("GH-42"), add=(workflow_runner.RUN_LABEL_DONE,))
+
+
+# --- _make_stage_label_fn (S-016 lifecycle board) ---------------------------
+
+def test_stage_label_fn_is_none_for_plain_story():
+    assert workflow_runner._make_stage_label_fn(_story("S-006")) is None
+
+
+def test_stage_label_fn_swaps_prior_label(monkeypatch):
+    added, removed = [], []
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(
+        workflow_runner, "remove_label",
+        lambda owner, repo, token, num, label: removed.append((num, label)),
+    )
+    monkeypatch.setattr(
+        workflow_runner, "add_labels",
+        lambda owner, repo, token, num, labels: added.append((num, labels)),
+    )
+    fn = workflow_runner._make_stage_label_fn(_story("GH-42"))
+    fn("plan")
+    assert added == [(42, ["stage:plan"])]
+    assert removed == []
+    fn("implement")
+    assert added == [(42, ["stage:plan"]), (42, ["stage:implement"])]
+    assert removed == [(42, "stage:plan")]
+
+
+def test_stage_label_fn_swallows_github_error(monkeypatch):
+    def boom():
+        raise GitHubError("offline")
+
+    monkeypatch.setattr(workflow_runner, "get_token", boom)
+    fn = workflow_runner._make_stage_label_fn(_story("GH-42"))
+    # Must not raise — a label failure can never change a ticket's outcome.
+    fn("plan")

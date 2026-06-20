@@ -264,6 +264,111 @@
       "skill_match": null,
       "passes": true,
       "status": "done"
+    },
+    {
+      "id": "S-015",
+      "type": "system-repair",
+      "priority": 1,
+      "title": "Quota-limit interruptions become resumable (quotad status), not blocked",
+      "description": "On a Claude subscription the 5-hour usage limit can halt a run mid-ticket. Today that is mishandled three ways. (A) When the breaker detects a usage limit (adw/safety.py detect_usage_limit) it opens the circuit with the generic circuit_cooldown_minutes (30 min), far shorter than the ~5h reset, so the scheduled poll retries every cooldown window and hits the wall again. (B) The usage halt returns outcome=halted, and adw/workflow_runner.py _finalize_story marks any non-done outcome status='blocked' — which pick_next_story never auto-picks again (tickets.py) — so a perfectly good ticket interrupted only by quota is sidelined until a human reopens it, and during one outage the breaker marches through and wrongly blocks several legitimate tickets one per cooldown cycle. (C) _finalize_story runs the whole-repo opus observer on every non-done outcome, so a usage halt spends a big agent call precisely when we just ran out of usage. Fix all three by making a quota interruption a first-class, auto-resumable state called 'quotad' (distinct from 'blocked' = needs human attention). The cooldown for a usage-limit halt is set to the reset time parsed from the failure text when present, else a configurable usage_limit_cooldown_minutes (default 300) from configs/budgets.json. The breaker/orchestrator surface a distinct 'quotad' outcome for the usage-limit halt only; other halts stay 'halted'. _finalize_story handles 'quotad' specially: status='quotad', a 'quotad' GitHub label, NO PR opened (work is incomplete), and the observer is skipped. pick_next_story treats 'quotad' stories as eligible so they resume automatically once the cooldown elapses (check_cooldown still gates when), while 'blocked' stays human-gated.",
+      "acceptance_criteria": [
+        "'quotad' is added to STORY_STATUSES in adw/tickets.py and accepted by load_prd validation and mark_story; existing statuses are unchanged",
+        "adw/safety.py: on a detected usage limit the breaker sets state.cooldown_until from a reset time parsed out of the failure text when one is present (e.g. an ISO timestamp or a 'resets'/'try again' clause), else from a configurable usage_limit_cooldown_minutes (default 300) read via SafetyConfig.from_budgets / configs/budgets.json; the generic circuit_cooldown_minutes no longer governs a usage-limit halt",
+        "The usage-limit halt is surfaced as a distinct 'quotad' outcome from adw/orchestrator.py run_ticket (not 'halted'); every other breaker halt still returns 'halted'",
+        "adw/workflow_runner.py _finalize_story handles a 'quotad' outcome by marking the story status='quotad', adding a 'quotad' issue label (best-effort, no-op for plain S-NNN), opening NO PR, and NOT running the observer; the existing done/blocked/halted handling is otherwise unchanged",
+        "adw/tickets.py pick_next_story (and pick_next_stories) treat status=='quotad' stories as eligible to pick alongside 'open', so a quota-interrupted ticket auto-resumes once its cooldown elapses; status=='blocked' remains excluded (human-gated)",
+        "Unit tests cover: reset-time parsed from a sample usage-limit message and the configurable fallback when absent; run_ticket returns 'quotad' for a usage-limit halt and 'halted' for a non-usage halt; _finalize_story on 'quotad' sets the status/label and skips both the PR and the observer; pick_next_story picks a 'quotad' story",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
+      "id": "S-016",
+      "type": "system-repair",
+      "priority": 2,
+      "title": "Phone-facing lifecycle board via GitHub stage labels (no new frontend)",
+      "description": "The only phone-facing board today is GitHub itself, and the orchestrator already maintains issue labels (adw/workflow_runner.py _set_run_label: in-progress/done/blocked, plus the observer's self-heal-suggested/needs-clarification). Make the issue reflect the SDLC stage the ticket is currently in, so a GitHub Projects board (a one-time human setup) can show Plan/Do/Check/Review-gate/Blocked columns without any new frontend, API, or backend. As a GH-sourced ticket advances stages, the orchestrator updates a mutually-exclusive stage label on the source issue (stage:plan, stage:implement, stage:test, stage:review, stage:document) via the same best-effort, injected per-stage-transition mechanism as the S-014 progress callback, so the orchestrator stays the only component that talks to GitHub and stage agents never do. Label changes are quiet (GitHub does not push phone notifications for label edits, unlike comments), so this adds board state without notification spam. Best-effort throughout: any GitHub/credential/offline failure is printed and swallowed and never changes the ticket outcome. Plain S-NNN stories (no source issue) are no-ops. The terminal in-progress/done/blocked/quotad labels and the S-014 per-stage comments are preserved.",
+      "acceptance_criteria": [
+        "As a GH-<n> story advances stages, the orchestrator sets a mutually-exclusive stage label on the source issue (one of stage:plan, stage:implement, stage:test, stage:review, stage:document) reflecting the current stage; the previous stage label is removed when the next is added so exactly one stage label is present",
+        "Stage labels are driven from the orchestrator on each stage transition through an injected, best-effort callback (the same injection pattern as the S-014 progress_fn), so stage agents never call GitHub directly and the orchestrator remains the sole GitHub authority",
+        "All stage-label updates are best-effort: any GitHub, credential, or offline failure is printed and swallowed, never changing the ticket's outcome or halting the run",
+        "Plain S-NNN stories (no source issue) trigger no stage-label calls; the existing in-progress/done/blocked/quotad labels and the S-014 per-stage comments are preserved, not removed or duplicated",
+        "README documents the one-time manual GitHub Projects setup that maps these labels to board columns (Plan / Do / Check / Review-gate / Blocked), labeled an out-of-agent-scope human action that a headless run never attempts and never reports blocked on",
+        "Unit tests with a fake GitHub client cover: the stage label is set and the prior one swapped on each transition for a GH story, no stage-label calls for an S-NNN story, and a GitHub failure is swallowed",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
+      "id": "S-017",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "Mid-ticket checkpoint: resume a quotad ticket from its last stage via state.json",
+      "description": "Today adw/orchestrator.py run_ticket always calls new_state(story.id) at entry, resetting iteration to 1 and the stage to plan, so a ticket interrupted by quota (S-015 'quotad') re-runs from plan on resume even though git already holds the prior stages' commits on the adw/<id> branch. That is correct (git-as-memory means the new plan stage sees the earlier work) but wastes tokens — the exact constraint that matters on a subscription. Add a bounded checkpoint/resume: when run_ticket starts a ticket that has an existing state.json for the SAME ticket_id left at a mid-pipeline stage (i.e. the prior run was interrupted, not finished), resume from that stage instead of starting fresh, re-using the persisted iteration count; completed stages whose outputs are already committed are not re-run. A fresh ticket (no prior state, or a state.json for a different ticket_id, or a finished run) behaves exactly as today. The resume must stay fully bounded: it still honors max_iterations and the circuit breaker, and a resumed run can never loop unbounded. This is leverage on our existing state.json hand-off, not a new memory layer.",
+      "acceptance_criteria": [
+        "run_ticket resumes from an existing state.json when it is for the same story.id and was left at a mid-pipeline stage (a quota interruption), re-entering at that stage and preserving the persisted iteration count instead of calling new_state",
+        "A fresh ticket — no state.json, a state.json for a different ticket_id, or one whose run already finished — behaves exactly as today (new_state, iteration 1, stage plan); existing single-ticket behavior is unchanged",
+        "On resume, stages already completed in the prior run (their outputs committed to the work branch) are not re-invoked; the loop re-enters at the first incomplete stage",
+        "A resumed run stays bounded: it honors max_iterations and the circuit breaker exactly as a fresh run, and cannot loop unbounded",
+        "Unit tests with a fake invoke_fn cover: resume from a mid-pipeline state.json re-enters at the recorded stage with the iteration preserved; a fresh ticket and a different-ticket state.json both start fresh; a resumed run still halts at max_iterations",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "blocked"
+    },
+    {
+      "id": "S-018",
+      "type": "system-repair",
+      "priority": 1,
+      "title": "Recognize and parse the real Claude subscription session-limit message",
+      "description": "The quotad work (S-015) was built against a guessed usage-limit format and never fired on the real subscription message captured 2026-06-20: \"You've hit your session limit · resets 1:10am (America/Toronto)\". detect_usage_limit() missed it (no 'session limit' pattern) and _parse_usage_reset() returned None (the reset clause is neither a Unix epoch nor ISO-8601), so a real session limit was misclassified as an output-decline halt (S-017). Add a 'session limit' detection pattern and a 'resets <h>[:<mm>] <am|pm> (<IANA tz>)' reset-clause parser that resolves the next future UTC instant via zoneinfo, with tzdata declared so it works on Windows and a try/except fallback so a missing/unknown tz degrades to the configured cooldown rather than raising. Hand-implemented (not dogfooded) per the quota_resilience_plan tzdata risk note.",
+      "acceptance_criteria": [
+        "detect_usage_limit recognizes the real session-limit message; the existing four patterns still match their samples; benign prose still returns False",
+        "_parse_usage_reset returns the correct future UTC instant for 'resets 1:10am (America/Toronto)' given a frozen now, rolls to the next day when that time already passed, and returns None (never raises) for an unknown tz or an unparseable clause",
+        "A real session-limit stage result routes through the quotad path (USAGE_LIMIT_HALT_REASON), not output-decline or dead-on-arrival",
+        "tzdata is a declared dependency so timezone resolution works on Windows; if absent, reset parsing degrades to None rather than raising",
+        "Unit tests cover detection, reset parse (frozen now, same-day roll, unknown-tz None), and the quotad routing; full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
+      "id": "S-019",
+      "type": "system-repair",
+      "priority": 2,
+      "title": "Observer must not wipe the run's circuit-breaker cooldown",
+      "description": "adw/orchestrator.py run_observer wrote a fresh State (cooldown_until=None) to the run's state.json, overwriting the cooldown the breaker had just set on a halt (evidence: S-017's state.json showed cooldown_until=null despite the circuit having opened). That lets an auto-retry start before the cooldown elapses, defeating the breaker's pause for every non-quota halt (the quotad path already skips the observer). Fix: run_observer loads the existing state.json and carries cooldown_until forward when it belongs to the same ticket, preserving the pause while still threading last_failure into the observe prompt.",
+      "acceptance_criteria": [
+        "After a halt that set cooldown_until, running the observer leaves cooldown_until intact in state.json while still presenting the failure reason to the observe stage",
+        "check_cooldown still reports an active cooldown after the observer has run on a non-quota halt",
+        "A leftover state.json for a different ticket does not leak its cooldown onto the observe run",
+        "Unit tests cover: cooldown survives an observer run, observer still receives last_failure, and a different-ticket cooldown is ignored; full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
+      "id": "S-020",
+      "type": "system-repair",
+      "priority": 2,
+      "title": "Scheduled poll pass is self-auditable via an out-of-repo log",
+      "description": "The registered \\ADW\\ task ran poll_once.py with no output redirection, so a 29-minute pass that committed nothing and exited 0 was unexplainable after the fact. Make poll_once self-log independent of how the task is registered: append one bounded, timestamped summary line per pass (start time, elapsed seconds, sync outcome, tickets run, stop reason) to a log outside the repo (default %LOCALAPPDATA%/adw/poll.log, overridable by --log-path / $ADW_POLL_LOG). A failure to write the log is swallowed and never affects the pass; the working tree is never touched. README documents the self-log and labels re-registering the scheduled task (for a redirected stdout) an out-of-agent-scope human/admin action.",
+      "acceptance_criteria": [
+        "poll_once appends a single bounded timestamped summary line per invocation to a configurable log outside the repo, covering sync outcome, tickets run, and stop reason; a write failure is swallowed and never affects the pass",
+        "The log path is configurable (--log-path / $ADW_POLL_LOG) and the working tree is never touched",
+        "README documents the self-log and the one-time admin re-registration of the scheduled task, labeled an out-of-agent-scope human action",
+        "Unit tests cover the summary line for a synced/ran pass and a stop-before-backlog pass with the log path injected; full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
     }
   ]
 }

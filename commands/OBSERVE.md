@@ -30,6 +30,10 @@ status block.
    stage outputs listed for this run, and `git log` / `git diff` on the work
    branch. **Read the implicated harness asset** (the stage spec, command,
    hook, or config the failing stage was following) before blaming it.
+   **Anchor every claim about what happened in that `git log` / `git diff`** —
+   never assert work was implemented or committed without confirming it there
+   (see `stage_specs/observe.md`); a halted ticket has often committed nothing,
+   and "git shows an empty diff — no work landed" is the right thing to report.
 4. Decide **ticket** vs **harness**. Bias toward **ticket** unless you have
    concrete evidence a harness asset is the root cause — a false "harness" call
    wastes a human's review.
