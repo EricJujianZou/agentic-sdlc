@@ -10,6 +10,7 @@ from workflows.poll_once import (
     append_log,
     default_log_path,
     format_summary_line,
+    poll_lock_path,
     poll_once,
 )
 
@@ -126,3 +127,27 @@ def test_default_log_path_is_outside_repo(monkeypatch, tmp_path):
     monkeypatch.delenv("ADW_POLL_LOG")
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
     assert default_log_path() == tmp_path / "local" / "adw" / "poll.log"
+
+
+# --- single-flight lock path (race-safety) ----------------------------------
+
+
+def test_poll_lock_path_env_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("ADW_POLL_LOCK", str(tmp_path / "my.lock"))
+    assert poll_lock_path() == tmp_path / "my.lock"
+
+
+def test_poll_lock_path_is_per_target_and_outside_repo(monkeypatch, tmp_path):
+    # Different target repos must resolve to different lock files, so a poll on
+    # the engine and a poll on a cross-repo target never block each other.
+    monkeypatch.delenv("ADW_POLL_LOCK", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    from adw import paths
+
+    monkeypatch.setattr(paths, "target_root", lambda: tmp_path / "repo-a")
+    a = poll_lock_path()
+    monkeypatch.setattr(paths, "target_root", lambda: tmp_path / "repo-b")
+    b = poll_lock_path()
+    assert a != b
+    assert a.parent == tmp_path / "local" / "adw" / "locks"
+    assert a.suffix == ".lock"

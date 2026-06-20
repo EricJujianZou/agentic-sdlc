@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import os
 import sys
 from dataclasses import dataclass
@@ -28,7 +29,9 @@ from typing import Callable
 REPO_ROOT = Path(__file__).resolve().parent.parent  # engine root, for imports
 sys.path.insert(0, str(REPO_ROOT))
 
+from adw import paths
 from adw.github import GitHubError
+from adw.locks import DEFAULT_STALE_SECONDS, LockHeld, single_flight
 from adw.workflow_runner import BacklogResult
 from workflows.run_backlog import DEFAULT_MAX_TICKETS, run_backlog
 from workflows.sync_issues import pull_and_sync
@@ -82,6 +85,31 @@ def default_log_path() -> Path:
     if local:
         return Path(local) / "adw" / "poll.log"
     return Path.home() / ".adw" / "poll.log"
+
+
+def poll_lock_path() -> Path:
+    """Where the single-flight lock for THIS target repo lives (S — race-safety).
+    Keyed by the target path so polls against different repos (the engine vs a
+    cross-repo target) never block each other, and always outside the repo so it
+    never dirties the tree. `ADW_POLL_LOCK` overrides the full path."""
+    env = os.environ.get("ADW_POLL_LOCK")
+    if env:
+        return Path(env)
+    base = os.environ.get("LOCALAPPDATA")
+    root = Path(base) / "adw" if base else Path.home() / ".adw"
+    key = hashlib.sha1(str(paths.target_root()).encode("utf-8")).hexdigest()[:12]
+    return root / "locks" / f"poll-{key}.lock"
+
+
+def _stale_seconds_from_env() -> float:
+    """Lock staleness override: `ADW_POLL_LOCK_STALE_MINUTES`, else the default."""
+    raw = os.environ.get("ADW_POLL_LOCK_STALE_MINUTES")
+    if raw:
+        try:
+            return float(raw) * 60
+        except ValueError:
+            pass
+    return DEFAULT_STALE_SECONDS
 
 
 def _clip(text: str) -> str:
@@ -147,11 +175,24 @@ def main() -> int:
     def backlog_fn() -> BacklogResult:
         return run_backlog(args.max_tickets, args.max_iterations)
 
+    log_path = Path(args.log_path) if args.log_path else default_log_path()
     started_at = _dt.datetime.now(_dt.timezone.utc)
-    result = poll_once(sync_fn=sync_fn, backlog_fn=backlog_fn)
+    # Single-flight: if another pass already holds this repo's lock, skip cleanly
+    # rather than double-running. A manual trigger and the scheduled \ADW\ task
+    # would otherwise interleave their prd.json read-modify-write and collide on
+    # the git work branch. Skipping is expected contention, not an error (exit 0).
+    try:
+        with single_flight(poll_lock_path(), stale_seconds=_stale_seconds_from_env()):
+            result = poll_once(sync_fn=sync_fn, backlog_fn=backlog_fn)
+    except LockHeld as exc:
+        finished_at = _dt.datetime.now(_dt.timezone.utc)
+        elapsed = max(0.0, (finished_at - started_at).total_seconds())
+        started = started_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+        append_log(log_path, f"{started} | {elapsed:.1f}s | skipped: {exc}")
+        print(f"skipped: {exc}")
+        return 0
     finished_at = _dt.datetime.now(_dt.timezone.utc)
 
-    log_path = Path(args.log_path) if args.log_path else default_log_path()
     append_log(
         log_path,
         format_summary_line(result, started_at=started_at, finished_at=finished_at),
