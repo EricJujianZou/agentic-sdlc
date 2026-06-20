@@ -469,7 +469,7 @@ def test_resume_from_mid_pipeline_state_reenters_at_recorded_stage(tmp_path):
     assert outcome.iterations == 2
     # plan/implement (already done before the interruption) are never re-invoked
     first_pass_stages = [s for it, s in seen if it == 2]
-    assert first_pass_stages == ["test", "review"]
+    assert first_pass_stages == ["test", "review", "document"]
 
 
 def test_resume_ignores_different_ticket_state(tmp_path):
