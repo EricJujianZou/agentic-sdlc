@@ -189,6 +189,46 @@ def test_progress_fn_includes_summary(monkeypatch):
     assert "test" in posted["body"]
 
 
+# --- _finalize_story quotad (S-015) -----------------------------------------
+
+
+def test_finalize_story_quotad_sets_status_label_skips_pr_and_observer(monkeypatch):
+    from adw.tickets import Prd
+
+    story = _story("S-006")
+    prd = Prd(project="p", stories=[story])
+    monkeypatch.setattr(workflow_runner, "load_prd", lambda path: prd)
+    monkeypatch.setattr(workflow_runner, "save_prd", lambda prd, path: None)
+    monkeypatch.setattr(workflow_runner, "_commit_bookkeeping", lambda message: None)
+
+    set_label_calls = []
+    monkeypatch.setattr(
+        workflow_runner,
+        "_set_run_label",
+        lambda story, **kwargs: set_label_calls.append(kwargs),
+    )
+
+    def boom_notify(*a, **k):
+        raise AssertionError("_notify_github must not be called for a quotad outcome")
+
+    def boom_observe(*a, **k):
+        raise AssertionError("_observe_and_report must not be called for a quotad outcome")
+
+    monkeypatch.setattr(workflow_runner, "_notify_github", boom_notify)
+    monkeypatch.setattr(workflow_runner, "_observe_and_report", boom_observe)
+
+    outcome = TicketOutcome(story.id, "quotad", reason="provider usage limit reached")
+    workflow_runner._finalize_story(
+        story, outcome, observer_invoke=None, observer_state_path="state.json", budgets={},
+    )
+
+    assert story.status == "quotad"
+    assert set_label_calls == [
+        {"remove": (workflow_runner.RUN_LABEL_IN_PROGRESS,),
+         "add": (workflow_runner.RUN_LABEL_QUOTAD,)}
+    ]
+
+
 # --- _set_run_label (S-014 follow-up) ---------------------------------------
 
 def test_set_run_label_swaps_labels_for_issue(monkeypatch):
