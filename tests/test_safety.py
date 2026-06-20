@@ -201,11 +201,33 @@ def test_usage_limit_detection():
 
 
 def test_usage_limit_halts_immediately():
+    # A real quota cut-off: the CLI rejects the turn, so there is no clean
+    # success block (parsed=False) and the usage-limit message is the output.
     breaker = CircuitBreaker()
     reason = breaker.record(
-        state("plan"), result("plan", raw_output="usage limit reached")
+        state("plan"),
+        result("plan", raw_output="Claude AI usage limit reached|1718000000", parsed=False),
     )
     assert reason is not None and "usage limit" in reason
+
+
+def test_usage_limit_text_in_successful_output_does_not_halt():
+    # Regression (dogfood 2026-06-19): a stage *about* usage limits (e.g. S-015)
+    # writes the trigger phrases into its SUCCESSFUL result. That is not a real
+    # quota halt and must not open the circuit.
+    breaker = CircuitBreaker()
+    s = state("plan")
+    reason = breaker.record(
+        s,
+        result(
+            "plan",
+            outcome="success",
+            raw_output="Plan: detect 'usage limit reached' and the 5-hour limit, "
+            "parse 'usage limit reached|<epoch>', handle 'out of extra usage'.",
+        ),
+    )
+    assert reason is None
+    assert s.cooldown_until is None
 
 
 def test_config_from_budgets(tmp_path):

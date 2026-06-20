@@ -86,7 +86,18 @@ class CircuitBreaker:
     def _evaluate(self, state: State, result: StageResult) -> str | None:
         cfg = self.config
 
-        if detect_usage_limit(result.raw_output):
+        # A genuine provider usage limit cuts the stage's turn off, so it can
+        # never also return a clean *successful* status block. Gate detection on
+        # a non-successful result: otherwise a stage whose very subject is usage
+        # limits (e.g. S-015) trips the matcher on its own prose and self-halts
+        # (dogfood 2026-06-19 false positive — the plan succeeded with 18k tokens
+        # yet "usage limit reached" in its plan text opened the circuit). The CLI
+        # surfaces a real limit in the result text and/or stderr; scan both, but
+        # only when the stage did not succeed.
+        stage_succeeded = result.status is not None and result.status.outcome == "success"
+        if not stage_succeeded and detect_usage_limit(
+            f"{result.raw_output}\n{result.stderr}"
+        ):
             return "provider usage limit reached; pausing instead of looping"
 
         # Dead-on-arrival: the CLI exited non-zero having produced nothing
