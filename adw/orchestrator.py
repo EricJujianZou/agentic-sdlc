@@ -44,6 +44,14 @@ VerifyFn = Callable[[], "tuple[bool, str]"]
 # problem can never change a ticket's outcome.
 ProgressFn = Callable[[str, str, str], None]
 
+# stage_fn(stage) -> None. Best-effort, orchestrator-only notification fired
+# once at each stage's ENTRY (before the stage runs) — e.g. swapping a board
+# label on the source GitHub issue so a phone-facing lifecycle board (S-016)
+# shows the stage currently in flight, not the last one to finish. Entry-time
+# (vs. progress_fn's exit-time) is what makes "currently in stage X" correct.
+# Injected and defaulting to None; it must never raise.
+StageLabelFn = Callable[[str], None]
+
 
 class Breaker(Protocol):
     """Circuit-breaker interface; the real one is adw/safety.py."""
