@@ -89,6 +89,7 @@ def run_ticket(
     breaker: Breaker | None = None,
     verify_fn: VerifyFn | None = None,
     progress_fn: ProgressFn | None = None,
+    stage_fn: StageLabelFn | None = None,
     runs_root: str | Path | None = None,
 ) -> TicketOutcome:
     """Drive one ticket through its `stage_order` (plan -> implement -> test
