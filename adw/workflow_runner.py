@@ -141,6 +141,16 @@ def _push_branch(branch: str) -> bool:
         return False
 
 
+def _pr_title(story: Story) -> str:
+    """`<id>: <title>`, without doubling the id when the stored title already
+    carries it (e.g. a story synced before the sync-side prefix strip)."""
+    title = story.title.strip()
+    prefix = f"{story.id}:"
+    if title.lower().startswith(prefix.lower()):
+        title = title[len(prefix):].strip()
+    return f"{story.id}: {title}"
+
+
 def _notify_github(
     story: Story, outcome: str, reason: str = "", test_evidence: str | None = None
 ) -> None:
@@ -156,7 +166,7 @@ def _notify_github(
         open_or_update_pr(
             owner, repo, token,
             head=branch, base="main",
-            title=f"{story.id}: {story.title}",
+            title=_pr_title(story),
             body=pr_body(story, outcome),
         )
         issue_number = source_issue_number(story.id)

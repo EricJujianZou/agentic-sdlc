@@ -328,3 +328,14 @@ def test_compose_stage_prompt_inlines_prime_and_spec(tmp_path):
     assert "Stage spec — `stage_specs/plan_feat.md`" in text    # spec inlined
     assert "do **not** try to" in text                          # don't-Read note
     assert "GH-1" in text and "Input primitive" in text         # ticket context
+
+
+def test_pr_title_does_not_double_the_id():
+    def _s(sid, title):
+        return Story(id=sid, type="feat", priority=5, title=title,
+                     description="d", acceptance_criteria=["a"])
+
+    # A story whose title already carries the id must not become "GH-1: GH-1: …".
+    assert workflow_runner._pr_title(_s("GH-1", "GH-1: Input primitive")) == "GH-1: Input primitive"
+    # A clean title is prefixed exactly once.
+    assert workflow_runner._pr_title(_s("GH-2", "Card primitive")) == "GH-2: Card primitive"

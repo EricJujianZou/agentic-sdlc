@@ -57,6 +57,21 @@ def test_parse_issue_body_case_insensitive_heading():
     assert criteria == ["item"]
 
 
+def test_parse_issue_body_accepts_bold_heading():
+    # A bold "**Acceptance criteria**" line is as valid a heading as `##`.
+    body = "desc\n\n**Acceptance criteria**\n- [ ] one\n- two"
+    desc, criteria = parse_issue_body(body)
+    assert desc == "desc"
+    assert criteria == ["one", "two"]
+
+
+def test_issue_to_story_strips_id_prefix_from_title():
+    # Issue titled "GH-42: Add feature X" must not yield a doubled id later.
+    story = issue_to_story(_issue(title="GH-42: Add feature X"))
+    assert story.id == "GH-42"
+    assert story.title == "Add feature X"
+
+
 def test_skip_reason_no_type_label():
     issue = _issue(labels=[{"name": "adw"}])
     reason = skip_reason(issue)
