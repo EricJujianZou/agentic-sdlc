@@ -594,6 +594,9 @@ def run_one_story(
     # Progress poster: comments stage transitions on the source issue so a
     # phone-filed ticket reports back live (S-014). None for plain S-NNN.
     progress = _make_progress_fn(story)
+    # Stage-label poster: swaps a `stage:<x>` board label on the source issue
+    # at each stage's entry (S-016). None for plain S-NNN.
+    stage_label = _make_stage_label_fn(story)
 
     # Decompose first if the ticket arrived criteria-less (e.g. a terse phone
     # issue, S-013): the read-only decompose stage proposes acceptance criteria
