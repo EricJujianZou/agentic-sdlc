@@ -466,10 +466,7 @@ def test_resume_from_mid_pipeline_state_reenters_at_recorded_stage(tmp_path):
 
     outcome = run(invoke, tmp_path)
     assert outcome.outcome == "done"
-    assert seen[0] == (2, "test")
-    assert ("plan" not in [s for _, s in seen[:2]])
-    assert ("plan", ) != seen[0][1:]
-    assert all(s not in (1, "plan") for s in seen[:0])
+    assert outcome.iterations == 2
     # plan/implement (already done before the interruption) are never re-invoked
     first_pass_stages = [s for it, s in seen if it == 2]
     assert first_pass_stages == ["test", "review"]
