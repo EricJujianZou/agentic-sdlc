@@ -3,6 +3,12 @@
 # it. This is the agent-proof half of the safety model; S-010 (improvements
 # C3) is the in-harness mirror. Turning this check into a *required* gate is
 # a one-time manual branch-protection step documented in README.md.
+#
+# Runs on ubuntu AND windows: Windows is the harness's real runtime, and some
+# bugs are platform-specific (e.g. zoneinfo needs the tzdata package on
+# Windows but resolves from system data on Linux — an ubuntu-only gate would
+# miss a missing tzdata dep). fail-fast: false so one OS failing still reports
+# the other.
 name: CI
 
 on:
@@ -14,7 +20,11 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
