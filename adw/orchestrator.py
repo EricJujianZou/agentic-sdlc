@@ -113,6 +113,8 @@ def run_ticket(
         for stage in stage_order:
             state.stage = stage
             save_state(state, state_path)
+            if stage_fn is not None:
+                stage_fn(stage)
             result = invoke_fn(stage, state, story)
             state.budget_used_tokens += result.tokens_used
             stages_run.append(stage)
