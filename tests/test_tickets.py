@@ -91,6 +91,35 @@ def test_pick_next_story_skips_non_open_and_returns_none_when_done():
     assert pick_next_story(prd) is None
 
 
+def test_pick_next_story_picks_quotad_but_not_blocked():
+    prd = Prd(
+        project="p",
+        stories=[
+            story(id="S-001", status="blocked"),
+            story(id="S-002", status="quotad", priority=1),
+        ],
+    )
+    assert pick_next_story(prd).id == "S-002"
+
+
+def test_load_prd_accepts_quotad_status(tmp_path):
+    path = write_prd(
+        tmp_path,
+        [{
+            "id": "S-001", "type": "feat", "priority": 1, "title": "t",
+            "description": "d", "acceptance_criteria": ["c"], "status": "quotad",
+        }],
+    )
+    prd = load_prd(path)
+    assert prd.stories[0].status == "quotad"
+
+
+def test_mark_story_accepts_quotad_status():
+    prd = Prd(project="p", stories=[story()])
+    mark_story(prd, "S-001", status="quotad")
+    assert prd.stories[0].status == "quotad"
+
+
 def test_pick_next_stories_returns_top_n_by_priority(tmp_path):
     prd = Prd(
         project="p",
