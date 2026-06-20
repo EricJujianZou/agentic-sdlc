@@ -267,3 +267,40 @@ def test_set_run_label_swallows_github_error(monkeypatch):
     monkeypatch.setattr(workflow_runner, "get_token", boom)
     # Must not raise — a relabel failure can never change a ticket's outcome.
     workflow_runner._set_run_label(_story("GH-42"), add=(workflow_runner.RUN_LABEL_DONE,))
+
+
+# --- _make_stage_label_fn (S-016 lifecycle board) ---------------------------
+
+def test_stage_label_fn_is_none_for_plain_story():
+    assert workflow_runner._make_stage_label_fn(_story("S-006")) is None
+
+
+def test_stage_label_fn_swaps_prior_label(monkeypatch):
+    added, removed = [], []
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(
+        workflow_runner, "remove_label",
+        lambda owner, repo, token, num, label: removed.append((num, label)),
+    )
+    monkeypatch.setattr(
+        workflow_runner, "add_labels",
+        lambda owner, repo, token, num, labels: added.append((num, labels)),
+    )
+    fn = workflow_runner._make_stage_label_fn(_story("GH-42"))
+    fn("plan")
+    assert added == [(42, ["stage:plan"])]
+    assert removed == []
+    fn("implement")
+    assert added == [(42, ["stage:plan"]), (42, ["stage:implement"])]
+    assert removed == [(42, "stage:plan")]
+
+
+def test_stage_label_fn_swallows_github_error(monkeypatch):
+    def boom():
+        raise GitHubError("offline")
+
+    monkeypatch.setattr(workflow_runner, "get_token", boom)
+    fn = workflow_runner._make_stage_label_fn(_story("GH-42"))
+    # Must not raise — a label failure can never change a ticket's outcome.
+    fn("plan")
