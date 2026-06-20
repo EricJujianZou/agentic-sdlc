@@ -8,6 +8,7 @@ import subprocess
 
 import adw.workflow_runner as workflow_runner
 from adw.github import GitHubError
+from adw.orchestrator import TicketOutcome
 from adw.tickets import Story
 from adw.workflow_runner import _make_verify_fn, _notify_github
 
