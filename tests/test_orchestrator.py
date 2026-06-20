@@ -251,6 +251,19 @@ def test_breaker_still_halts_unfinished_work(tmp_path):
     assert "circuit open" in outcome.reason
 
 
+def test_breaker_usage_limit_halt_returns_quotad(tmp_path):
+    class UsageLimitBreaker:
+        def record(self, state, result):
+            return USAGE_LIMIT_HALT_REASON
+
+    def invoke(stage, state, story):
+        return ok(stage)  # no exit_signal anywhere
+
+    outcome = run(invoke, tmp_path, breaker=UsageLimitBreaker())
+    assert outcome.outcome == "quotad"
+    assert outcome.reason == USAGE_LIMIT_HALT_REASON
+
+
 # --- document stage tests ---
 
 
