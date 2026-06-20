@@ -28,9 +28,8 @@ toward caution over speed; use judgment on trivial tasks._
   the git-credential token + GitHub REST API via `adw/github.py`: `get_token()`,
   `repo_slug()`, `open_or_update_pr()`, `api_request()`, `comment_on_issue()`,
   etc. `git push` works (credential helper); PRs and issue edits go through the
-  API, not `gh`.
-- **Never push to `main`.** Work on a branch; `main` lands via a human-approved
-  REST-API PR merge.
+  API, not `gh`. (You open PRs; humans merge — AGENTS.md owns the never-push-main
+  rule.)
 - **Branches are often stacked.** A ticket branch may sit on earlier *unmerged*
   ticket branches, so its diff-to-`main` includes them (e.g. a "61-commit"
   S-017). Check ancestry (`git merge-base --is-ancestor`) and commits-vs-parent
@@ -56,7 +55,6 @@ added by editing the title after filing, since GitHub assigns the number).
 
 ## Map
 
-`AGENTS.md` stage-agent contract · `architecture.md` system overview ·
-`plans/*.md` subsystem designs (+ reference repos) · `stage_specs/` stage
-contracts · `commands/PRIME.md` codebase orientation · `skills/` solved problem
-classes (currently sparse — they accrete from dogfooding).
+See `AGENTS.md`'s "Where to look" table for the repo file map (`architecture.md`,
+`stage_specs/`, `skills/`, `commands/PRIME.md`, the `plans/*.md` designs) — not
+duplicated here. `AGENTS.md` itself is the stage-agent contract.
