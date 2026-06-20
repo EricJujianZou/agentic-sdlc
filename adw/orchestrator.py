@@ -81,6 +81,25 @@ class _NullBreaker:
         return None
 
 
+def _resume_state(
+    story_id: str, state_path: str | Path, stage_order: tuple[str, ...]
+) -> State | None:
+    """Return a persisted state to resume from, or None to start fresh
+    (S-017). Resumable means: the file exists, parses, belongs to the same
+    ticket, and was left mid-pipeline (a quota interruption) rather than
+    finished (document/decompose/observe) or absent. `last_failure` is
+    cleared so the re-entered stage sees a clean halt, not a quota message
+    mistaken for a stage failure to plan around."""
+    try:
+        prior = load_state(state_path)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        return None
+    if prior.ticket_id != story_id or prior.stage not in stage_order:
+        return None
+    prior.last_failure = None
+    return prior
+
+
 def run_ticket(
     story: Story,
     invoke_fn: InvokeFn,
