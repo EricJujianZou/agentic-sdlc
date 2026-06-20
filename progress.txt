@@ -5,3 +5,7 @@
 Tactical learnings below, newest last. Hard cap: 100 lines total (enforced by adw/progress.py).
 Prune every run: durable patterns -> skills/, harness ambiguity/bugs -> system-repair ticket, stale -> delete.
 ---
+
+S-017: state.stage already distinguishes "finished" (document/decompose/observe)
+from "mid-pipeline interrupted" (one of stage_order) — no new State field needed
+to detect a resumable quota interruption; just check `stage in stage_order`.
