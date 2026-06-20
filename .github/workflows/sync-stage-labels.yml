@@ -1,0 +1,147 @@
+# Sync the harness's stage / run-state labels to a GitHub Projects (v2) board.
+#
+# As an `adw` ticket advances, the harness sets one mutually-exclusive
+# `stage:<x>` label (plus run-state labels like `in-progress`/`done`/`blocked`/
+# `quotad`) on the source issue. Projects v2 has no no-code "label -> column"
+# automation, so this Action does it: on every label change it recomputes the
+# right Stage and writes it to the board's single-select "Stage" field.
+#
+# ── ONE-TIME SETUP (do this on github.com, see README "Lifecycle board") ──
+# 1. Create a USER-level Projects v2 board (so it can span repos for cross-repo).
+# 2. Add a single-select field named "Stage" with options (names matter):
+#       Triage, Plan, Do, Check, Review-gate, Blocked, Paused, Done
+# 3. In THIS repo → Settings → Secrets and variables → Actions:
+#    • Variables:  PROJECT_OWNER = your user login (e.g. EricJujianZou)
+#                  PROJECT_NUMBER = the number in the project URL (/projects/N)
+#                  STAGE_FIELD   = Stage   (optional; defaults to "Stage")
+#    • Secret:     PROJECTS_TOKEN = a PAT that can write the project — the
+#                  default GITHUB_TOKEN CANNOT touch a user-level Projects v2.
+#                  Classic PAT scopes: `project` + `repo`. Fine-grained:
+#                  Projects read/write + Issues read.
+# 4. (Optional) add a Projects "Auto-add" workflow filtered to label:adw so new
+#    tickets land on the board; this Action also adds a missing item defensively.
+#
+# For an ORG-owned project, change `user(login:...)` to `organization(login:...)`
+# in the first GraphQL query below.
+
+name: Sync stage labels to Project board
+
+on:
+  issues:
+    types: [labeled, unlabeled, opened, reopened]
+
+# Least privilege: this job only reads the issue; all project writes go through
+# the PROJECTS_TOKEN PAT, not the workflow's GITHUB_TOKEN.
+permissions:
+  issues: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Cheap pre-filter: only run for issues the harness manages.
+    if: contains(join(github.event.issue.labels.*.name, ','), 'adw')
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          PROJECT_OWNER: ${{ vars.PROJECT_OWNER }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          STAGE_FIELD: ${{ vars.STAGE_FIELD }}
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const owner = process.env.PROJECT_OWNER;
+            const number = parseInt(process.env.PROJECT_NUMBER || '', 10);
+            const fieldName = process.env.STAGE_FIELD || 'Stage';
+
+            if (!owner || !Number.isInteger(number)) {
+              core.info('PROJECT_OWNER / PROJECT_NUMBER not set yet — skipping. ' +
+                        'Configure them once the board exists (see workflow header).');
+              return;
+            }
+
+            // Lower-cased so label case drift (e.g. a pre-existing `DONE`
+            // label vs the harness's `done`) still maps to the right column;
+            // the RULES below are all lowercase.
+            const labels = (context.payload.issue.labels || []).map(l => l.name.toLowerCase());
+            if (!labels.includes('adw')) {
+              core.info('issue is not adw-labeled; nothing to board.');
+              return;
+            }
+
+            // First match wins. Terminal/pause states outrank the lingering
+            // stage label (the harness never clears stage labels at the end),
+            // and any stage outranks a bare in-progress. No run/stage label yet
+            // => the ticket is filed but unpicked => Triage.
+            const RULES = [
+              ['done',            'Done'],
+              ['blocked',         'Blocked'],
+              ['quotad',          'Paused'],
+              ['stage:review',    'Review-gate'],
+              ['stage:document',  'Review-gate'],
+              ['stage:test',      'Check'],
+              ['stage:implement', 'Do'],
+              ['stage:plan',      'Plan'],
+              ['in-progress',     'Plan'],
+            ];
+            let target = 'Triage';
+            for (const [label, stage] of RULES) {
+              if (labels.includes(label)) { target = stage; break; }
+            }
+            core.info(`labels=[${labels.join(', ')}] -> Stage=${target}`);
+
+            // 1. Resolve the project, its Stage field, and the target option id.
+            const projQ = await github.graphql(`
+              query($owner:String!, $number:Int!, $field:String!) {
+                user(login:$owner) {
+                  projectV2(number:$number) {
+                    id
+                    field(name:$field) {
+                      ... on ProjectV2SingleSelectField { id options { id name } }
+                    }
+                  }
+                }
+              }`, { owner, number, field: fieldName });
+
+            const project = projQ.user && projQ.user.projectV2;
+            if (!project) { core.warning(`project #${number} not found for ${owner}`); return; }
+            const field = project.field;
+            if (!field || !field.options) {
+              core.warning(`single-select field "${fieldName}" not found on the project`); return;
+            }
+            const option = field.options.find(o => o.name.toLowerCase() === target.toLowerCase());
+            if (!option) {
+              core.warning(`no "${target}" option on "${fieldName}" — create options: ` +
+                           'Triage, Plan, Do, Check, Review-gate, Blocked, Paused, Done');
+              return;
+            }
+
+            // 2. Find this issue's project item, or add it.
+            const issueId = context.payload.issue.node_id;
+            const itemsQ = await github.graphql(`
+              query($id:ID!) {
+                node(id:$id) {
+                  ... on Issue { projectItems(first:50) { nodes { id project { id } } } }
+                }
+              }`, { id: issueId });
+            let item = (itemsQ.node.projectItems.nodes || [])
+              .find(n => n.project.id === project.id);
+            if (!item) {
+              const added = await github.graphql(`
+                mutation($projectId:ID!, $contentId:ID!) {
+                  addProjectV2ItemById(input:{ projectId:$projectId, contentId:$contentId }) {
+                    item { id }
+                  }
+                }`, { projectId: project.id, contentId: issueId });
+              item = added.addProjectV2ItemById.item;
+            }
+
+            // 3. Set the Stage field on the item.
+            await github.graphql(`
+              mutation($projectId:ID!, $itemId:ID!, $fieldId:ID!, $optionId:String!) {
+                updateProjectV2ItemFieldValue(input:{
+                  projectId:$projectId, itemId:$itemId, fieldId:$fieldId,
+                  value:{ singleSelectOptionId:$optionId }
+                }) { projectV2Item { id } }
+              }`, { projectId: project.id, itemId: item.id, fieldId: field.id, optionId: option.id });
+
+            core.info(`set Stage=${target} on item ${item.id}`);
