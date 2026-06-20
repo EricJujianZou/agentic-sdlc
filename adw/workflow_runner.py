@@ -315,6 +315,32 @@ def _make_progress_fn(story: Story):
     return post
 
 
+def _make_stage_label_fn(story: Story):
+    """A per-stage board-label setter for a GH-sourced ticket, else None (S-016).
+
+    Returns a callable the orchestrator invokes once at each stage's entry; it
+    swaps the issue's `stage:<x>` label for the new one so a GitHub Projects
+    board can show the stage currently in flight. Mutually exclusive: the prior
+    stage label is removed when the next is added. Best-effort throughout —
+    reuses `_set_run_label`'s GitHub-error swallowing, so a notification
+    problem can never change the ticket's outcome. Stories with no source
+    issue (plain S-NNN) get None — nothing is called."""
+    issue_number = source_issue_number(story.id)
+    if issue_number is None:
+        return None
+
+    prev: str | None = None
+
+    def set_stage(stage: str) -> None:
+        nonlocal prev
+        label = STAGE_LABEL_PREFIX + stage
+        remove = (prev,) if prev and prev != label else ()
+        _set_run_label(story, remove=remove, add=(label,))
+        prev = label
+
+    return set_stage
+
+
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file with the ticket and state context."""
     command_file = paths.commands_dir() / f"{stage.upper()}.md"
