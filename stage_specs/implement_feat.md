@@ -12,15 +12,23 @@ sdlc_stage: implement
 - Follow the plan's steps in order; finish one before starting the next.
 - Match the surrounding code: naming, comment density, error handling,
   test style. Read a neighboring file before writing a new one.
-- New code gets tests in the same shape the project already uses
-  (`tests/test_<module>.py`, plain pytest functions).
+- New code gets tests in the same shape and location the project already uses
+  — read a neighbouring test first (e.g. `tests/test_<module>.py` plain pytest
+  functions for a Python repo, a `*.test.tsx` beside the component for a
+  vitest/JS repo).
 - No new dependencies without the plan calling for them.
 
 ## Quick checks (run as you go, not only at the end)
 
-1. `uv run pytest -q` — full suite; it is fast here.
-2. Import/syntax sanity for any new module:
-   `uv run python -c "import <module>"`.
+Use the project's own toolchain — infer it from its manifest/README
+(`pyproject.toml`/`package.json`/…), don't assume Python:
+
+1. Full suite via the project's test command — e.g. `uv run pytest -q`, or
+   `npm test` for a JS/TS repo. This must match the orchestrator's own
+   `test_evidence_command` (configs/budgets.json, overridable per repo under
+   `.adw/configs/`), since that deterministic re-run is the real gate.
+2. A build / import / type sanity check in the project's language (e.g.
+   `uv run python -c "import <module>"`, or `npm run typecheck`/`build`).
 
 ## Definition of done
 

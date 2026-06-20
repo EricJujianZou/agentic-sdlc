@@ -45,7 +45,13 @@ def parse_issue_body(body: str) -> tuple[str, list[str]]:
     if not body:
         return "", []
     body = _dequote(body)
-    parts = re.split(r"(?im)^#+\s*acceptance criteria\s*$", body, maxsplit=1)
+    # Accept a markdown heading (`## Acceptance criteria`) OR a bold line
+    # (`**Acceptance criteria**`) — a phone paste or hand-filed issue often uses
+    # the bold form, and an unparsed heading silently drops the criteria (then
+    # decompose has to regenerate them, an extra agent call).
+    parts = re.split(
+        r"(?im)^\s*(?:#+|\*\*)\s*acceptance criteria\s*(?:\*\*)?\s*$", body, maxsplit=1
+    )
     description = parts[0].strip()
     if len(parts) < 2:
         return description, []
@@ -89,11 +95,18 @@ def issue_to_story(issue: dict) -> Story:
             break
 
     description, criteria = parse_issue_body(issue.get("body") or "")
+    sid = issue_story_id(issue)
+    title = issue.get("title", "").strip()
+    # The issue title carries the id prefix by convention ("GH-1: Title"); the id
+    # is tracked separately, so strip it here to avoid a doubled "GH-1: GH-1: …"
+    # in the PR title and outcome comments.
+    if title.lower().startswith(f"{sid.lower()}:"):
+        title = title[len(sid) + 1:].strip()
     return Story(
-        id=issue_story_id(issue),
+        id=sid,
         type=type_label,
         priority=priority,
-        title=issue.get("title", "").strip(),
+        title=title,
         description=description,
         acceptance_criteria=criteria,
     )

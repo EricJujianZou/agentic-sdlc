@@ -7,11 +7,17 @@ sdlc_stage: test
 
 # Test spec — feat
 
+Use the project's own toolchain — infer it from its manifest/README
+(`pyproject.toml`/`package.json`/…), don't assume Python.
+
 ## Checks, in order (stop early only on a hard error, not a failure)
 
-1. **Build/import sanity** — the project still loads:
-   `uv run python -c "import adw"` or the project's equivalent.
-2. **Full unit suite** — `uv run pytest -q`. Record the pass/fail count.
+1. **Build/import sanity** — the project still loads: e.g.
+   `uv run python -c "import adw"`, or `npm run typecheck`/`build` for a JS/TS
+   repo.
+2. **Full unit suite** — the project's test command (e.g. `uv run pytest -q`
+   or `npm test`; it should match `test_evidence_command` in configs). Record
+   the pass/fail count.
 3. **Targeted verification** — for each acceptance criterion, the
    smallest command or scenario that proves it (a specific test, a CLI
    invocation, a grep for the expected wiring). Name what you ran.
