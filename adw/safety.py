@@ -150,7 +150,7 @@ class CircuitBreaker:
         if not stage_succeeded and detect_usage_limit(
             f"{result.raw_output}\n{result.stderr}"
         ):
-            return "provider usage limit reached; pausing instead of looping"
+            return USAGE_LIMIT_HALT_REASON
 
         # Dead-on-arrival: the CLI exited non-zero having produced nothing
         # (0 tokens, empty output). The same-error rule (5 loops) can never
