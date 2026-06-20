@@ -13,6 +13,7 @@ from typing import Callable, Protocol
 
 from adw import runlog
 from adw.invoke import StageResult
+from adw.safety import USAGE_LIMIT_HALT_REASON
 from adw.state import State, new_state, save_state
 from adw.status import _candidate_objects
 from adw.tickets import Story
