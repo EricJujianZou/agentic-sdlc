@@ -258,6 +258,53 @@ def _format_repair_comment(story: Story, result: ObserverResult) -> str:
     return "\n".join(lines)
 
 
+_FINGERPRINT_MARKER = "<!-- adw-upstream-fingerprint: {} -->"
+
+
+def _repair_fingerprint(story: Story, result: ObserverResult) -> str:
+    """A stable-ish dedup key for a harness-level finding: normalize the
+    repair's title (or summary/ticket id as fallbacks) before hashing, so
+    re-runs of the same underlying bug collapse to one upstream issue."""
+    r = result.repair or {}
+    basis = (r.get("title") or result.summary or story.id).strip().lower()
+    return hashlib.sha256(basis.encode()).hexdigest()[:12]
+
+
+def _format_upstream_issue(story: Story, result: ObserverResult, fingerprint: str) -> tuple[str, str]:
+    """Render a harness-level finding as a standalone engine-repo issue
+    (cross-repo routing): reuses the same body as the in-repo comment, plus a
+    hidden marker the dedup check looks for on re-runs."""
+    r = result.repair or {}
+    title = f"system-repair: {r.get('title') or result.summary or story.id}"
+    body = _format_repair_comment(story, result) + f"\n\n{_FINGERPRINT_MARKER.format(fingerprint)}"
+    return title, body
+
+
+def _file_upstream_repair(story: Story, result: ObserverResult) -> None:
+    """Best-effort: file the harness-level finding as a system-repair issue in
+    the *engine* repo when this run is cross-repo (a downstream user building
+    their own target repo) — the engine owner otherwise never sees a bug their
+    own self-hosting can't surface. Self-hosted runs (target == engine) are a
+    no-op: today's in-repo comment already reaches the same place.
+
+    Never raises: any GitHub/credential failure (including a missing token
+    scope on the engine repo) is printed and swallowed, same as every other
+    outbound notification in this module."""
+    if paths.target_root() == paths.engine_root():
+        return
+    try:
+        token = get_token()
+        owner, repo = engine_repo_slug()
+        fingerprint = _repair_fingerprint(story, result)
+        existing = list_open_issues(owner, repo, token, label=SELF_HEAL_LABEL)
+        if any(fingerprint in (issue.get("body") or "") for issue in existing):
+            return
+        title, body = _format_upstream_issue(story, result, fingerprint)
+        create_issue(owner, repo, token, title, body, labels=[SELF_HEAL_LABEL])
+    except GitHubError as exc:
+        print(f"upstream system-repair filing skipped: {exc}")
+
+
 def _observe_and_report(
     story: Story, invoke_fn, failure_reason: str, *, state_path: str | Path | None = None
 ) -> None:
