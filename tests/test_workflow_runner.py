@@ -11,7 +11,15 @@ from adw import paths
 from adw.github import GitHubError
 from adw.orchestrator import TicketOutcome
 from adw.tickets import Story
-from adw.workflow_runner import _ensure_work_branch, _make_verify_fn, _notify_github
+import json
+import os
+
+from adw.workflow_runner import (
+    _ensure_work_branch,
+    _make_verify_fn,
+    _notify_github,
+    reap_stale_in_progress,
+)
 
 
 def _run_git(cwd, *args):
