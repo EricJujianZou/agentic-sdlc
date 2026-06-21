@@ -44,3 +44,13 @@ set `"suggested_tools": ["playwright"]` in your status block.
 no lens found a must-fix issue, and the working tree/branch state is
 clean. Anything less: `failure` with a concrete, ordered fix list —
 vague review feedback wastes an entire loop iteration.
+
+## PR description
+
+When (and only when) `exit_signal: true`, add a `pr_description` field
+to your status block: a short human-facing change summary covering what
+changed, notable tradeoffs, and any risks a merger should know — written
+for someone who hasn't read the diff. This becomes the PR body in place
+of the default ticket-restatement, so write it as you would a PR
+description, not a review verdict. Omit the field when `exit_signal` is
+not `true`.
