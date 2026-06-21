@@ -43,7 +43,7 @@ from adw.orchestrator import (
     run_ticket,
 )
 from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
-from adw.state import State
+from adw.state import load_state, State
 from adw.tickets import (
     Story,
     get_story,
@@ -51,6 +51,7 @@ from adw.tickets import (
     mark_story,
     pick_next_stories,
     pick_next_story,
+    reclaim_stale_in_progress,
     save_prd,
 )
 
