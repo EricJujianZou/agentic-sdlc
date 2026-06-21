@@ -67,5 +67,6 @@ def parse_status_block(text: str) -> StatusBlock:
             files_changed=int(obj.get("files_changed", 0)),
             suggested_tools=list(obj.get("suggested_tools", [])),
             system_repair_suggested=bool(obj.get("system_repair_suggested", False)),
+            pr_description=obj.get("pr_description"),
         )
     raise StatusBlockError("no status block found in stage output")
