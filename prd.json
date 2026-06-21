@@ -412,8 +412,8 @@
         "The upstream report is filed by the orchestrator deterministically, with NO"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "in_progress"
+      "passes": true,
+      "status": "done"
     }
   ]
 }
