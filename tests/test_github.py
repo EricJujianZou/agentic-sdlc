@@ -190,6 +190,74 @@ def test_comment_on_issue_correct_shape(monkeypatch):
     assert calls[0][2]["body"] == "hello"
 
 
+def test_create_issue_omits_labels_when_empty(monkeypatch):
+    calls = []
+
+    def fake_api(method, path, token, payload=None):
+        calls.append((method, path, payload))
+        return {"number": 9}
+
+    monkeypatch.setattr("adw.github.api_request", fake_api)
+    create_issue("owner", "repo", "tok", "title", "body")
+    assert calls[0][0] == "POST"
+    assert "/repos/owner/repo/issues" in calls[0][1]
+    assert "labels" not in calls[0][2]
+
+
+def test_create_issue_includes_labels_when_given(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "adw.github.api_request",
+        lambda method, path, token, payload=None: calls.append((method, path, payload)),
+    )
+    create_issue("owner", "repo", "tok", "title", "body", labels=["self-heal-suggested"])
+    assert calls[0][2]["labels"] == ["self-heal-suggested"]
+
+
+def test_list_open_issues_filters_label_and_prs(monkeypatch):
+    seen_path = {}
+
+    def fake_api(method, path, token, payload=None):
+        seen_path["path"] = path
+        return [{"number": 1}, {"number": 2, "pull_request": {}}]
+
+    monkeypatch.setattr("adw.github.api_request", fake_api)
+    issues = list_open_issues("owner", "repo", "tok", label="self-heal-suggested")
+    assert "labels=self-heal-suggested" in seen_path["path"]
+    assert [i["number"] for i in issues] == [1]
+
+
+def test_list_open_issues_no_label_filter(monkeypatch):
+    seen_path = {}
+
+    def fake_api(method, path, token, payload=None):
+        seen_path["path"] = path
+        return []
+
+    monkeypatch.setattr("adw.github.api_request", fake_api)
+    list_open_issues("owner", "repo", "tok")
+    assert "labels=" not in seen_path["path"]
+
+
+def test_engine_repo_slug_from_env(monkeypatch):
+    monkeypatch.setenv(ENGINE_REPO_ENV, "SomeOrg/some-engine")
+    assert engine_repo_slug() == ("SomeOrg", "some-engine")
+
+
+def test_engine_repo_slug_malformed_env_raises(monkeypatch):
+    monkeypatch.setenv(ENGINE_REPO_ENV, "not-a-slug")
+    with pytest.raises(GitHubError, match=ENGINE_REPO_ENV):
+        engine_repo_slug()
+
+
+def test_engine_repo_slug_falls_back_to_engine_remote(monkeypatch):
+    monkeypatch.delenv(ENGINE_REPO_ENV, raising=False)
+    monkeypatch.setattr(
+        "adw.github.repo_slug", lambda repo_root=None: ("EricJujianZou", "agentic-sdlc")
+    )
+    assert engine_repo_slug() == ("EricJujianZou", "agentic-sdlc")
+
+
 def test_api_request_offline_raises_github_error(monkeypatch):
     import urllib.error
 
