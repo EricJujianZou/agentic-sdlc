@@ -102,6 +102,14 @@ any target repo via its `origin` remote; you don't copy `poll_once.py` per repo.
 - **Pull, then work the backlog in one pass:**
   `uv run python workflows/poll_once.py [--max-tickets N]`
 
+> **PowerShell (Windows):** the bash inline form `ADW_REPO=… <cmd>` is a no-op in
+> PowerShell — set the env var on its own line first, then run:
+> ```powershell
+> $env:ADW_REPO = "C:/path/to/target"   # omit/clear to target this engine repo
+> uv run python workflows/poll_once.py --max-tickets 1
+> Remove-Item Env:\ADW_REPO             # clear so it doesn't leak into later commands
+> ```
+
 `poll_once.py` is one launch = one pass: it syncs, then works the open backlog
 (honoring the circuit-breaker cooldown and `--max-tickets`, stopping on the
 first blocked/halted ticket). It is **not** a daemon — there is no loop or
