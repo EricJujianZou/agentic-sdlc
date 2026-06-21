@@ -11,6 +11,7 @@ backlog runner (workflows/run_backlog.py) reuses the same per-story core.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -24,7 +25,10 @@ from adw.github import (
     GitHubError,
     add_labels,
     comment_on_issue,
+    create_issue,
+    engine_repo_slug,
     get_token,
+    list_open_issues,
     open_or_update_pr,
     outcome_comment_body,
     pr_body,
