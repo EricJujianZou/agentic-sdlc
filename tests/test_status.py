@@ -56,3 +56,17 @@ def test_prose_only_raises():
 def test_invalid_outcome_raises():
     with pytest.raises(StatusBlockError, match="outcome"):
         parse_status_block('{"stage": "test", "ticket_id": "S-001", "outcome": "done!"}')
+
+
+def test_parses_pr_description_when_present():
+    text = (
+        '{"stage": "review", "ticket_id": "GH-51", "outcome": "success", '
+        '"exit_signal": true, "pr_description": "Adds review-authored PR body."}'
+    )
+    block = parse_status_block(text)
+    assert block.pr_description == "Adds review-authored PR body."
+
+
+def test_pr_description_defaults_to_none_when_absent():
+    block = parse_status_block(GOOD_BLOCK)
+    assert block.pr_description is None
