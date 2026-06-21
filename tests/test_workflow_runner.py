@@ -4,6 +4,8 @@ The verifier is the orchestrator's deterministic re-run of the suite after
 the dual gate. These stub subprocess.run so no real pytest is spawned, and
 assert the exit code maps to pass/fail and a timeout counts as a failure.
 """
+import json
+import os
 import subprocess
 
 import adw.workflow_runner as workflow_runner
@@ -11,9 +13,6 @@ from adw import paths
 from adw.github import GitHubError
 from adw.orchestrator import TicketOutcome
 from adw.tickets import Story
-import json
-import os
-
 from adw.workflow_runner import (
     _ensure_work_branch,
     _make_verify_fn,
