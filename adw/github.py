@@ -119,6 +119,26 @@ def list_adw_issues(owner: str, repo: str, token: str) -> list[dict]:
     return [i for i in issues if "pull_request" not in i]
 
 
+def create_issue(
+    owner: str, repo: str, token: str, title: str, body: str, labels: list[str] | None = None
+) -> dict:
+    """Open a new issue. `labels` is included only when non-empty, so a plain
+    issue payload matches what a human filing one by hand would send."""
+    payload: dict[str, Any] = {"title": title, "body": body}
+    if labels:
+        payload["labels"] = list(labels)
+    return api_request("POST", f"/repos/{owner}/{repo}/issues", token, payload)
+
+
+def list_open_issues(owner: str, repo: str, token: str, label: str | None = None) -> list[dict]:
+    """Return open Issues, optionally filtered to one label, excluding pull requests."""
+    path = f"/repos/{owner}/{repo}/issues?state=open&per_page=100"
+    if label:
+        path += f"&labels={urllib.parse.quote(label, safe='')}"
+    issues = api_request("GET", path, token)
+    return [i for i in issues if "pull_request" not in i]
+
+
 def open_or_update_pr(
     owner: str,
     repo: str,
