@@ -50,6 +50,15 @@ def run_backlog(
     budgets = json.loads(paths.budgets_path().read_text(encoding="utf-8"))
     max_iterations = max_iterations or budgets["max_iterations_default"]
 
+    # GH-47: a prior pass may have been interrupted mid-ticket, stranding it
+    # `in_progress` forever (pick_next_story never re-picks it). Reclaim any
+    # stale one before picking, inside the poll's single-flight lock.
+    reclaimed = reap_stale_in_progress(
+        stale_seconds=budgets.get("in_progress_stale_minutes", 60) * 60
+    )
+    if reclaimed:
+        print(f"backlog runner: reclaimed stale in_progress ticket(s): {', '.join(reclaimed)}")
+
     if parallel:
         return run_parallel_backlog(
             max_tickets=max_tickets,
