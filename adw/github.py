@@ -6,6 +6,7 @@ Credentials are read from the local git credential store via `git credential fil
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import urllib.error
@@ -17,6 +18,8 @@ from typing import Any
 from adw import paths
 
 API_BASE = "https://api.github.com"
+
+ENGINE_REPO_ENV = "ADW_ENGINE_REPO"
 
 
 class GitHubError(RuntimeError):
