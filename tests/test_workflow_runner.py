@@ -408,3 +408,66 @@ def test_ensure_work_branch_fresh_path_leaves_dirty_tree_uncommitted(tmp_path, m
 
     assert _run_git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "adw/GH-47"
     assert _run_git(repo, "status", "--porcelain") != ""
+
+
+# --- reap_stale_in_progress (GH-47) -----------------------------------------
+
+
+def _write_prd(repo, stories) -> None:
+    (repo / "prd.json").write_text(
+        json.dumps({"project": "p", "stories": stories}), encoding="utf-8"
+    )
+
+
+def _write_state(repo, *, ticket_id, age_seconds) -> None:
+    state_path = repo / "state.json"
+    state_path.write_text(
+        json.dumps({"ticket_id": ticket_id, "stage": "plan", "iteration": 1, "branch": "x"}),
+        encoding="utf-8",
+    )
+    stale_time = time.time() - age_seconds
+    os.utime(state_path, (stale_time, stale_time))
+
+
+def test_reap_stale_in_progress_flips_stranded_ticket_and_commits(tmp_path, monkeypatch):
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.setattr(paths, "target_root", lambda: repo)
+    _write_prd(repo, [{
+        "id": "GH-46", "type": "system-repair", "priority": 1, "title": "t",
+        "description": "d", "acceptance_criteria": ["c"], "status": "in_progress",
+    }])
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-m", "prd in_progress")
+    _write_state(repo, ticket_id="GH-46", age_seconds=3600)
+
+    reclaimed = reap_stale_in_progress(
+        stale_seconds=60, prd_path=repo / "prd.json", state_path=repo / "state.json",
+    )
+
+    assert reclaimed == ["GH-46"]
+    saved = json.loads((repo / "prd.json").read_text(encoding="utf-8"))
+    assert saved["stories"][0]["status"] == "open"
+    assert _run_git(repo, "status", "--porcelain") == ""
+    assert "reclaim stale in_progress" in _run_git(repo, "log", "-1", "--format=%s")
+
+
+def test_reap_stale_in_progress_leaves_live_ticket_alone(tmp_path, monkeypatch):
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.setattr(paths, "target_root", lambda: repo)
+    _write_prd(repo, [{
+        "id": "GH-46", "type": "system-repair", "priority": 1, "title": "t",
+        "description": "d", "acceptance_criteria": ["c"], "status": "in_progress",
+    }])
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-m", "prd in_progress")
+    _write_state(repo, ticket_id="GH-46", age_seconds=5)
+    head_before = _run_git(repo, "rev-parse", "HEAD")
+
+    reclaimed = reap_stale_in_progress(
+        stale_seconds=60, prd_path=repo / "prd.json", state_path=repo / "state.json",
+    )
+
+    assert reclaimed == []
+    saved = json.loads((repo / "prd.json").read_text(encoding="utf-8"))
+    assert saved["stories"][0]["status"] == "in_progress"
+    assert _run_git(repo, "rev-parse", "HEAD") == head_before
