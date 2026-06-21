@@ -26,6 +26,7 @@ from adw.tickets import Story
 from adw.workflow_runner import (
     BacklogResult,
     STAGE_ORDER_BY_TYPE,
+    reap_stale_in_progress,
     run_backlog_loop,
     run_one_story,
     run_parallel_backlog,
