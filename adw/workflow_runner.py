@@ -597,7 +597,10 @@ def _finalize_story(
         _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_DONE,))
     else:
         _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,))
-    _notify_github(story, outcome.outcome, outcome.reason or "", outcome.test_evidence)
+    _notify_github(
+        story, outcome.outcome, outcome.reason or "", outcome.test_evidence,
+        outcome.pr_description,
+    )
     if outcome.outcome != "done" and budgets.get("observer_enabled", True):
         _observe_and_report(
             story, observer_invoke, outcome.reason or "", state_path=observer_state_path
