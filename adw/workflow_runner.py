@@ -330,6 +330,8 @@ def _observe_and_report(
     if result.problem is not None:
         print(f"observer skipped: {result.problem}")
         return
+    if result.classification == "harness" and result.repair:
+        _file_upstream_repair(story, result)
     if number is None:
         return  # plain S-NNN: nothing to post to; the run log holds the analysis
     if result.classification == "harness" and result.repair:
