@@ -9,3 +9,11 @@ Prune every run: durable patterns -> skills/, harness ambiguity/bugs -> system-r
 S-017: state.stage already distinguishes "finished" (document/decompose/observe)
 from "mid-pipeline interrupted" (one of stage_order) — no new State field needed
 to detect a resumable quota interruption; just check `stage in stage_order`.
+
+GH-46: _ensure_work_branch's two paths (existing branch -> checkout, new ->
+checkout -b) need different dirty-tree handling — checkout -b silently carries
+a dirty tree over, but plain checkout aborts on one. _commit_bookkeeping is a
+safe no-op-on-clean-tree helper already used for prd.json bookkeeping; reuse
+it before any checkout onto an existing branch instead of inventing a new
+stash path (stash risks merge conflicts when the target branch's file has
+diverged).

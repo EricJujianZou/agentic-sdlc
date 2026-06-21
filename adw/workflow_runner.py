@@ -78,6 +78,10 @@ def _git(*args: str) -> str:
 
 def _ensure_work_branch(branch: str) -> None:
     if _git("branch", "--list", branch):
+        # GH-46: sync may have left an uncommitted prd.json write on the
+        # current branch; commit it before switching so checkout doesn't
+        # abort on a dirty tree that would be overwritten.
+        _commit_bookkeeping("chore: persist sync before resuming work branch")
         _git("checkout", branch)
     else:
         _git("checkout", "-b", branch)

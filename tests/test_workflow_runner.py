@@ -7,10 +7,30 @@ assert the exit code maps to pass/fail and a timeout counts as a failure.
 import subprocess
 
 import adw.workflow_runner as workflow_runner
+from adw import paths
 from adw.github import GitHubError
 from adw.orchestrator import TicketOutcome
 from adw.tickets import Story
-from adw.workflow_runner import _make_verify_fn, _notify_github
+from adw.workflow_runner import _ensure_work_branch, _make_verify_fn, _notify_github
+
+
+def _run_git(cwd, *args):
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def _init_repo(root):
+    """A temp git repo on `main` with a committed prd.json."""
+    root.mkdir()
+    _run_git(root, "init")
+    _run_git(root, "config", "user.email", "t@t.t")
+    _run_git(root, "config", "user.name", "tester")
+    (root / "prd.json").write_text('{"stories": []}', encoding="utf-8")
+    _run_git(root, "add", "-A")
+    _run_git(root, "commit", "-m", "init")
+    _run_git(root, "branch", "-M", "main")
+    return root
 
 
 class _Proc:
@@ -339,3 +359,45 @@ def test_pr_title_does_not_double_the_id():
     assert workflow_runner._pr_title(_s("GH-1", "GH-1: Input primitive")) == "GH-1: Input primitive"
     # A clean title is prefixed exactly once.
     assert workflow_runner._pr_title(_s("GH-2", "Card primitive")) == "GH-2: Card primitive"
+
+
+# --- _ensure_work_branch (GH-46) --------------------------------------------
+
+def test_ensure_work_branch_commits_dirty_sync_write_before_resuming(tmp_path, monkeypatch):
+    # Reproduces the bug: sync rewrites prd.json on `main` and leaves it
+    # uncommitted, then the backlog runner resumes a pre-existing adw/<id>
+    # branch whose prd.json has diverged. Without the fix, `git checkout`
+    # raises CalledProcessError because the dirty tree would be overwritten.
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.setattr(paths, "target_root", lambda: repo)
+
+    _run_git(repo, "checkout", "-b", "adw/GH-46")
+    (repo / "prd.json").write_text('{"stories": [{"id": "GH-46"}]}', encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-m", "work branch prd")
+    _run_git(repo, "checkout", "main")
+
+    # Simulate sync's uncommitted prd.json write on main.
+    synced_content = '{"stories": [{"id": "GH-46"}, {"id": "GH-47"}]}'
+    (repo / "prd.json").write_text(synced_content, encoding="utf-8")
+
+    _ensure_work_branch("adw/GH-46")  # must not raise
+
+    assert _run_git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "adw/GH-46"
+    _run_git(repo, "checkout", "main")
+    assert (repo / "prd.json").read_text(encoding="utf-8") == synced_content
+    assert _run_git(repo, "status", "--porcelain") == ""
+
+
+def test_ensure_work_branch_fresh_path_leaves_dirty_tree_uncommitted(tmp_path, monkeypatch):
+    # The fresh-branch path (`checkout -b`) must behave exactly as today:
+    # the dirty tree carries over uncommitted.
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.setattr(paths, "target_root", lambda: repo)
+
+    (repo / "prd.json").write_text('{"stories": [{"id": "GH-47"}]}', encoding="utf-8")
+
+    _ensure_work_branch("adw/GH-47")
+
+    assert _run_git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "adw/GH-47"
+    assert _run_git(repo, "status", "--porcelain") != ""
