@@ -17,3 +17,11 @@ safe no-op-on-clean-tree helper already used for prd.json bookkeeping; reuse
 it before any checkout onto an existing branch instead of inventing a new
 stash path (stash risks merge conflicts when the target branch's file has
 diverged).
+
+GH-47: state.json is gitignored, so its mtime is a clean heartbeat — git
+operations (checkout, commit) never touch it, and save_state rewrites it at
+every stage entry. That made it the natural staleness signal for reclaiming a
+stranded in_progress ticket, cheaper than threading a lock/process check
+through pick_next_story. Split as a pure predicate (reclaim_stale_in_progress,
+tickets.py) + thin IO wrapper (reap_stale_in_progress, workflow_runner.py) so
+the staleness logic itself needs no tmp-repo fixture to test.
