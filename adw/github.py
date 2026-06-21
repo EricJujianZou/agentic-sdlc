@@ -181,13 +181,16 @@ def source_issue_number(story_id: str) -> int | None:
     return None
 
 
-def pr_body(story: Any, outcome: str) -> str:
-    reason = getattr(story, "description", "")
-    body = (
-        f"## Outcome: {outcome}\n\n"
-        f"**Ticket:** {story.id} — {story.title}\n\n"
-        f"{reason}\n"
-    )
+def pr_body(story: Any, outcome: str, pr_description: str | None = None) -> str:
+    if pr_description:
+        body = f"{pr_description}\n"
+    else:
+        reason = getattr(story, "description", "")
+        body = (
+            f"## Outcome: {outcome}\n\n"
+            f"**Ticket:** {story.id} — {story.title}\n\n"
+            f"{reason}\n"
+        )
     # On a done ticket, link the source issue so merging this PR closes it —
     # that is the human merge gate doubling as the issue's close event, which
     # lets the harness leave the issue OPEN (only relabeled) until work lands.
