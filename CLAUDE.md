@@ -23,6 +23,13 @@ toward caution over speed; use judgment on trivial tasks._
   session could repeat — a guard denial on benign input, a quirk you only
   learned by failing — add a one-liner to *Operational facts* below (or a
   memory) before moving on. Don't silently route around it.
+- **Self-heal the bugs you hit.** A harness/repo bug (not a typo) is work, not
+  an obstacle to route around — fixing itself is what this repo is *for*.
+  Default: file a `system-repair` GitHub issue (`adw` + a type label) and let the
+  harness dogfood the fix on its next poll. Fix it yourself on a branch + PR
+  (never push `main`) only when it's trivial, or when the bug sits in the very
+  path the harness would need to fix it (so it can't safely dogfood). The same
+  principle binds stage agents via `AGENTS.md` (they only file, never hand-edit).
 - **Goal-driven.** Turn the task into a verifiable check (a test, a command) and
   loop until it passes. State a brief plan for multi-step work.
 
@@ -52,8 +59,11 @@ toward caution over speed; use judgment on trivial tasks._
   text — so a benign command that merely *contains* a blocked pattern
   (`git push … main`, `git reset --hard`, `--no-verify`, `rm -rf <abs>`) is
   denied even inside an `echo`, heredoc, or quoted string. Put such content in a
-  file and read it, or split the tokens. (A guard that ignored matches inside
-  quotes would be a fair `system-repair`.)
+  file and read it, or split the tokens. `rm -rf` is stricter still: it trips
+  whenever the command holds *any* absolute/`..` token anywhere — a leading
+  `cd "C:/…"` is enough — not only when the rm target is absolute; use
+  `rm -f … && rmdir`, or isolate the rm with no absolute token. (A guard that
+  ignored matches inside quotes would be a fair `system-repair`.)
 - **Batch API/PR calls: isolate failures.** When opening several PRs/issues via
   the REST API, wrap each in its own try/except so one failure doesn't abort the
   rest. A `422 "No commits between main and <branch>"` almost always means the
