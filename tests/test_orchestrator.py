@@ -55,6 +55,33 @@ def test_happy_path_one_iteration(tmp_path):
     assert outcome.tokens_used == 500
 
 
+def test_pr_description_carried_from_review_gate(tmp_path):
+    def invoke(stage, state, story):
+        if stage == "review":
+            return StageResult(
+                status=StatusBlock(
+                    stage="review", ticket_id="S-001", outcome="success",
+                    exit_signal=True, pr_description="Reviewer's PR summary.",
+                ),
+                exit_code=0,
+                tokens_used=100,
+            )
+        return ok(stage)
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert outcome.pr_description == "Reviewer's PR summary."
+
+
+def test_pr_description_none_when_review_omits_it(tmp_path):
+    def invoke(stage, state, story):
+        return ok(stage, exit_signal=(stage == "review"))
+
+    outcome = run(invoke, tmp_path)
+    assert outcome.outcome == "done"
+    assert outcome.pr_description is None
+
+
 def test_progress_fn_called_once_per_stage(tmp_path):
     events = []
 
