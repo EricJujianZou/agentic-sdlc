@@ -217,6 +217,7 @@ def run_ticket(
                 return _finish(
                     story, state, "done", None, stages_run,
                     warning=warning, test_evidence=test_evidence,
+                    pr_description=result.status.pr_description,
                 )
 
             halt_reason = breaker.record(state, result)
