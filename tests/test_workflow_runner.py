@@ -7,6 +7,7 @@ assert the exit code maps to pass/fail and a timeout counts as a failure.
 import json
 import os
 import subprocess
+import time
 
 import adw.workflow_runner as workflow_runner
 from adw import paths
