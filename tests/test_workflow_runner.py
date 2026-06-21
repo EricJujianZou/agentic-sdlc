@@ -7,10 +7,30 @@ assert the exit code maps to pass/fail and a timeout counts as a failure.
 import subprocess
 
 import adw.workflow_runner as workflow_runner
+from adw import paths
 from adw.github import GitHubError
 from adw.orchestrator import TicketOutcome
 from adw.tickets import Story
-from adw.workflow_runner import _make_verify_fn, _notify_github
+from adw.workflow_runner import _ensure_work_branch, _make_verify_fn, _notify_github
+
+
+def _run_git(cwd, *args):
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def _init_repo(root):
+    """A temp git repo on `main` with a committed prd.json."""
+    root.mkdir()
+    _run_git(root, "init")
+    _run_git(root, "config", "user.email", "t@t.t")
+    _run_git(root, "config", "user.name", "tester")
+    (root / "prd.json").write_text('{"stories": []}', encoding="utf-8")
+    _run_git(root, "add", "-A")
+    _run_git(root, "commit", "-m", "init")
+    _run_git(root, "branch", "-M", "main")
+    return root
 
 
 class _Proc:
