@@ -197,6 +197,100 @@ def test_observe_and_report_noop_for_plain_story(monkeypatch):
     assert called == []  # no source issue -> nothing to post to
 
 
+# --- _file_upstream_repair (cross-repo upstream system-repair filing) -------
+
+def _harness_result(title="fix the test spec"):
+    return ObserverResult(
+        "harness", {"title": title, "description": "d", "evidence": ["x"]}, "diag",
+    )
+
+
+def test_file_upstream_repair_cross_repo_files_issue(monkeypatch, tmp_path):
+    monkeypatch.setattr(wr.paths, "target_root", lambda: tmp_path / "target")
+    monkeypatch.setattr(wr.paths, "engine_root", lambda: tmp_path / "engine")
+    monkeypatch.setattr(wr, "get_token", lambda: "tok")
+    monkeypatch.setattr(wr, "engine_repo_slug", lambda: ("EngineOrg", "engine-repo"))
+    monkeypatch.setattr(wr, "list_open_issues", lambda *a, **k: [])
+    created = {}
+    monkeypatch.setattr(
+        wr, "create_issue",
+        lambda owner, repo, token, title, body, labels=None:
+            created.update(owner=owner, repo=repo, title=title, body=body, labels=labels),
+    )
+    wr._file_upstream_repair(_story("GH-7"), _harness_result())
+    assert created["owner"] == "EngineOrg" and created["repo"] == "engine-repo"
+    assert created["labels"] == [wr.SELF_HEAL_LABEL]
+    assert "adw" not in created["labels"]
+    assert "adw-upstream-fingerprint" in created["body"]
+
+
+def test_file_upstream_repair_self_hosted_noop(monkeypatch, tmp_path):
+    same = tmp_path / "repo"
+    monkeypatch.setattr(wr.paths, "target_root", lambda: same)
+    monkeypatch.setattr(wr.paths, "engine_root", lambda: same)
+    called = []
+    monkeypatch.setattr(wr, "create_issue", lambda *a, **k: called.append(a))
+    wr._file_upstream_repair(_story("GH-7"), _harness_result())
+    assert called == []
+
+
+def test_file_upstream_repair_dedup_skips_existing(monkeypatch, tmp_path):
+    monkeypatch.setattr(wr.paths, "target_root", lambda: tmp_path / "target")
+    monkeypatch.setattr(wr.paths, "engine_root", lambda: tmp_path / "engine")
+    monkeypatch.setattr(wr, "get_token", lambda: "tok")
+    monkeypatch.setattr(wr, "engine_repo_slug", lambda: ("EngineOrg", "engine-repo"))
+    fingerprint = wr._repair_fingerprint(_story("GH-7"), _harness_result())
+    monkeypatch.setattr(
+        wr, "list_open_issues",
+        lambda *a, **k: [{"body": f"...<!-- adw-upstream-fingerprint: {fingerprint} -->"}],
+    )
+    called = []
+    monkeypatch.setattr(wr, "create_issue", lambda *a, **k: called.append(a))
+    wr._file_upstream_repair(_story("GH-7"), _harness_result())
+    assert called == []
+
+
+def test_file_upstream_repair_swallows_github_error(monkeypatch, tmp_path):
+    from adw.github import GitHubError
+
+    monkeypatch.setattr(wr.paths, "target_root", lambda: tmp_path / "target")
+    monkeypatch.setattr(wr.paths, "engine_root", lambda: tmp_path / "engine")
+
+    def boom():
+        raise GitHubError("no token")
+
+    monkeypatch.setattr(wr, "get_token", boom)
+    wr._file_upstream_repair(_story("GH-7"), _harness_result())  # must not raise
+
+
+def test_observe_and_report_files_upstream_when_cross_repo_harness(monkeypatch, tmp_path):
+    monkeypatch.setattr(wr, "run_observer", lambda *a, **k: _harness_result())
+    monkeypatch.setattr(wr, "_post_observer", lambda *a, **k: None)
+    called = []
+    monkeypatch.setattr(wr, "_file_upstream_repair", lambda story, result: called.append(story.id))
+    wr._observe_and_report(_story("GH-7"), lambda *a, **k: None, "x")
+    assert called == ["GH-7"]
+
+
+def test_observe_and_report_files_upstream_even_without_source_issue(monkeypatch):
+    monkeypatch.setattr(wr, "run_observer", lambda *a, **k: _harness_result())
+    called = []
+    monkeypatch.setattr(wr, "_file_upstream_repair", lambda story, result: called.append(story.id))
+    monkeypatch.setattr(wr, "_post_observer", lambda *a, **k: None)
+    wr._observe_and_report(_story("S-006"), lambda *a, **k: None, "x")
+    assert called == ["S-006"]  # plain S-NNN still has no in-repo issue, but upstream filing fires
+
+
+def test_observe_and_report_no_upstream_filing_for_ticket_level(monkeypatch):
+    monkeypatch.setattr(wr, "run_observer", lambda *a, **k: ObserverResult(
+        "ticket", None, "request is self-contradictory"))
+    called = []
+    monkeypatch.setattr(wr, "_file_upstream_repair", lambda story, result: called.append(story.id))
+    monkeypatch.setattr(wr, "_post_observer", lambda *a, **k: None)
+    wr._observe_and_report(_story("GH-7"), lambda *a, **k: None, "x")
+    assert called == []
+
+
 # --- prompt contract --------------------------------------------------------
 
 def test_observe_command_status_contract():
