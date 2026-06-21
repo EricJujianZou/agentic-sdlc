@@ -69,6 +69,19 @@ def repo_slug(repo_root: Path | str | None = None) -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
+def engine_repo_slug() -> tuple[str, str]:
+    """Return (owner, repo) for the *engine* repo (where upstream system-repair
+    reports get filed): `ADW_ENGINE_REPO` (owner/repo) if set, else the engine
+    checkout's own git remote (self-hosting: same as `repo_slug()`)."""
+    env = os.environ.get(ENGINE_REPO_ENV)
+    if env:
+        parts = env.split("/")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise GitHubError(f"{ENGINE_REPO_ENV} must be 'owner/repo', got {env!r}")
+        return parts[0], parts[1]
+    return repo_slug(paths.engine_root())
+
+
 def api_request(
     method: str,
     path: str,
