@@ -265,6 +265,7 @@ def _finish(
     *,
     warning: str | None = None,
     test_evidence: str | None = None,
+    pr_description: str | None = None,
 ) -> TicketOutcome:
     return TicketOutcome(
         ticket_id=story.id,
@@ -275,6 +276,7 @@ def _finish(
         stages_run=stages_run,
         warning=warning,
         test_evidence=test_evidence,
+        pr_description=pr_description,
     )
 
 
