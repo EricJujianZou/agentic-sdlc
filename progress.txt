@@ -9,3 +9,9 @@ Prune every run: durable patterns -> skills/, harness ambiguity/bugs -> system-r
 S-017: state.stage already distinguishes "finished" (document/decompose/observe)
 from "mid-pipeline interrupted" (one of stage_order) — no new State field needed
 to detect a resumable quota interruption; just check `stage in stage_order`.
+
+GH-53: cross-repo upstream filing fires on `target_root() != engine_root()`
+*before* the `source_issue_number(...) is None` early-return in
+_observe_and_report — a plain S-NNN ticket has no in-repo issue to comment on
+but still needs the upstream report, so the two guards are independent, not
+nested.
