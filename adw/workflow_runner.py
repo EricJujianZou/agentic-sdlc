@@ -188,7 +188,11 @@ def _pr_title(story: Story) -> str:
 
 
 def _notify_github(
-    story: Story, outcome: str, reason: str = "", test_evidence: str | None = None
+    story: Story,
+    outcome: str,
+    reason: str = "",
+    test_evidence: str | None = None,
+    pr_description: str | None = None,
 ) -> None:
     """Best-effort outbound notification: push the work branch, open/update a
     PR for it, and comment the outcome on the source issue if one exists.
@@ -203,7 +207,7 @@ def _notify_github(
             owner, repo, token,
             head=branch, base="main",
             title=_pr_title(story),
-            body=pr_body(story, outcome),
+            body=pr_body(story, outcome, pr_description),
         )
         issue_number = source_issue_number(story.id)
         if issue_number is not None:
@@ -629,7 +633,10 @@ def _finalize_story(
         _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_DONE,))
     else:
         _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,))
-    _notify_github(story, outcome.outcome, outcome.reason or "", outcome.test_evidence)
+    _notify_github(
+        story, outcome.outcome, outcome.reason or "", outcome.test_evidence,
+        outcome.pr_description,
+    )
     if outcome.outcome != "done" and budgets.get("observer_enabled", True):
         _observe_and_report(
             story, observer_invoke, outcome.reason or "", state_path=observer_state_path
