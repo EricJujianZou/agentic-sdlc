@@ -73,6 +73,7 @@ class TicketOutcome:
     stages_run: list[str] = field(default_factory=list)
     warning: str | None = None
     test_evidence: str | None = None  # deterministic local pytest count on done
+    pr_description: str | None = None  # review-authored PR body (S-... GH-51)
 
 
 @dataclass
