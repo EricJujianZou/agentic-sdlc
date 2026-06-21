@@ -12,9 +12,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from adw.github import (
+    ENGINE_REPO_ENV,
     GitHubError,
     add_labels,
     comment_on_issue,
+    create_issue,
+    engine_repo_slug,
+    list_open_issues,
     open_or_update_pr,
     outcome_comment_body,
     pr_body,
