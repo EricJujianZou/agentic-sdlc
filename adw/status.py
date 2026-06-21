@@ -30,6 +30,7 @@ class StatusBlock:
     files_changed: int = 0
     suggested_tools: list[str] = field(default_factory=list)
     system_repair_suggested: bool = False
+    pr_description: str | None = None
 
 
 def _candidate_objects(text: str):
