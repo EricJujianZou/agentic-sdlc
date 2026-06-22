@@ -106,8 +106,15 @@ def _new_branch_base() -> str | None:
 
 
 def _snapshot_tracked_dirty() -> dict[str, bytes]:
+    # `_git()` strips the whole output, which would eat the leading status
+    # space of the first porcelain line and shift its fixed-column parse —
+    # call subprocess directly here so column offsets stay accurate.
+    proc = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=paths.target_root(), capture_output=True, text=True, check=True,
+    )
     snapshot: dict[str, bytes] = {}
-    for line in _git("status", "--porcelain", "--untracked-files=no").splitlines():
+    for line in proc.stdout.splitlines():
         status, rel = line[:2], line[3:]
         if "D" in status:
             continue
