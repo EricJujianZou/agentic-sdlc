@@ -112,6 +112,36 @@ def api_request(
         raise GitHubError(f"offline: cannot reach api.github.com: {exc.reason}") from exc
 
 
+def list_account_repos(token: str, owner: str) -> list[tuple[str, str, str]]:
+    """Page through the account's own (non-fork-irrelevant) repos and return
+    `(owner, name, clone_url)` for every active one owned by `owner`.
+
+    Filters out archived/disabled repos (dead weight for a sweep) and any
+    result whose `owner.login` doesn't match `owner` (a token can also see
+    org/collaborator repos we don't want auto-clone-and-worked here). Pages
+    until a response shorter than `per_page` signals the last page."""
+    repos: list[tuple[str, str, str]] = []
+    page = 1
+    per_page = 100
+    while True:
+        batch = api_request(
+            "GET", f"/user/repos?per_page={per_page}&affiliation=owner&page={page}", token
+        )
+        if not batch:
+            break
+        for repo in batch:
+            if (
+                repo.get("owner", {}).get("login") == owner
+                and not repo.get("archived")
+                and not repo.get("disabled")
+            ):
+                repos.append((owner, repo["name"], repo["clone_url"]))
+        if len(batch) < per_page:
+            break
+        page += 1
+    return repos
+
+
 def list_adw_issues(owner: str, repo: str, token: str) -> list[dict]:
     """Return open Issues labeled 'adw', excluding pull requests."""
     path = f"/repos/{owner}/{repo}/issues?state=open&labels=adw&per_page=100"
