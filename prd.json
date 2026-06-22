@@ -507,8 +507,8 @@
         "Full suite stays green (`uv run pytest -q`)."
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "in_progress"
+      "passes": true,
+      "status": "done"
     },
     {
       "id": "GH-60",
