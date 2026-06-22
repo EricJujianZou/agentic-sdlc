@@ -16,6 +16,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,7 +47,7 @@ from adw.orchestrator import (
     run_ticket,
 )
 from adw.safety import CircuitBreaker, SafetyConfig, check_cooldown
-from adw.state import State
+from adw.state import load_state, State
 from adw.tickets import (
     Story,
     get_story,
@@ -54,6 +55,7 @@ from adw.tickets import (
     mark_story,
     pick_next_stories,
     pick_next_story,
+    reclaim_stale_in_progress,
     save_prd,
 )
 
@@ -82,6 +84,10 @@ def _git(*args: str) -> str:
 
 def _ensure_work_branch(branch: str) -> None:
     if _git("branch", "--list", branch):
+        # GH-46: sync may have left an uncommitted prd.json write on the
+        # current branch; commit it before switching so checkout doesn't
+        # abort on a dirty tree that would be overwritten.
+        _commit_bookkeeping("chore: persist sync before resuming work branch")
         _git("checkout", branch)
     else:
         _git("checkout", "-b", branch)
@@ -94,6 +100,36 @@ def _commit_bookkeeping(message: str) -> None:
     if _git("status", "--porcelain").strip():
         _git("add", "-A")
         _git("commit", "-m", message)
+
+
+def reap_stale_in_progress(
+    *, stale_seconds: float, prd_path: str | Path | None = None,
+    state_path: str | Path | None = None,
+) -> list[str]:
+    """Flip every stranded `in_progress` story back to `open` (GH-47): an
+    interrupted run (machine sleep, killed agent, a concurrent tree op) leaves
+    a ticket `in_progress` forever since `pick_next_story` never re-picks it.
+    `state.json` is gitignored, so its mtime is a heartbeat git never disturbs,
+    and `save_state` rewrites it at every stage entry — a ticket is "live"
+    only if `state.json` names it AND was touched within `stale_seconds`.
+    Commits the flip (if any) so the tree stays clean for the next stage."""
+    prd_path = paths.prd_path() if prd_path is None else Path(prd_path)
+    state_path = paths.state_path() if state_path is None else Path(state_path)
+    ticket_id: str | None = None
+    age: float | None = None
+    try:
+        ticket_id = load_state(state_path).ticket_id
+        age = time.time() - state_path.stat().st_mtime
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        pass
+    prd = load_prd(prd_path)
+    reclaimed = reclaim_stale_in_progress(
+        prd, stale_seconds=stale_seconds, live_ticket_id=ticket_id, state_age_seconds=age,
+    )
+    if reclaimed:
+        save_prd(prd, prd_path)
+        _commit_bookkeeping(f"chore: reclaim stale in_progress: {', '.join(reclaimed)}")
+    return reclaimed
 
 
 def _make_verify_fn(budgets: dict, cwd: str | Path | None = None):
@@ -156,7 +192,11 @@ def _pr_title(story: Story) -> str:
 
 
 def _notify_github(
-    story: Story, outcome: str, reason: str = "", test_evidence: str | None = None
+    story: Story,
+    outcome: str,
+    reason: str = "",
+    test_evidence: str | None = None,
+    pr_description: str | None = None,
 ) -> None:
     """Best-effort outbound notification: push the work branch, open/update a
     PR for it, and comment the outcome on the source issue if one exists.
@@ -171,7 +211,7 @@ def _notify_github(
             owner, repo, token,
             head=branch, base="main",
             title=_pr_title(story),
-            body=pr_body(story, outcome),
+            body=pr_body(story, outcome, pr_description),
         )
         issue_number = source_issue_number(story.id)
         if issue_number is not None:
@@ -646,7 +686,10 @@ def _finalize_story(
         _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_DONE,))
     else:
         _set_run_label(story, remove=(RUN_LABEL_IN_PROGRESS,), add=(RUN_LABEL_BLOCKED,))
-    _notify_github(story, outcome.outcome, outcome.reason or "", outcome.test_evidence)
+    _notify_github(
+        story, outcome.outcome, outcome.reason or "", outcome.test_evidence,
+        outcome.pr_description,
+    )
     if outcome.outcome != "done" and budgets.get("observer_enabled", True):
         _observe_and_report(
             story, observer_invoke, outcome.reason or "", state_path=observer_state_path

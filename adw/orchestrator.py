@@ -73,6 +73,7 @@ class TicketOutcome:
     stages_run: list[str] = field(default_factory=list)
     warning: str | None = None
     test_evidence: str | None = None  # deterministic local pytest count on done
+    pr_description: str | None = None  # review-authored PR body (S-... GH-51)
 
 
 @dataclass
@@ -216,6 +217,7 @@ def run_ticket(
                 return _finish(
                     story, state, "done", None, stages_run,
                     warning=warning, test_evidence=test_evidence,
+                    pr_description=result.status.pr_description,
                 )
 
             halt_reason = breaker.record(state, result)
@@ -263,6 +265,7 @@ def _finish(
     *,
     warning: str | None = None,
     test_evidence: str | None = None,
+    pr_description: str | None = None,
 ) -> TicketOutcome:
     return TicketOutcome(
         ticket_id=story.id,
@@ -273,6 +276,7 @@ def _finish(
         stages_run=stages_run,
         warning=warning,
         test_evidence=test_evidence,
+        pr_description=pr_description,
     )
 
 

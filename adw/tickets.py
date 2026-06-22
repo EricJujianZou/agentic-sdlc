@@ -172,6 +172,34 @@ def pick_next_stories(prd: Prd, n: int, *, types: tuple[str, ...] | None = None)
     return candidates[: max(0, n)]
 
 
+def reclaim_stale_in_progress(
+    prd: Prd,
+    *,
+    stale_seconds: float,
+    live_ticket_id: str | None,
+    state_age_seconds: float | None,
+) -> list[str]:
+    """Flip every `in_progress` story back to `open` unless it is provably the
+    one a live run is working (GH-47): `state.json`'s `ticket_id` matches it
+    AND its heartbeat (mtime age) is within `stale_seconds`. A missing
+    heartbeat (`state_age_seconds` or `live_ticket_id` is None) is never
+    treated as live. Pure — no IO; the caller supplies the heartbeat reading.
+    Returns the ids reclaimed, in story order."""
+    reclaimed: list[str] = []
+    for s in prd.stories:
+        if s.status != "in_progress":
+            continue
+        live = (
+            live_ticket_id == s.id
+            and state_age_seconds is not None
+            and state_age_seconds <= stale_seconds
+        )
+        if not live:
+            s.status = "open"
+            reclaimed.append(s.id)
+    return reclaimed
+
+
 def get_story(prd: Prd, story_id: str) -> Story:
     for story in prd.stories:
         if story.id == story_id:

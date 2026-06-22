@@ -12,6 +12,7 @@ from adw.tickets import (
     next_story_id,
     pick_next_stories,
     pick_next_story,
+    reclaim_stale_in_progress,
     save_prd,
 )
 
@@ -218,3 +219,60 @@ def test_pick_next_story_filters_by_type():
     assert pick_next_story(prd, types=("feat", "system-repair")).id == "S-001"
     assert pick_next_story(prd, types=("system-repair",)) is None  # no match
     assert pick_next_story(prd).id == "S-001"  # default: any type, by priority
+
+
+# --- reclaim_stale_in_progress (GH-47) --------------------------------------
+
+
+def test_reclaim_stale_in_progress_reclaims_stale_same_ticket():
+    prd = Prd(project="p", stories=[story(id="S-001", status="in_progress")])
+    reclaimed = reclaim_stale_in_progress(
+        prd, stale_seconds=60, live_ticket_id="S-001", state_age_seconds=120,
+    )
+    assert reclaimed == ["S-001"]
+    assert prd.stories[0].status == "open"
+
+
+def test_reclaim_stale_in_progress_leaves_fresh_same_ticket():
+    prd = Prd(project="p", stories=[story(id="S-001", status="in_progress")])
+    reclaimed = reclaim_stale_in_progress(
+        prd, stale_seconds=60, live_ticket_id="S-001", state_age_seconds=10,
+    )
+    assert reclaimed == []
+    assert prd.stories[0].status == "in_progress"
+
+
+def test_reclaim_stale_in_progress_reclaims_foreign_ticket_even_if_fresh():
+    # A fresh state.json belonging to a DIFFERENT ticket never protects this one.
+    prd = Prd(project="p", stories=[story(id="S-001", status="in_progress")])
+    reclaimed = reclaim_stale_in_progress(
+        prd, stale_seconds=60, live_ticket_id="S-002", state_age_seconds=5,
+    )
+    assert reclaimed == ["S-001"]
+    assert prd.stories[0].status == "open"
+
+
+def test_reclaim_stale_in_progress_reclaims_when_heartbeat_missing():
+    prd = Prd(project="p", stories=[story(id="S-001", status="in_progress")])
+    reclaimed = reclaim_stale_in_progress(
+        prd, stale_seconds=60, live_ticket_id=None, state_age_seconds=None,
+    )
+    assert reclaimed == ["S-001"]
+    assert prd.stories[0].status == "open"
+
+
+def test_reclaim_stale_in_progress_leaves_other_statuses_untouched():
+    prd = Prd(
+        project="p",
+        stories=[
+            story(id="S-001", status="open"),
+            story(id="S-002", status="blocked"),
+            story(id="S-003", status="quotad"),
+            story(id="S-004", status="done", passes=True),
+        ],
+    )
+    reclaimed = reclaim_stale_in_progress(
+        prd, stale_seconds=60, live_ticket_id=None, state_age_seconds=None,
+    )
+    assert reclaimed == []
+    assert [s.status for s in prd.stories] == ["open", "blocked", "quotad", "done"]

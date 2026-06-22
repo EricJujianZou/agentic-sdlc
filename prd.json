@@ -319,7 +319,7 @@
       ],
       "skill_match": null,
       "passes": false,
-      "status": "blocked"
+      "status": "open"
     },
     {
       "id": "S-018",
@@ -371,6 +371,44 @@
       "status": "done"
     },
     {
+      "id": "GH-53",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "Cross-repo self-heal: route harness-level observer findings to the engine repo as a triage-gated system-repair issue",
+      "description": "## Problem\n\nWhen the harness runs cross-repo (a downstream user with their own fork building\ntheir own target repo), a **harness-level** failure has nowhere to go. The\nobserver already classifies harness-level vs ticket-level findings and posts the\ndiagnosis to the run's source issue / phone (`_observe_and_report` /\n`_post_harness_observation` in `adw/workflow_runner.py`), but that report lands in\nthe **downstream target repo** \u2014 the engine owner never sees it. So engine bugs\nfound by a second user (exactly the bugs self-hosting can't surface) don't flow\nback upstream.\n\n## Approach (decided)\n\nRoute the observer's harness-level finding to the **engine repo's issue tracker**,\nas a **system-repair issue** (a report) \u2014 not a PR. At detection time the agent is\nmid-run on a *target* ticket and has not (and may not) touched engine code, so\nthere is no fix to PR; the upstream harness dogfoods the fix on its own side once\nthe issue is triaged in. This reuses the observer + `adw/github.py` issue-filing\nthat already exist; it is not a new subsystem or a hook.\n\nTrigger: observer result is harness-level **AND** the run is cross-repo\n(`paths.target_root() != paths.engine_root()`). A self-hosted run (target ==\nengine) keeps today's behavior exactly.",
+      "acceptance_criteria": [
+        "On a harness-level observer finding during a **cross-repo** run, a",
+        "The engine repo slug is configurable (e.g. `ADW_ENGINE_REPO` /",
+        "**Human-label-gated:** the filed issue does NOT carry the `adw` label (so it is",
+        "**Deduped:** before filing, existing open issues are checked by a fingerprint",
+        "**Best-effort, never fatal:** any failure (missing token scope on the engine",
+        "A self-hosted run (target == engine) is unchanged: no upstream issue is filed.",
+        "Unit tests with a fake GitHub client cover: a cross-repo harness-level finding",
+        "Full suite stays green (`uv run pytest -q`)."
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
+      "id": "GH-51",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "PR body should follow the repo PR template, authored by the review stage",
+      "description": "## Problem\n\nHarness-opened PRs don't reflect the repo's own PR template\n(`.github/PULL_REQUEST_TEMPLATE.md`). The template only auto-fills the GitHub\nweb compose box; the harness opens PRs via the REST API\n(`adw/workflow_runner.py::_notify_github` \u2192 `open_or_update_pr`) with an explicit\nbody, which bypasses the template. That body comes from\n`adw/github.py::pr_body(story, outcome)`, which restates the ticket\n(`## Outcome` + `**Ticket:** id \u2014 title` + the ticket *description* verbatim +\n`Closes #n`). It has no access to what the stages actually did, so a reviewer\ncan't see *what changed / tradeoffs / risks* without reading the diff (see #50).\n\n## Approach (decided)\n\nAuthor the PR body in the **review stage**, not a hook. Review is the only stage\nthat has read the full diff and judged it against the criteria, so it is the\nnatural author of a human-facing change summary; a PreToolUse-style hook is the\nwrong mechanism (it gates tool calls, can't intercept the urllib PR creation,\nand has no view of the diff). Ride the existing status-block \u2192 `TicketOutcome` \u2192\n`_notify_github` seam.\n\nThis is an **enhancement with a fallback**, not a replacement: review emits the\ndescription when it runs; `pr_body()` uses it when present and otherwise keeps\ntoday's body.\n\n### Accepted caveat (as-is, do NOT over-engineer)\n\nPipelines that skip review keep the current body: `STAGE_ORDER_BY_TYPE`\n(`adw/workflow_runner.py`) has **bug skip review and chore skip plan+review**,\nand `_notify_github` also fires on `blocked` outcomes where review didn't pass.\nThose PRs keeping the plain ticket-description body is acceptable \u2014 no extra work\nto special-case them.",
+      "acceptance_criteria": [
+        "`stage_specs/review_feat.md` instructs the review stage to emit a",
+        "The status-block model/parser and `TicketOutcome` (`adw/orchestrator.py`)",
+        "`adw/github.py::pr_body()` renders `pr_description` when present (keeping the",
+        "Pipelines that skip review (bug/chore) and non-done/blocked outcomes keep the",
+        "Unit tests cover: `pr_body()` with and without `pr_description`; a review",
+        "Full suite stays green (`uv run pytest -q`)."
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
       "id": "GH-56",
       "type": "feat",
       "priority": 2,
@@ -392,28 +430,6 @@
       "skill_match": null,
       "passes": false,
       "status": "open"
-    },
-    {
-      "id": "GH-53",
-      "type": "system-repair",
-      "priority": 3,
-      "title": "Cross-repo self-heal: route harness-level observer findings to the engine repo as a triage-gated system-repair issue",
-      "description": "## Problem\n\nWhen the harness runs cross-repo (a downstream user with their own fork building\ntheir own target repo), a **harness-level** failure has nowhere to go. The\nobserver already classifies harness-level vs ticket-level findings and posts the\ndiagnosis to the run's source issue / phone (`_observe_and_report` /\n`_post_harness_observation` in `adw/workflow_runner.py`), but that report lands in\nthe **downstream target repo** \u2014 the engine owner never sees it. So engine bugs\nfound by a second user (exactly the bugs self-hosting can't surface) don't flow\nback upstream.\n\n## Approach (decided)\n\nRoute the observer's harness-level finding to the **engine repo's issue tracker**,\nas a **system-repair issue** (a report) \u2014 not a PR. At detection time the agent is\nmid-run on a *target* ticket and has not (and may not) touched engine code, so\nthere is no fix to PR; the upstream harness dogfoods the fix on its own side once\nthe issue is triaged in. This reuses the observer + `adw/github.py` issue-filing\nthat already exist; it is not a new subsystem or a hook.\n\nTrigger: observer result is harness-level **AND** the run is cross-repo\n(`paths.target_root() != paths.engine_root()`). A self-hosted run (target ==\nengine) keeps today's behavior exactly.",
-      "acceptance_criteria": [
-        "On a harness-level observer finding during a **cross-repo** run, a",
-        "The engine repo slug is configurable (e.g. `ADW_ENGINE_REPO` /",
-        "**Human-label-gated:** the filed issue does NOT carry the `adw` label (so it is",
-        "**Deduped:** before filing, existing open issues are checked by a fingerprint",
-        "**Best-effort, never fatal:** any failure (missing token scope on the engine",
-        "A self-hosted run (target == engine) is unchanged: no upstream issue is filed.",
-        "Unit tests with a fake GitHub client cover: a cross-repo harness-level finding",
-        "Full suite stays green (`uv run pytest -q`).",
-        "--",
-        "The upstream report is filed by the orchestrator deterministically, with NO"
-      ],
-      "skill_match": null,
-      "passes": true,
-      "status": "done"
     }
   ]
 }

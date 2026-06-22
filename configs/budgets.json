@@ -11,5 +11,6 @@
   "test_evidence_command": ["uv", "run", "pytest", "-q"],
   "test_evidence_timeout_minutes": 10,
   "observer_enabled": true,
-  "max_parallel": 3
+  "max_parallel": 3,
+  "in_progress_stale_minutes": 60
 }

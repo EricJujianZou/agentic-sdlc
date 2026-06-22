@@ -71,6 +71,18 @@ def test_pr_body_no_close_when_blocked_or_plain_story():
     assert "Closes #" not in pr_body(_story(id="S-006"), "done")
 
 
+def test_pr_body_without_pr_description_is_unchanged():
+    s = _story()
+    assert pr_body(s, "done") == pr_body(s, "done", None)
+
+
+def test_pr_body_renders_pr_description_when_present():
+    s = _story(id="GH-42")
+    body = pr_body(s, "done", "Summary of what changed and the risks.")
+    assert "Summary of what changed and the risks." in body
+    assert "Closes #42" in body
+
+
 def test_outcome_comment_body_done():
     s = _story()
     text = outcome_comment_body(s, "done")

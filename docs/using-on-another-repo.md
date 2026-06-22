@@ -69,6 +69,16 @@ ADW_REPO=/path/to/my-project uv run --project /path/to/engine \
   python /path/to/engine/workflows/feat_full_cycle.py --ticket S-001
 ```
 
+On **PowerShell** the inline `ADW_REPO=… <cmd>` form does nothing (it isn't a
+prefix-assignment shell) — set the env var on its own line first, then run:
+
+```powershell
+$env:ADW_REPO = "C:/path/to/my-project"
+uv run --project C:/path/to/engine `
+  python C:/path/to/engine/workflows/poll_once.py --max-tickets 1
+Remove-Item Env:\ADW_REPO   # clear afterwards so it doesn't leak into later commands
+```
+
 Everything lands in the target: the `adw/S-001` branch, the commits, the run
 logs under `my-project/observability/runs/`, and the `prd.json` status flips.
 The engine repo is never touched. With `ADW_REPO` unset and the command run
