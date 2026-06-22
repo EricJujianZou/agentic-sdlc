@@ -304,24 +304,6 @@
       "status": "done"
     },
     {
-      "id": "S-017",
-      "type": "system-repair",
-      "priority": 3,
-      "title": "Mid-ticket checkpoint: resume a quotad ticket from its last stage via state.json",
-      "description": "Today adw/orchestrator.py run_ticket always calls new_state(story.id) at entry, resetting iteration to 1 and the stage to plan, so a ticket interrupted by quota (S-015 'quotad') re-runs from plan on resume even though git already holds the prior stages' commits on the adw/<id> branch. That is correct (git-as-memory means the new plan stage sees the earlier work) but wastes tokens \u2014 the exact constraint that matters on a subscription. Add a bounded checkpoint/resume: when run_ticket starts a ticket that has an existing state.json for the SAME ticket_id left at a mid-pipeline stage (i.e. the prior run was interrupted, not finished), resume from that stage instead of starting fresh, re-using the persisted iteration count; completed stages whose outputs are already committed are not re-run. A fresh ticket (no prior state, or a state.json for a different ticket_id, or a finished run) behaves exactly as today. The resume must stay fully bounded: it still honors max_iterations and the circuit breaker, and a resumed run can never loop unbounded. This is leverage on our existing state.json hand-off, not a new memory layer.",
-      "acceptance_criteria": [
-        "run_ticket resumes from an existing state.json when it is for the same story.id and was left at a mid-pipeline stage (a quota interruption), re-entering at that stage and preserving the persisted iteration count instead of calling new_state",
-        "A fresh ticket \u2014 no state.json, a state.json for a different ticket_id, or one whose run already finished \u2014 behaves exactly as today (new_state, iteration 1, stage plan); existing single-ticket behavior is unchanged",
-        "On resume, stages already completed in the prior run (their outputs committed to the work branch) are not re-invoked; the loop re-enters at the first incomplete stage",
-        "A resumed run stays bounded: it honors max_iterations and the circuit breaker exactly as a fresh run, and cannot loop unbounded",
-        "Unit tests with a fake invoke_fn cover: resume from a mid-pipeline state.json re-enters at the recorded stage with the iteration preserved; a fresh ticket and a different-ticket state.json both start fresh; a resumed run still halts at max_iterations",
-        "Full suite uv run pytest -q stays green"
-      ],
-      "skill_match": null,
-      "passes": false,
-      "status": "open"
-    },
-    {
       "id": "S-018",
       "type": "system-repair",
       "priority": 1,
