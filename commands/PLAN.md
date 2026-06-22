@@ -24,6 +24,11 @@ with the reason in `failure_reason`. Never end your turn with a question.
    failed, and plan around it. Do not repeat a plan that already failed.
 4. Write the plan in your reply, following the spec's format exactly.
    Map every acceptance criterion to at least one step.
+5. Populate `file_manifest` in your status block from the `file:line` refs
+   you already cite in your Steps and Context sections — `edit` for every
+   file a step touches, `read` for files you consulted but won't change.
+   This lets implement/test/review open exactly those files instead of
+   re-surveying the repo.
 
 End your reply with exactly this status block (JSON, last thing in the
 message), with values filled in:
@@ -38,7 +43,8 @@ message), with values filled in:
   "failure_reason": null,
   "files_changed": 0,
   "suggested_tools": [],
-  "system_repair_suggested": false
+  "system_repair_suggested": false,
+  "file_manifest": {"edit": ["path/or/path:line"], "read": ["path/or/path:line"]}
 }
 ```
 
