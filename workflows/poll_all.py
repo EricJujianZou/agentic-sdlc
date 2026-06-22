@@ -269,27 +269,23 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
     iterations = max_iterations or budgets["max_iterations_default"]
 
     tickets_run = 0
-    index = 0
     while active_repos:
-        repo_path = active_repos[index % len(active_repos)]
+        repo_path = active_repos.pop(0)
         with _target(repo_path):
             try:
                 reap_stale_in_progress(stale_seconds=stale_seconds)
                 story = pick_next_story(load_prd(paths.prd_path()))
                 if story is None:
-                    active_repos.remove(repo_path)
-                    continue
+                    continue  # backlog empty here — drop from rotation
                 stage_order = STAGE_ORDER_BY_TYPE.get(story.type)
                 if stage_order is None:
-                    active_repos.remove(repo_path)
-                    continue
+                    continue  # defensive: schema restricts type, but never dispatch blind
                 outcome = run_one_story(
                     story, stage_order,
                     models=models, budgets=budgets, max_iterations=iterations,
                 )
             except Exception as exc:  # noqa: BLE001 — one repo's crash must not kill the sweep
                 print(f"sweep: {repo_path} raised {exc.__class__.__name__}: {exc}")
-                active_repos.remove(repo_path)
                 continue
             tickets_run += 1
             if outcome.outcome == "quotad":
@@ -297,9 +293,7 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
                 if cooldown_until:
                     write_global_cooldown(cooldown_until, f"{repo_path.name}/{story.id} quotad")
                 return SweepResult(tickets_run, f"quotad at {repo_path.name}/{story.id}")
-        index += 1
-        if index >= len(active_repos):
-            index = 0
+        active_repos.append(repo_path)  # still has work (or might later) — keep in rotation
 
     return SweepResult(tickets_run, "no open stories remain in any repo")
 
