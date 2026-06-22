@@ -411,6 +411,57 @@ def test_ensure_work_branch_fresh_path_leaves_dirty_tree_uncommitted(tmp_path, m
     assert _run_git(repo, "status", "--porcelain") != ""
 
 
+def test_ensure_work_branch_new_branch_cut_from_main_not_head(tmp_path, monkeypatch):
+    # GH-58: an interrupted run can leave HEAD on a dead ticket branch. The
+    # next ticket's new branch must be cut from main, not from that dead tip.
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.setattr(paths, "target_root", lambda: repo)
+
+    _run_git(repo, "checkout", "-b", "adw/dead")
+    (repo / "prd.json").write_text('{"stories": [{"id": "dead"}]}', encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-m", "dead branch work")
+    # tree is clean on adw/dead at this point (HEAD stays here, simulating
+    # an interrupted run that never switched back to main)
+
+    _ensure_work_branch("adw/GH-58")
+
+    assert _run_git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "adw/GH-58"
+    main_tip = _run_git(repo, "rev-parse", "main")
+    assert _run_git(repo, "rev-parse", "adw/GH-58") == main_tip
+    is_ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", "adw/dead", "adw/GH-58"],
+        cwd=str(repo), capture_output=True,
+    )
+    assert is_ancestor.returncode != 0
+
+
+def test_ensure_work_branch_new_branch_preserves_dirty_prd_from_dead_head(tmp_path, monkeypatch):
+    # The naive `checkout -b branch main` would abort on this dirty tree
+    # (current HEAD's committed prd.json diverges from main's); the fix
+    # must avoid that and still carry sync's uncommitted write forward.
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.setattr(paths, "target_root", lambda: repo)
+
+    _run_git(repo, "checkout", "-b", "adw/dead")
+    (repo / "prd.json").write_text('{"stories": [{"id": "dead"}]}', encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-m", "dead branch work")
+
+    synced_content = '{"stories": [{"id": "GH-58"}]}'
+    (repo / "prd.json").write_text(synced_content, encoding="utf-8")
+
+    _ensure_work_branch("adw/GH-58")
+
+    assert _run_git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "adw/GH-58"
+    is_ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", "adw/dead", "adw/GH-58"],
+        cwd=str(repo), capture_output=True,
+    )
+    assert is_ancestor.returncode != 0
+    assert (repo / "prd.json").read_text(encoding="utf-8") == synced_content
+
+
 # --- reap_stale_in_progress (GH-47) -----------------------------------------
 
 
