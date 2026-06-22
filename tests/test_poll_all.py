@@ -96,7 +96,7 @@ def test_target_context_restores_prior_on_exception(tmp_path, monkeypatch):
 
 
 def test_ensure_clone_self_host_maps_to_engine_root_with_no_clone(monkeypatch):
-    owner, name = poll_all.repo_slug(paths.engine_root())
+    owner, name = poll_all._ENGINE_SLUG
     descriptor = poll_all.RepoDescriptor(owner, name, "https://example/x.git")
     called = []
     monkeypatch.setattr(poll_all.subprocess, "run", lambda *a, **k: called.append(a))
