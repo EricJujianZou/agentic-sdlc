@@ -525,8 +525,8 @@
         "**Companion finding (separate, not this ticket):** GH-56 is mis-typed `feat`"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "in_progress"
+      "passes": true,
+      "status": "done"
     }
   ]
 }
