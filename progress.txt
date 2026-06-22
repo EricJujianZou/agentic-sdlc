@@ -36,3 +36,11 @@ param in a test, match on `path.endswith("&page=N")`, not `"page=N" in path`
 — `per_page=100` itself contains the substring "page=100", which contains
 "page=1" as a prefix, so an `in`-based page=1 check always matches and the
 fake "pages" forever.
+
+GH-61: the optional-field pattern (pr_description on StatusBlock) is reusable
+for any new stage-handoff data — add to the dataclass, parse leniently
+(non-matching shape -> None, never raise), thread it through compose_stage_
+prompt by reading the latest iter*_<stage>_output.md with parse_status_block
+inside try/except. Kept the new file_manifest section gated to
+implement/test/review only (not plan itself) since the manifest only exists
+once a plan has run.
