@@ -181,7 +181,7 @@ def ensure_clone(descriptor: RepoDescriptor) -> Path | None:
     The engine's own repo short-circuits to `paths.engine_root()` (self-host —
     no clone, no network). Any git failure is logged and returns None (isolated
     — the caller skips this repo, the rest of the sweep continues)."""
-    if descriptor.slug == "/".join(repo_slug(paths.engine_root())):
+    if _ENGINE_SLUG is not None and (descriptor.owner, descriptor.name) == _ENGINE_SLUG:
         return paths.engine_root()
     repo_path = managed_repos_dir() / descriptor.owner / descriptor.name
     try:
