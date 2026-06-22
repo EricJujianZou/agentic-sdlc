@@ -320,16 +320,17 @@ def test_sweep_no_active_repos_after_clone_failures(monkeypatch):
 def test_sweep_self_host_only_engine_has_issues(tmp_path, monkeypatch):
     monkeypatch.setattr(poll_all, "read_global_cooldown", lambda: None)
     monkeypatch.setattr(poll_all, "get_token", lambda: "tok")
-    owner, name = poll_all.repo_slug(paths.engine_root())
+    owner, name = poll_all._ENGINE_SLUG
     monkeypatch.setattr(poll_all, "engine_repo_slug", lambda: (owner, name))
     repos = [poll_all.RepoDescriptor(owner, name, "https://example/engine.git")]
     monkeypatch.setattr(poll_all, "discover_targets", lambda token, o: repos)
 
     clone_calls = []
+    original_ensure_clone = poll_all.ensure_clone
 
     def fake_ensure_clone(descriptor):
         clone_calls.append(descriptor)
-        return poll_all.ensure_clone(descriptor)
+        return original_ensure_clone(descriptor)
 
     monkeypatch.setattr(poll_all, "ensure_clone", fake_ensure_clone)
     monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
