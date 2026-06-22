@@ -25,3 +25,12 @@ stranded in_progress ticket, cheaper than threading a lock/process check
 through pick_next_story. Split as a pure predicate (reclaim_stale_in_progress,
 tickets.py) + thin IO wrapper (reap_stale_in_progress, workflow_runner.py) so
 the staleness logic itself needs no tmp-repo fixture to test.
+
+GH-58: `_git()` (workflow_runner.py) `.strip()`s its whole stdout — fine for
+single-value calls, but it eats the leading status-byte of the first line of
+multi-line output like `git status --porcelain` (" M file" -> "M file"),
+breaking fixed-column parsing. Any helper that needs to parse porcelain
+line-by-line must shell out via subprocess directly, not through `_git()`.
+New ticket branches are now cut from origin/main (else local main) instead of
+current HEAD, via snapshot-dirty-files -> `checkout -f -b` -> restore-files,
+so a dead/interrupted ticket branch left on HEAD can't poison the next one.
