@@ -304,9 +304,9 @@ def test_list_account_repos_pages_until_short_page(monkeypatch):
 
     def fake_api(method, path, token, payload=None):
         calls.append(path)
-        if "page=1" in path:
+        if path.endswith("page=1"):
             return full_page
-        if "page=2" in path:
+        if path.endswith("page=2"):
             return last_page
         return []
 
