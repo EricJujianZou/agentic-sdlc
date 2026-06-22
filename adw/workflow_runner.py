@@ -563,7 +563,7 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
             "Read the ones relevant to your stage (the latest plan output "
             "is your work order):\n" + listing + "\n"
         )
-    manifest_section = _plan_manifest(run_dir)
+    manifest_section = _plan_manifest(run_dir) if stage in ("implement", "test", "review") else None
     if manifest_section:
         prompt += "\n" + manifest_section + "\n"
     prompt_path = run_dir / f"iter{state.iteration:02d}_{stage}_prompt.md"
