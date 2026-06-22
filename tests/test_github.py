@@ -271,6 +271,51 @@ def test_engine_repo_slug_falls_back_to_engine_remote(monkeypatch):
     assert engine_repo_slug() == ("EricJujianZou", "agentic-sdlc")
 
 
+def _repo(name, owner="EricJujianZou", archived=False, disabled=False):
+    return {
+        "name": name,
+        "owner": {"login": owner},
+        "archived": archived,
+        "disabled": disabled,
+        "clone_url": f"https://github.com/{owner}/{name}.git",
+    }
+
+
+def test_list_account_repos_filters_owner_archived_disabled(monkeypatch):
+    page = [
+        _repo("mine"),
+        _repo("not-mine", owner="SomeoneElse"),
+        _repo("dead", archived=True),
+        _repo("off", disabled=True),
+    ]
+
+    def fake_api(method, path, token, payload=None):
+        return page if "page=1" in path else []
+
+    monkeypatch.setattr("adw.github.api_request", fake_api)
+    repos = list_account_repos("tok", "EricJujianZou")
+    assert repos == [("EricJujianZou", "mine", "https://github.com/EricJujianZou/mine.git")]
+
+
+def test_list_account_repos_pages_until_short_page(monkeypatch):
+    calls = []
+    full_page = [_repo(f"repo{i}") for i in range(100)]
+    last_page = [_repo("repo100")]
+
+    def fake_api(method, path, token, payload=None):
+        calls.append(path)
+        if "page=1" in path:
+            return full_page
+        if "page=2" in path:
+            return last_page
+        return []
+
+    monkeypatch.setattr("adw.github.api_request", fake_api)
+    repos = list_account_repos("tok", "EricJujianZou")
+    assert len(repos) == 101
+    assert len(calls) == 2
+
+
 def test_api_request_offline_raises_github_error(monkeypatch):
     import urllib.error
 
