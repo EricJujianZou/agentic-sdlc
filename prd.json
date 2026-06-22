@@ -412,6 +412,41 @@
       "skill_match": null,
       "passes": false,
       "status": "blocked"
+    },
+    {
+      "id": "GH-59",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "Mid-ticket checkpoint: resume a quotad ticket from its last stage via state.json",
+      "description": "Today adw/orchestrator.py run_ticket always calls new_state(story.id) at entry, resetting iteration to 1 and the stage to plan, so a ticket interrupted by quota (S-015 'quotad') re-runs from plan on resume even though git already holds the prior stages' commits on the adw/<id> branch. That is correct (git-as-memory means the new plan stage sees the earlier work) but wastes tokens \u2014 the exact constraint that matters on a subscription. Add a bounded checkpoint/resume: when run_ticket starts a ticket that has an existing state.json for the SAME ticket_id left at a mid-pipeline stage (i.e. the prior run was interrupted, not finished), resume from that stage instead of starting fresh, re-using the persisted iteration count; completed stages whose outputs are already committed are not re-run. A fresh ticket (no prior state, or a state.json for a different ticket_id, or a finished run) behaves exactly as today. The resume must stay fully bounded: it still honors max_iterations and the circuit breaker, and a resumed run can never loop unbounded. This is leverage on our existing state.json hand-off, not a new memory layer.",
+      "acceptance_criteria": [
+        "run_ticket resumes from an existing state.json when it is for the same story.id and was left at a mid-pipeline stage (a quota interruption), re-entering at that stage and preserving the persisted iteration count instead of calling new_state",
+        "A fresh ticket \u2014 no state.json, a state.json for a different ticket_id, or one whose run already finished \u2014 behaves exactly as today (new_state, iteration 1, stage plan); existing single-ticket behavior is unchanged",
+        "On resume, stages already completed in the prior run (their outputs committed to the work branch) are not re-invoked; the loop re-enters at the first incomplete stage",
+        "A resumed run stays bounded: it honors max_iterations and the circuit breaker exactly as a fresh run, and cannot loop unbounded",
+        "Unit tests with a fake invoke_fn cover: resume from a mid-pipeline state.json re-enters at the recorded stage with the iteration preserved; a fresh ticket and a different-ticket state.json both start fresh; a resumed run still halts at max_iterations",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "GH-58",
+      "type": "system-repair",
+      "priority": 2,
+      "title": "New ticket branch is cut from current HEAD, not main, so an interrupted run poisons the next ticket branch",
+      "description": "## Problem\n\n`_ensure_work_branch` (`adw/workflow_runner.py`) creates a new ticket branch\nfrom **whatever HEAD currently points at**, never from a clean base:\n\n```\ndef _ensure_work_branch(branch):\n    if _git(\"branch\", \"--list\", branch):\n        _git(\"checkout\", branch)\n    else:\n        _git(\"checkout\", \"-b\", branch)   # <- cut from current HEAD\n```\n\nThe harness leaves HEAD on the last ticket's branch between runs (and an\n*interrupted* run leaves HEAD on the branch of the ticket that crashed). So the\nnext ticket is branched **on top of** the previous one. Its diff-to-`main` then\nincludes the earlier branch's commits, and an abandoned/in-flight branch poisons\nthe base of the next PR.\n\n## Evidence\n\nGH-56 was claimed (`chore: mark GH-56 in_progress`) and then interrupted before\nany stage ran, leaving HEAD on `adw/GH-56`. The next ticket, **GH-53**, was cut\nfrom that tip: `git merge-base --is-ancestor adw/GH-56 adw/GH-53` is true, so\nPR #57 (GH-53) carries GH-56's marker commit in its history. This is the\nconcrete instance of the \"branches are often stacked\" gotcha already noted in\n`CLAUDE.md`, but there is no guard and no recovery for it.\n\nThe GH-47 stale-`in_progress` reaper reduces this (it reclaims the stranded\nticket) but does NOT eliminate it: whenever the next picked ticket differs from\nthe reclaimed one, or HEAD simply is not `main` at branch-creation time, the new\nbranch is still cut from the wrong base.\n\n## Approach (proposed)\n\nWhen creating a *new* ticket branch, base it on `main` (or `origin/main`) rather\nthan current HEAD - e.g. `git checkout -b adw/<id> origin/main` after a fetch,\nor `git switch main` before `checkout -b`. Existing branches (resume case) are\nstill checked out as-is. Keep it surgical: this is about the branch *base*, not\nabout rebasing or touching already-stacked branches.",
+      "acceptance_criteria": [
+        "A new ticket branch is created from `main`/`origin/main`, independent of the",
+        "Resuming an existing `adw/<id>` branch is unchanged (checkout, no rebase).",
+        "An interrupted run that leaves HEAD on a dead ticket branch cannot cause the",
+        "Unit test covers: new branch cut while HEAD is on an unrelated branch ends up",
+        "Full suite stays green (`uv run pytest -q`)."
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "in_progress"
     }
   ]
 }
