@@ -31,6 +31,7 @@ class StatusBlock:
     suggested_tools: list[str] = field(default_factory=list)
     system_repair_suggested: bool = False
     pr_description: str | None = None
+    file_manifest: dict | None = None
 
 
 def _candidate_objects(text: str):
