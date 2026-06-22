@@ -304,24 +304,6 @@
       "status": "done"
     },
     {
-      "id": "S-017",
-      "type": "system-repair",
-      "priority": 3,
-      "title": "Mid-ticket checkpoint: resume a quotad ticket from its last stage via state.json",
-      "description": "Today adw/orchestrator.py run_ticket always calls new_state(story.id) at entry, resetting iteration to 1 and the stage to plan, so a ticket interrupted by quota (S-015 'quotad') re-runs from plan on resume even though git already holds the prior stages' commits on the adw/<id> branch. That is correct (git-as-memory means the new plan stage sees the earlier work) but wastes tokens \u2014 the exact constraint that matters on a subscription. Add a bounded checkpoint/resume: when run_ticket starts a ticket that has an existing state.json for the SAME ticket_id left at a mid-pipeline stage (i.e. the prior run was interrupted, not finished), resume from that stage instead of starting fresh, re-using the persisted iteration count; completed stages whose outputs are already committed are not re-run. A fresh ticket (no prior state, or a state.json for a different ticket_id, or a finished run) behaves exactly as today. The resume must stay fully bounded: it still honors max_iterations and the circuit breaker, and a resumed run can never loop unbounded. This is leverage on our existing state.json hand-off, not a new memory layer.",
-      "acceptance_criteria": [
-        "run_ticket resumes from an existing state.json when it is for the same story.id and was left at a mid-pipeline stage (a quota interruption), re-entering at that stage and preserving the persisted iteration count instead of calling new_state",
-        "A fresh ticket \u2014 no state.json, a state.json for a different ticket_id, or one whose run already finished \u2014 behaves exactly as today (new_state, iteration 1, stage plan); existing single-ticket behavior is unchanged",
-        "On resume, stages already completed in the prior run (their outputs committed to the work branch) are not re-invoked; the loop re-enters at the first incomplete stage",
-        "A resumed run stays bounded: it honors max_iterations and the circuit breaker exactly as a fresh run, and cannot loop unbounded",
-        "Unit tests with a fake invoke_fn cover: resume from a mid-pipeline state.json re-enters at the recorded stage with the iteration preserved; a fresh ticket and a different-ticket state.json both start fresh; a resumed run still halts at max_iterations",
-        "Full suite uv run pytest -q stays green"
-      ],
-      "skill_match": null,
-      "passes": false,
-      "status": "open"
-    },
-    {
       "id": "S-018",
       "type": "system-repair",
       "priority": 1,
@@ -410,7 +392,7 @@
     },
     {
       "id": "GH-56",
-      "type": "feat",
+      "type": "system-repair",
       "priority": 2,
       "title": "Multi-repo driver: auto-discover, auto-clone, and sweep all adw backlogs until quota (sequential v1)",
       "description": "## Problem\n\nCross-repo work has no unattended path. `ADW_REPO` selects one target per\nprocess; an interactive `$env:ADW_REPO` never reaches the Task Scheduler job\n(it's a separate process tree reading the persistent environment, where the var\nis empty by design); so the overnight automation only ever works the engine\nitself. Per-repo scheduled tasks + env vars don't scale. The repo-agnostic\nengine (S-011) was step one toward multi-repo; this is the driver layer on top.\n\nNote: syncing/retrieving issues is already deterministic Python (no LLM, no\ntokens) \u2014 `workflows/sync_issues.py` (REST + regex). Token cost is only the\nwork stages (plan/implement/test/review). So sweeping every repo's issues is\nfree; the only bounded resource is the work, which the circuit breaker already\ngoverns. Hence: no artificial ticket cap \u2014 work until quota'd or backlogs empty.\n\n## Decisions (locked)\n\n- **Discovery:** auto-discover all the account's GitHub repos that have \u22651 open\n  `adw`-labeled issue (no maintained list).\n- **Local clones:** auto-clone any missing repo into a managed dir.\n- **No global cap:** sweep and work as much as possible until quota'd or empty.\n- **Shared breaker/quota:** ONE account-wide breaker + cooldown across all repos.\n- **Ordering:** round-robin one ticket per repo (so a quota wall mid-sweep leaves\n  some progress everywhere rather than starving later repos).\n- **Sequential v1** \u2014 parallel deferred until the #4 worktree work lands.\n\n## Approach\n\nA new driver (e.g. `workflows/poll_all.py`) that:\n1. Discovers targets: list the account's repos via the API, keep those with an\n   open `adw` issue.\n2. Ensures local clones: clone missing repos into a managed dir; resolve each\n   repo's working-tree path (idempotent; `git fetch` if already present).\n3. Syncs every repo (reuse `sync_issues`), populating each repo's own `prd.json`.\n4. Works tickets round-robin across repos until the shared breaker trips (quota)\n   or all backlogs are empty \u2014 reusing `run_one_story`/`run_ticket` per ticket,\n   re-resolving `paths.target_root()` per repo (clear its `lru_cache` between\n   repos).\n5. On quota: the current repo's ticket goes `quotad`; the driver writes the\n   GLOBAL cooldown and stops the whole sweep.\n6. Resumes on the next scheduled firing once the global cooldown elapses\n   (`quotad` + open tickets are picked up automatically).\n\n## Key new pieces\n\n- Repo **discovery** (API: list repos \u2192 filter to those with an open `adw` issue).\n- **Auto-clone manager** (managed dir, idempotent).\n- **Driver loop** with per-repo `target_root` cache reset + per-repo failure\n  isolation (one repo's clone/sync/ticket error never aborts the sweep).\n- **Lift the breaker cooldown to a global, out-of-repo store** (e.g.\n  `%LOCALAPPDATA%/adw/breaker.json`) \u2014 checked before the sweep, written on a\n  quota halt. This is the core change that makes the breaker account-wide instead\n  of per-`state.json`.\n- **Round-robin** cross-repo ticket selection.\n\n## Reuses unchanged\n\n`sync_issues`, `run_one_story`/`run_ticket`, the `quotad` path\n(`_finalize_story`: no PR, observer skipped, cooldown from parsed reset time),\nthe GH-47 stale-`in_progress` reaper, the autocommit/guard/stop hooks, per-repo\n`prd.json`/`state.json`.\n\n## Deferred / out of scope\n\n- Parallel cross-repo execution (needs the unmerged #4 worktrees).\n- GitHub Project (v2) as a discovery source (GraphQL; the label scan covers v1).\n- Wake-at-exact-reset precision (hourly re-fire + cooldown gate suffices).",
@@ -430,6 +412,121 @@
       "skill_match": null,
       "passes": false,
       "status": "open"
+    },
+    {
+      "id": "GH-59",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "Mid-ticket checkpoint: resume a quotad ticket from its last stage via state.json",
+      "description": "Today adw/orchestrator.py run_ticket always calls new_state(story.id) at entry, resetting iteration to 1 and the stage to plan, so a ticket interrupted by quota (S-015 'quotad') re-runs from plan on resume even though git already holds the prior stages' commits on the adw/<id> branch. That is correct (git-as-memory means the new plan stage sees the earlier work) but wastes tokens \u2014 the exact constraint that matters on a subscription. Add a bounded checkpoint/resume: when run_ticket starts a ticket that has an existing state.json for the SAME ticket_id left at a mid-pipeline stage (i.e. the prior run was interrupted, not finished), resume from that stage instead of starting fresh, re-using the persisted iteration count; completed stages whose outputs are already committed are not re-run. A fresh ticket (no prior state, or a state.json for a different ticket_id, or a finished run) behaves exactly as today. The resume must stay fully bounded: it still honors max_iterations and the circuit breaker, and a resumed run can never loop unbounded. This is leverage on our existing state.json hand-off, not a new memory layer.",
+      "acceptance_criteria": [
+        "run_ticket resumes from an existing state.json when it is for the same story.id and was left at a mid-pipeline stage (a quota interruption), re-entering at that stage and preserving the persisted iteration count instead of calling new_state",
+        "A fresh ticket \u2014 no state.json, a state.json for a different ticket_id, or one whose run already finished \u2014 behaves exactly as today (new_state, iteration 1, stage plan); existing single-ticket behavior is unchanged",
+        "On resume, stages already completed in the prior run (their outputs committed to the work branch) are not re-invoked; the loop re-enters at the first incomplete stage",
+        "A resumed run stays bounded: it honors max_iterations and the circuit breaker exactly as a fresh run, and cannot loop unbounded",
+        "Unit tests with a fake invoke_fn cover: resume from a mid-pipeline state.json re-enters at the recorded stage with the iteration preserved; a fresh ticket and a different-ticket state.json both start fresh; a resumed run still halts at max_iterations",
+        "Full suite uv run pytest -q stays green"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "GH-58",
+      "type": "system-repair",
+      "priority": 2,
+      "title": "New ticket branch is cut from current HEAD, not main, so an interrupted run poisons the next ticket branch",
+      "description": "## Problem\n\n`_ensure_work_branch` (`adw/workflow_runner.py`) creates a new ticket branch\nfrom **whatever HEAD currently points at**, never from a clean base:\n\n```\ndef _ensure_work_branch(branch):\n    if _git(\"branch\", \"--list\", branch):\n        _git(\"checkout\", branch)\n    else:\n        _git(\"checkout\", \"-b\", branch)   # <- cut from current HEAD\n```\n\nThe harness leaves HEAD on the last ticket's branch between runs (and an\n*interrupted* run leaves HEAD on the branch of the ticket that crashed). So the\nnext ticket is branched **on top of** the previous one. Its diff-to-`main` then\nincludes the earlier branch's commits, and an abandoned/in-flight branch poisons\nthe base of the next PR.\n\n## Evidence\n\nGH-56 was claimed (`chore: mark GH-56 in_progress`) and then interrupted before\nany stage ran, leaving HEAD on `adw/GH-56`. The next ticket, **GH-53**, was cut\nfrom that tip: `git merge-base --is-ancestor adw/GH-56 adw/GH-53` is true, so\nPR #57 (GH-53) carries GH-56's marker commit in its history. This is the\nconcrete instance of the \"branches are often stacked\" gotcha already noted in\n`CLAUDE.md`, but there is no guard and no recovery for it.\n\nThe GH-47 stale-`in_progress` reaper reduces this (it reclaims the stranded\nticket) but does NOT eliminate it: whenever the next picked ticket differs from\nthe reclaimed one, or HEAD simply is not `main` at branch-creation time, the new\nbranch is still cut from the wrong base.\n\n## Approach (proposed)\n\nWhen creating a *new* ticket branch, base it on `main` (or `origin/main`) rather\nthan current HEAD - e.g. `git checkout -b adw/<id> origin/main` after a fetch,\nor `git switch main` before `checkout -b`. Existing branches (resume case) are\nstill checked out as-is. Keep it surgical: this is about the branch *base*, not\nabout rebasing or touching already-stacked branches.",
+      "acceptance_criteria": [
+        "A new ticket branch is created from `main`/`origin/main`, independent of the",
+        "Resuming an existing `adw/<id>` branch is unchanged (checkout, no rebase).",
+        "An interrupted run that leaves HEAD on a dead ticket branch cannot cause the",
+        "Unit test covers: new branch cut while HEAD is on an unrelated branch ends up",
+        "Full suite stays green (`uv run pytest -q`)."
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
+      "id": "GH-64",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "Budget-aware blocker handling: fast-stop + type-conditional edit policy in implement",
+      "description": "## Problem\n\nOn 2026-06-22 GH-56 burned ~26K tokens producing a **complete** plan it already\nknew would be guard-denied (a `feat` ticket whose implementation edits harness\ndirs). Separately, implement on such a ticket would attempt `Write`s the guard\ndenies, retry, and burn the permission-denial budget \u2014 a known-failed path it is\ntold nothing about up front.\n\n## Approach\n\n- Add a rule to the read-only command files (PLAN/DECOMPOSE/REVIEW): \"on a hard\n  structural blocker, report `blocked` immediately \u2014 do not produce the full\n  deliverable.\"\n- Inject the guard's type-based edit policy into the **implement** prompt by ticket\n  type: for a non-`system-repair` ticket, \"you may not create/edit under `adw/`,\n  `workflows/`, `configs/` \u2014 the guard denies it; if the plan requires that, report\n  `blocked`.\" So implement never attempts a known-denied write.",
+      "acceptance_criteria": [
+        "Plan/decompose/review stop and report `blocked` on a hard blocker without",
+        "The implement prompt states the type-conditional harness-edit prohibition; a",
+        "Full suite stays green (`uv run pytest -q`)."
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "GH-63",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "Right-size and gate the expensive opus stages (decompose + observer)",
+      "description": "## Problem\n\n`configs/models.json` runs `decompose` and `observe` on `claude-opus-4-8`.\nDecompose only expands a terse ticket into acceptance criteria (sonnet is plenty).\nThe observer runs a whole-repo **opus** diagnosis on *every* non-`done` outcome,\nincluding clearly ticket-level failures (e.g. a guard denial or a test failure with\na stated `failure_reason`) where its self-heal value is low.\n\n## Approach\n\n- `decompose` -> sonnet.\n- Observer: run a cheap sonnet **triage** first and escalate to opus only when the\n  failure looks harness-level; and **skip** the observer entirely when\n  `failure_reason` clearly indicates a ticket-level cause.",
+      "acceptance_criteria": [
+        "Decompose uses a non-opus model.",
+        "The observer does not spend opus on a clearly ticket-level failure; it escalates",
+        "Self-host behavior is otherwise unchanged; full suite stays green."
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "GH-62",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "Reuse the CLI session across same-stage retries to cache loaded context",
+      "description": "## Problem\n\n`invoke_stage` (`adw/invoke.py`) captures `session_id` from the CLI envelope but\ndiscards it. A retry of the *same* stage spawns a fresh process that re-reads the\ncodebase at full price, even though the CLI's prompt cache would make a resumed\nsession's prior reads cheap cache-reads (~10% cost).\n\n## Approach\n\nWhen re-invoking the **same** stage within a ticket (same model + same scoped\ntools), pass `--resume <session_id>` from the prior attempt so the model keeps its\nloaded context. Cross-*stage* reuse is out of scope: stages change model\n(opus<->sonnet) and tool scope, so their sessions are not interchangeable.",
+      "acceptance_criteria": [
+        "A same-stage retry resumes the prior attempt's session via `--resume` when model",
+        "A fresh stage, a different model, or a first attempt still starts cold.",
+        "Breaker / iteration accounting is unchanged.",
+        "Full suite stays green (`uv run pytest -q`)."
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "GH-61",
+      "type": "system-repair",
+      "priority": 2,
+      "title": "Plan emits a file manifest so downstream stages stop re-surveying the repo",
+      "description": "## Problem\n\nEvery stage is a separate cold `claude -p` process (`adw/invoke.py` \u2014 no\n`--resume`, no shared session), so plan -> implement -> test -> review each\nre-explore the codebase from scratch. Measured 2026-06-22: GH-56's plan stage was\n**26,385 tokens**, of which ~90% was the agent's own `Read`/`Grep`/`Glob` (the\nfixed scaffolding is only ~2K). The downstream stages re-pay similar reads at full\nprice. This repeated exploration is the dominant per-ticket token cost.\n\n## Approach\n\n- The plan stage emits a **machine-readable file manifest** in its status block:\n  the files it will edit plus the key files to read for context (it already cites\n  `file:line` refs in prose; formalize them).\n- `compose_stage_prompt` (`adw/workflow_runner.py`) inlines the latest plan's\n  manifest directly into the implement/test/review prompts (today it only lists\n  prior-output *paths* to `Read`).\n- Command files (IMPLEMENT/TEST/REVIEW) gain a rule: \"the plan names the exact\n  files; open only those, do not survey the codebase. If the manifest is wrong or\n  insufficient, you may read more and say so.\" (Graceful degradation.)",
+      "acceptance_criteria": [
+        "The plan status block carries a structured file manifest (files-to-edit +",
+        "Implement/test/review prompts inline that manifest; downstream stages are told",
+        "A representative ticket shows reduced downstream-stage reads (token usage is",
+        "Full suite stays green (`uv run pytest -q`)."
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "open"
+    },
+    {
+      "id": "GH-60",
+      "type": "system-repair",
+      "priority": 1,
+      "title": "detect_usage_limit false-positives on a blocked stage whose output mentions usage limits (self-halts the backlog)",
+      "description": "## Problem\n\nThe circuit breaker's quota detection (`adw/safety.py` `_evaluate`) opens the\ncircuit with `USAGE_LIMIT_HALT_REASON` whenever a stage did **not** succeed AND\n`detect_usage_limit(raw_output + stderr)` matches. The non-success gate\n(`stage_succeeded = result.status is not None and result.status.outcome == \"success\"`)\nwas added (S-015/S-018) so a stage's own prose about usage limits could not\nself-trip the matcher. But a legitimate **`blocked`** outcome is also\nnon-success, so a stage that *correctly* reports `blocked` and whose output\nhappens to contain a usage-limit phrase is falsely classified as a provider\nquota halt \u2014 and a bogus fallback cooldown (`now + usage_limit_cooldown_minutes`)\nis stamped, pausing the whole backlog.\n\n## Evidence (GH-56, 2026-06-22 12:26Z overnight run)\n\n- GH-56's plan stage **succeeded** (exit 0, no timeout, full 12.7 KB plan, 26,385\n  tokens) and returned `outcome: blocked` for a real reason (a `feat` ticket\n  cannot edit harness dirs; see companion note below).\n- Its plan output contains \"...run for hours (until the ~5h **session limit**)\",\n  which matches the `\\bsession limit\\b` pattern in `_USAGE_LIMIT_PATTERNS`.\n- `not stage_succeeded` is True (outcome is `blocked`), so detection fired ->\n  ticket marked `quotad`, cooldown stamped as the **fallback** `now + 300min`\n  (`2026-06-22T17:31:55.856290Z` = run-end + exactly 5h; no real reset was\n  parsed \u2014 confirming no genuine provider message was ever received).\n- That bogus 5-hour cooldown then blocked every subsequent poll (12:34Z, 13:34Z:\n  \"circuit cooldown active\"), so GH-58 and GH-59 never ran.\n\nThis is a recurrence of the 2026-06-19 false positive in a new shape (a `blocked`\noutcome, not a `success` one).\n\n## Approach (proposed)\n\nA genuine provider usage limit cuts the CLI turn off mid-stream, so the stage\ncannot return ANY parseable structured status block \u2014 `result.status is None`.\nGate detection on that, not on \"non-success\":\n\n- Change the guard from `not stage_succeeded` to `result.status is None` (no\n  verdict at all = genuinely cut off), and/or scan only `result.stderr` / the\n  `rate_limit_event` CLI signal, never the agent's `raw_output` prose.\n\nPrefer the `result.status is None` gate \u2014 minimal and it matches the real\ncut-off semantics.",
+      "acceptance_criteria": [
+        "A stage that returns ANY structured outcome (`blocked`, `done`, `success`,",
+        "A genuine cut-off (`result.status is None`) carrying a usage-limit signal still",
+        "Unit test: a `blocked` StageResult whose `raw_output` contains \"session limit\"",
+        "Full suite stays green (`uv run pytest -q`).",
+        "**Filed human-gated (no `adw` label) on purpose:** this fix sits in the very",
+        "**Companion finding (separate, not this ticket):** GH-56 is mis-typed `feat`"
+      ],
+      "skill_match": null,
+      "passes": false,
+      "status": "in_progress"
     }
   ]
 }
