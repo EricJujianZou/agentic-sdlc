@@ -6,6 +6,7 @@ Credentials are read from the local git credential store via `git credential fil
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import urllib.error
@@ -17,6 +18,8 @@ from typing import Any
 from adw import paths
 
 API_BASE = "https://api.github.com"
+
+ENGINE_REPO_ENV = "ADW_ENGINE_REPO"
 
 
 class GitHubError(RuntimeError):
@@ -66,6 +69,19 @@ def repo_slug(repo_root: Path | str | None = None) -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
+def engine_repo_slug() -> tuple[str, str]:
+    """Return (owner, repo) for the *engine* repo (where upstream system-repair
+    reports get filed): `ADW_ENGINE_REPO` (owner/repo) if set, else the engine
+    checkout's own git remote (self-hosting: same as `repo_slug()`)."""
+    env = os.environ.get(ENGINE_REPO_ENV)
+    if env:
+        parts = env.split("/")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise GitHubError(f"{ENGINE_REPO_ENV} must be 'owner/repo', got {env!r}")
+        return parts[0], parts[1]
+    return repo_slug(paths.engine_root())
+
+
 def api_request(
     method: str,
     path: str,
@@ -99,6 +115,26 @@ def api_request(
 def list_adw_issues(owner: str, repo: str, token: str) -> list[dict]:
     """Return open Issues labeled 'adw', excluding pull requests."""
     path = f"/repos/{owner}/{repo}/issues?state=open&labels=adw&per_page=100"
+    issues = api_request("GET", path, token)
+    return [i for i in issues if "pull_request" not in i]
+
+
+def create_issue(
+    owner: str, repo: str, token: str, title: str, body: str, labels: list[str] | None = None
+) -> dict:
+    """Open a new issue. `labels` is included only when non-empty, so a plain
+    issue payload matches what a human filing one by hand would send."""
+    payload: dict[str, Any] = {"title": title, "body": body}
+    if labels:
+        payload["labels"] = list(labels)
+    return api_request("POST", f"/repos/{owner}/{repo}/issues", token, payload)
+
+
+def list_open_issues(owner: str, repo: str, token: str, label: str | None = None) -> list[dict]:
+    """Return open Issues, optionally filtered to one label, excluding pull requests."""
+    path = f"/repos/{owner}/{repo}/issues?state=open&per_page=100"
+    if label:
+        path += f"&labels={urllib.parse.quote(label, safe='')}"
     issues = api_request("GET", path, token)
     return [i for i in issues if "pull_request" not in i]
 
