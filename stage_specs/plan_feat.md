@@ -47,3 +47,12 @@ do if one materializes. No generic filler ("tests might fail").
 
 Granularity rule: a plan an implementer must re-interpret is a failed
 plan. If a step needs a sub-decision, make the decision now.
+
+## File manifest
+
+Your status block carries a `file_manifest` object: `{"edit": [...],
+"read": [...]}`, each a list of `path` or `path:line` strings. Every file
+a Step touches must appear under `edit`; files you read for context but
+won't change go under `read`. The downstream stages (implement/test/
+review) open only these files instead of re-surveying the repo, so be
+complete — an omitted file costs a re-exploration, not a stuck stage.
