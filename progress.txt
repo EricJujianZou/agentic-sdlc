@@ -25,3 +25,14 @@ stranded in_progress ticket, cheaper than threading a lock/process check
 through pick_next_story. Split as a pure predicate (reclaim_stale_in_progress,
 tickets.py) + thin IO wrapper (reap_stale_in_progress, workflow_runner.py) so
 the staleness logic itself needs no tmp-repo fixture to test.
+
+GH-56: any helper that needs the engine's own git remote (self-host check)
+must resolve it at MODULE IMPORT time, not inside the function — a test that
+monkeypatches `subprocess.run` to fake a different repo's git calls (clone,
+fetch) will also stomp the real `git remote get-url origin` call if it's
+resolved lazily, since `import subprocess` binds the same module object
+everywhere. Also: when faking a paginated API by string-matching a query
+param in a test, match on `path.endswith("&page=N")`, not `"page=N" in path`
+— `per_page=100` itself contains the substring "page=100", which contains
+"page=1" as a prefix, so an `in`-based page=1 check always matches and the
+fake "pages" forever.
