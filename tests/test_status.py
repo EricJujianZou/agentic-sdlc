@@ -70,3 +70,29 @@ def test_parses_pr_description_when_present():
 def test_pr_description_defaults_to_none_when_absent():
     block = parse_status_block(GOOD_BLOCK)
     assert block.pr_description is None
+
+
+def test_parses_file_manifest_when_present():
+    text = (
+        '{"stage": "plan", "ticket_id": "GH-61", "outcome": "success", '
+        '"file_manifest": {"edit": ["adw/status.py"], "read": ["adw/workflow_runner.py:466"]}}'
+    )
+    block = parse_status_block(text)
+    assert block.file_manifest == {
+        "edit": ["adw/status.py"],
+        "read": ["adw/workflow_runner.py:466"],
+    }
+
+
+def test_file_manifest_defaults_to_none_when_absent():
+    block = parse_status_block(GOOD_BLOCK)
+    assert block.file_manifest is None
+
+
+def test_non_dict_file_manifest_coerced_to_none():
+    text = (
+        '{"stage": "plan", "ticket_id": "GH-61", "outcome": "success", '
+        '"file_manifest": "not a dict"}'
+    )
+    block = parse_status_block(text)
+    assert block.file_manifest is None
