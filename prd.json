@@ -410,8 +410,8 @@
         "The account-wide quota is the real ceiling; the global breaker must trip"
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "in_progress"
+      "passes": true,
+      "status": "done"
     },
     {
       "id": "GH-59",
