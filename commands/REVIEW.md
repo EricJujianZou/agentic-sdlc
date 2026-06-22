@@ -20,7 +20,10 @@ with the reason in `failure_reason`. Never end your turn with a question.
 
 1. Follow `commands/PRIME.md` first.
 2. Read `stage_specs/review_feat.md` and the prior stage outputs listed
-   in this prompt (plan, implement summary, test evidence).
+   in this prompt (plan, implement summary, test evidence). The plan
+   names the exact files (the file manifest inlined in this prompt, if
+   present). Open those and only those; do not survey the codebase. If
+   the manifest is wrong or insufficient, read more and say so.
 3. Review the diff for this ticket (`git diff main...HEAD`) through the
    spec's three lenses: intent, quality/security, visual.
 4. Verdict:
