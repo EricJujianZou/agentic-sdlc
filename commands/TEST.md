@@ -20,7 +20,10 @@ with the reason in `failure_reason`. Never end your turn with a question.
 
 1. Follow `commands/PRIME.md` first.
 2. Read `stage_specs/test_feat.md` — it lists which checks to run and in
-   what order.
+   what order. The plan names the exact files (the file manifest inlined
+   in this prompt, if present). Open those and only those; do not survey
+   the codebase. If the manifest is wrong or insufficient, read more and
+   say so in your summary.
 3. Run the checks. Then verify EVERY acceptance criterion on the ticket
    individually against the actual behavior, not against the code's
    intent. Quote the evidence (test name, command output) per criterion.
