@@ -464,6 +464,38 @@ def _stage_spec_name(stage: str) -> str | None:
     return None
 
 
+def _plan_manifest(run_dir: Path) -> str | None:
+    """Render the latest plan output's `file_manifest` (if any) as a markdown
+    section telling downstream stages exactly which files to open, instead of
+    re-surveying the repo (GH-61). Degrades to None on any missing/unparseable
+    plan output or absent/empty manifest — a bad manifest costs a little
+    re-exploration, never a stuck stage."""
+    plan_outputs = sorted(run_dir.glob("iter*_plan_output.md"))
+    if not plan_outputs:
+        return None
+    try:
+        block = parse_status_block(plan_outputs[-1].read_text(encoding="utf-8"))
+    except (StatusBlockError, OSError):
+        return None
+    manifest = block.file_manifest
+    if not manifest:
+        return None
+    edit = manifest.get("edit") or []
+    read = manifest.get("read") or []
+    if not edit and not read:
+        return None
+    lines = [
+        "## File manifest (from the plan)\n",
+        "Open only these, do not survey the codebase; if the manifest is "
+        "wrong or insufficient, read more and say so.\n",
+    ]
+    if edit:
+        lines.append("Edit:\n" + "\n".join(f"- {p}" for p in edit) + "\n")
+    if read:
+        lines.append("Read:\n" + "\n".join(f"- {p}" for p in read) + "\n")
+    return "\n".join(lines)
+
+
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file, the inlined orientation + stage
     spec, and the ticket/state context.
