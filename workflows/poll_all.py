@@ -38,11 +38,9 @@ sys.path.insert(0, str(REPO_ROOT))
 from adw import paths
 from adw.github import GitHubError, engine_repo_slug, get_token, list_account_repos, list_adw_issues, repo_slug
 from adw.locks import DEFAULT_STALE_SECONDS, LockHeld, single_flight
-from adw.orchestrator import TicketOutcome
 from adw.state import load_state
 from adw.tickets import load_prd, pick_next_story
 from adw.workflow_runner import STAGE_ORDER_BY_TYPE, reap_stale_in_progress, run_one_story
-from workflows.run_backlog import DEFAULT_MAX_TICKETS
 from workflows.sync_issues import pull_and_sync
 
 
