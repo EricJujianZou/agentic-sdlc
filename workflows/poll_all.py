@@ -55,6 +55,20 @@ class RepoDescriptor:
         return f"{self.owner}/{self.name}"
 
 
+def _resolve_engine_slug() -> tuple[str, str] | None:
+    try:
+        return repo_slug(paths.engine_root())
+    except GitHubError:
+        return None
+
+
+# Resolved once at import time (a single real git call against the engine's
+# OWN checkout — not the target repo, never mocked away by a test's per-test
+# fixtures) so `ensure_clone`'s self-host short-circuit never depends on
+# whatever happens to be patching `subprocess` at call time.
+_ENGINE_SLUG = _resolve_engine_slug()
+
+
 # --- out-of-repo paths (mirrors workflows/poll_once.py's idiom) -------------
 
 
