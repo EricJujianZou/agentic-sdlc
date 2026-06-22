@@ -302,6 +302,25 @@ def test_usage_limit_text_in_successful_output_does_not_halt():
     assert s.cooldown_until is None
 
 
+def test_blocked_outcome_with_usage_limit_text_does_not_halt():
+    # Regression (dogfood 2026-06-22, GH-56): a stage that correctly reports
+    # `blocked` (a real verdict, not a cut-off) whose prose happens to mention
+    # "session limit" must not be classified as a quota halt.
+    breaker = CircuitBreaker()
+    s = state("plan")
+    reason = breaker.record(
+        s,
+        result(
+            "plan",
+            outcome="blocked",
+            raw_output="This plan would run for hours (until the ~5h session limit), "
+            "so it is blocked pending a smaller scope.",
+        ),
+    )
+    assert reason is None
+    assert s.cooldown_until is None
+
+
 def test_parse_usage_reset_future_epoch():
     future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=3)
     text = f"Claude AI usage limit reached|{int(future.timestamp())}"
