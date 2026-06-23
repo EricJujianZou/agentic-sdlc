@@ -33,6 +33,9 @@ STAGE_TOOLS: dict[str, list[str]] = {
     # observe runs read-only on a non-done ticket to diagnose root cause across
     # the whole repo (self-heal lens); it proposes, never edits or commits.
     "observe": ["Read", "Glob", "Grep", *_GIT_READONLY],
+    # observe_triage is the cheap sonnet pre-pass over the same observe prompt
+    # (GH-63); same read-only scope as observe.
+    "observe_triage": ["Read", "Glob", "Grep", *_GIT_READONLY],
     "document": ["Read", "Glob", "Grep", "Write", *_GIT_READONLY, "Bash(git add:*)", "Bash(git commit:*)"],
 }
 
