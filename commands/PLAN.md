@@ -16,6 +16,8 @@ question, and anything you ask will go unread. If you hit a contradiction,
 missing prerequisite, or any blocker, do not ask and do not stall: report
 `outcome: "blocked"` in the status block (the only channel anyone reads),
 with the reason in `failure_reason`. Never end your turn with a question.
+On a hard structural blocker, report `blocked` immediately — do not spend
+tokens producing the full plan first.
 
 1. Follow `commands/PRIME.md` first.
 2. Read `stage_specs/plan_feat.md` — it defines the exact plan format.
