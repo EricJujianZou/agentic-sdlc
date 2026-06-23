@@ -94,6 +94,28 @@ def _ref_exists(ref: str) -> bool:
         return False
 
 
+# Files the harness rewrites as its own bookkeeping (story status flips). A
+# work branch whose only diff vs base touches these has nothing to review, so
+# opening a PR for it just creates an empty "mergeable/clean" PR (GH-59/#69).
+_BOOKKEEPING_PATHS = frozenset({"prd.json", "state.json"})
+
+
+def _branch_has_reviewable_diff(branch: str, base: str = "main") -> bool:
+    """True if `branch` has any committed change beyond the harness's own
+    bookkeeping files vs its merge-base with `base` — i.e. real work to review.
+    Used to suppress an empty PR on a blocked ticket that implemented nothing.
+    Diffs against `origin/<base>` when available (what GitHub diffs the PR
+    against; a stale local `<base>` over-reports), else `<base>`. Any git
+    failure fails open (returns True) so a PR stays the safe default."""
+    base_ref = f"origin/{base}" if _ref_exists(f"origin/{base}") else base
+    try:
+        merge_base = _git("merge-base", base_ref, branch)
+        changed = _git("diff", "--name-only", f"{merge_base}..{branch}").splitlines()
+    except subprocess.CalledProcessError:
+        return True
+    return any(f.strip() and f.strip() not in _BOOKKEEPING_PATHS for f in changed)
+
+
 def _new_branch_base() -> str | None:
     if "origin" in _git("remote").split():
         try:
@@ -266,12 +288,22 @@ def _notify_github(
     try:
         token = get_token()
         owner, repo = repo_slug()
-        open_or_update_pr(
-            owner, repo, token,
-            head=branch, base="main",
-            title=_pr_title(story),
-            body=pr_body(story, outcome, pr_description),
-        )
+        # A done ticket always gets a PR; a non-done outcome (blocked/halted)
+        # only when the branch holds real work — otherwise the PR is empty and
+        # looks deceptively mergeable (GH-59/#69). The outcome comment below
+        # still fires, so the phone is notified either way.
+        if outcome == "done" or _branch_has_reviewable_diff(branch):
+            open_or_update_pr(
+                owner, repo, token,
+                head=branch, base="main",
+                title=_pr_title(story),
+                body=pr_body(story, outcome, pr_description),
+            )
+        else:
+            print(
+                f"PR skipped for {story.id}: {outcome} with no implementation "
+                "diff vs base (only harness bookkeeping)"
+            )
         issue_number = source_issue_number(story.id)
         if issue_number is not None:
             comment_on_issue(

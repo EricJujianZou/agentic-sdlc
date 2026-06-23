@@ -172,6 +172,89 @@ def test_notify_github_still_tries_pr_after_push_failure(monkeypatch):
     assert "pr" in calls
 
 
+def test_notify_github_skips_empty_pr_on_blocked_but_still_comments(monkeypatch):
+    # A blocked ticket whose branch holds no implementation (e.g. a duplicate
+    # detected at plan, GH-59/#69) must not open an empty "mergeable" PR, but
+    # the phone still gets the outcome comment.
+    calls = {}
+    monkeypatch.setattr(workflow_runner, "_push_branch", lambda branch: True)
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(workflow_runner, "_branch_has_reviewable_diff", lambda branch: False)
+    monkeypatch.setattr(
+        workflow_runner, "open_or_update_pr",
+        lambda *a, **k: calls.setdefault("pr", True),
+    )
+    monkeypatch.setattr(
+        workflow_runner, "comment_on_issue",
+        lambda *a, **k: calls.setdefault("comment", True),
+    )
+    _notify_github(_story("GH-59"), "blocked", "already shipped on main")
+    assert "pr" not in calls
+    assert "comment" in calls
+
+
+def test_notify_github_opens_pr_on_blocked_with_real_work(monkeypatch):
+    # A blocked ticket that did produce committed work still gets a PR so the
+    # human can see the partial implementation.
+    calls = {}
+    monkeypatch.setattr(workflow_runner, "_push_branch", lambda branch: True)
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+    monkeypatch.setattr(workflow_runner, "_branch_has_reviewable_diff", lambda branch: True)
+    monkeypatch.setattr(
+        workflow_runner, "open_or_update_pr",
+        lambda *a, **k: calls.setdefault("pr", True),
+    )
+    monkeypatch.setattr(workflow_runner, "comment_on_issue", lambda *a, **k: None)
+    _notify_github(_story("GH-59"), "blocked", "partial work")
+    assert "pr" in calls
+
+
+def test_notify_github_done_opens_pr_without_consulting_diff(monkeypatch):
+    # A done outcome always opens a PR; it must short-circuit before the diff
+    # check ever runs.
+    calls = {}
+    monkeypatch.setattr(workflow_runner, "_push_branch", lambda branch: True)
+    monkeypatch.setattr(workflow_runner, "get_token", lambda: "tok")
+    monkeypatch.setattr(workflow_runner, "repo_slug", lambda: ("o", "r"))
+
+    def boom(branch):
+        raise AssertionError("done must not gate the PR on a diff check")
+
+    monkeypatch.setattr(workflow_runner, "_branch_has_reviewable_diff", boom)
+    monkeypatch.setattr(
+        workflow_runner, "open_or_update_pr",
+        lambda *a, **k: calls.setdefault("pr", True),
+    )
+    monkeypatch.setattr(workflow_runner, "comment_on_issue", lambda *a, **k: None)
+    _notify_github(_story("GH-42"), "done", "")
+    assert "pr" in calls
+
+
+def test_branch_has_reviewable_diff_false_for_bookkeeping_only(tmp_path, monkeypatch):
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.setattr(paths, "target_root", lambda: repo)
+    _run_git(repo, "checkout", "-b", "adw/GH-99")
+    # Only a prd.json status flip — pure harness bookkeeping, nothing to review.
+    (repo / "prd.json").write_text(
+        '{"stories": [{"id": "GH-99", "status": "blocked"}]}', encoding="utf-8"
+    )
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-m", "chore: record GH-99 outcome: blocked")
+    assert workflow_runner._branch_has_reviewable_diff("adw/GH-99") is False
+
+
+def test_branch_has_reviewable_diff_true_for_real_work(tmp_path, monkeypatch):
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.setattr(paths, "target_root", lambda: repo)
+    _run_git(repo, "checkout", "-b", "adw/GH-99")
+    (repo / "feature.py").write_text("x = 1\n", encoding="utf-8")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-m", "adw auto: edit feature.py")
+    assert workflow_runner._branch_has_reviewable_diff("adw/GH-99") is True
+
+
 # --- _make_progress_fn (S-014) ----------------------------------------------
 
 def test_progress_fn_is_none_for_plain_story():
