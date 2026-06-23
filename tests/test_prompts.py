@@ -59,6 +59,40 @@ def test_headless_rule_present_in_stage_commands(name):
     assert '"blocked"' in text, f"{name}.md must route blockers to outcome=blocked"
 
 
+FAST_STOP_STAGE_COMMANDS = ("PLAN", "DECOMPOSE", "REVIEW")
+
+
+@pytest.mark.parametrize("name", FAST_STOP_STAGE_COMMANDS)
+def test_fast_stop_rule_present_in_readonly_stage_commands(name):
+    """GH-64: read-only stages must report `blocked` immediately on a hard
+    structural blocker rather than burning tokens producing the full
+    deliverable first. IMPLEMENT/TEST are not read-only, so excluded here."""
+    text = (REPO_ROOT / "commands" / f"{name}.md").read_text(encoding="utf-8").lower()
+    assert "report `blocked` immediately" in text or "report \"blocked\" immediately" in text \
+        or "blocked` immediately" in text, f"{name}.md missing the fast-stop rule"
+
+
+def test_compose_stage_prompt_implement_harness_policy_by_type(tmp_path):
+    from adw.workflow_runner import compose_stage_prompt
+
+    state = new_state("S-001")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    state.stage = "implement"
+
+    feat_story = Story(id="S-001", type="feat", priority=1, title="t", description="d",
+                        acceptance_criteria=["c"])
+    feat_prompt = compose_stage_prompt("implement", state, feat_story, run_dir).read_text(encoding="utf-8")
+    assert "outcome: \"blocked\"" in feat_prompt or '"blocked"' in feat_prompt
+    assert "workflows/" in feat_prompt
+    assert "Harness-edit policy" in feat_prompt
+
+    repair_story = Story(id="GH-1", type="system-repair", priority=1, title="t", description="d",
+                          acceptance_criteria=["c"])
+    repair_prompt = compose_stage_prompt("implement", state, repair_story, run_dir).read_text(encoding="utf-8")
+    assert "Harness-edit policy" not in repair_prompt
+
+
 def test_compose_stage_prompt_includes_prior_outputs(tmp_path):
     from adw.workflow_runner import compose_stage_prompt
 

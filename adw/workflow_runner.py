@@ -598,6 +598,14 @@ def _plan_manifest(run_dir: Path) -> str | None:
 # state.stage) is borrowed from the base stage.
 _PROMPT_BASE_STAGE = {"observe_triage": "observe"}
 
+# Mirrors hooks/pretooluse_guard.py HARNESS_DIRS — that file is the source of
+# truth (enforced by the hook); this copy only drives the implement-prompt
+# warning below, since hooks/ has no __init__.py to import from the engine.
+_HARNESS_DIRS = (
+    "adw", "hooks", "workflows", "stage_specs", "skills", "commands",
+    "configs", "plans", ".claude",
+)
+
 
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file, the inlined orientation + stage
@@ -670,6 +678,15 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
     manifest_section = _plan_manifest(run_dir) if stage in ("implement", "test", "review") else None
     if manifest_section:
         prompt += "\n" + manifest_section + "\n"
+    if base == "implement" and story.type != "system-repair":
+        dirs = ", ".join(f"`{d}/`" for d in _HARNESS_DIRS)
+        prompt += (
+            "\n## Harness-edit policy\n\n"
+            f"This ticket is type `{story.type}`, not `system-repair`, so the "
+            f"PreToolUse guard denies any create/edit under these harness dirs: "
+            f"{dirs}. If the plan requires editing one of these, do not attempt "
+            "the write — report `outcome: \"blocked\"` with the reason instead.\n"
+        )
     prompt_path = run_dir / f"iter{state.iteration:02d}_{stage}_prompt.md"
     prompt_path.write_text(prompt, encoding="utf-8")
     return prompt_path

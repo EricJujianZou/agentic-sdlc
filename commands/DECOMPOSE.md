@@ -16,6 +16,8 @@ criteria, the workflow persists them. You never edit files.
 question.** If the ticket is too vague or self-contradictory to expand into
 honest criteria, do not guess and do not ask — report `outcome: "blocked"`
 with the reason in `failure_reason`.
+On a hard structural blocker, report `blocked` immediately — do not spend
+tokens proposing criteria first.
 
 1. Follow `commands/PRIME.md` first.
 2. Read `stage_specs/decompose_feat.md` — the contract for what good criteria
