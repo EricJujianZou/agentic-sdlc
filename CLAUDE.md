@@ -50,6 +50,13 @@ toward caution over speed; use judgment on trivial tasks._
   backlog in the background. Expect a `prd.json` you didn't touch. For an
   attended run, keep new tickets out of its pick set (status ≠ `open`) or run by
   explicit id, so it doesn't race you for the tree.
+- **`\ADW\` task power settings (don't re-query).** `StopIfGoingOnBatteries=True`,
+  `WakeToRun=False`, `ExecutionTimeLimit=PT2H`, `MultipleInstances=IgnoreNew`. The
+  current power plan: **AC = never sleep, battery = sleep after 5 min.** So for an
+  unattended/overnight run the machine **must stay on AC** — on battery the run is
+  killed mid-stage (`LastTaskResult 0xC000013A`) and won't wake to retry, which
+  strands the in-flight ticket (reaper reclaims it next fire). A run over 2h is
+  also killed by the time limit. Verify only if behavior contradicts this.
 - **`prd.json` is saved `ensure_ascii=True`** by the harness. Don't fight the
   unicode escaping — write it the same way or let the harness rewrite it.
 - **Platform: Windows / PowerShell, CRLF.** `zoneinfo` has no tz database on

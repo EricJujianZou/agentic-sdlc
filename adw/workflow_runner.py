@@ -83,6 +83,50 @@ def _git(*args: str) -> str:
     return proc.stdout.strip()
 
 
+def _ref_exists(ref: str) -> bool:
+    try:
+        subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", ref],
+            cwd=paths.target_root(), capture_output=True, text=True, check=True,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def _new_branch_base() -> str | None:
+    if "origin" in _git("remote").split():
+        try:
+            _git("fetch", "--quiet", "origin", "main")
+        except subprocess.CalledProcessError:
+            pass
+    for candidate in ("origin/main", "main"):
+        if _ref_exists(candidate):
+            return candidate
+    return None
+
+
+def _snapshot_tracked_dirty() -> dict[str, bytes]:
+    # `_git()` strips the whole output, which would eat the leading status
+    # space of the first porcelain line and shift its fixed-column parse —
+    # call subprocess directly here so column offsets stay accurate.
+    proc = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=paths.target_root(), capture_output=True, text=True, check=True,
+    )
+    snapshot: dict[str, bytes] = {}
+    for line in proc.stdout.splitlines():
+        status, rel = line[:2], line[3:]
+        if "D" in status:
+            continue
+        if "->" in rel:
+            rel = rel.split("->", 1)[1].strip()
+        path = paths.target_root() / rel
+        if path.is_file():
+            snapshot[rel] = path.read_bytes()
+    return snapshot
+
+
 def _ensure_work_branch(branch: str) -> None:
     if _git("branch", "--list", branch):
         # GH-46: sync may have left an uncommitted prd.json write on the
@@ -91,7 +135,21 @@ def _ensure_work_branch(branch: str) -> None:
         _commit_bookkeeping("chore: persist sync before resuming work branch")
         _git("checkout", branch)
     else:
-        _git("checkout", "-b", branch)
+        # GH-58: cut new branches from a clean base (origin/main, else main)
+        # rather than current HEAD, which may be a previous/dead ticket
+        # branch left behind by an interrupted run. `checkout -f -b` never
+        # aborts on a dirty tree, so any uncommitted sync write (e.g. a
+        # fresh prd.json) is snapshotted first and restored after, landing
+        # as an uncommitted change on the new branch for `_mark_in_progress`
+        # to pick up and commit.
+        base = _new_branch_base()
+        if base is None:
+            _git("checkout", "-b", branch)
+        else:
+            dirty = _snapshot_tracked_dirty()
+            _git("checkout", "-f", "-b", branch, base)
+            for rel, data in dirty.items():
+                (paths.target_root() / rel).write_bytes(data)
 
 
 def _commit_bookkeeping(message: str) -> None:
