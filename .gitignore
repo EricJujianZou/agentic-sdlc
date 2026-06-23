@@ -220,3 +220,6 @@ __marimo__/
 # Harness runtime artifacts (per-run, never durable — see architecture.md memory model)
 state.json
 observability/runs/
+prd.json 
+# keep on giving me merge conflicts.
+
