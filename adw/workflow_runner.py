@@ -496,6 +496,15 @@ def _plan_manifest(run_dir: Path) -> str | None:
     return "\n".join(lines)
 
 
+# Internal pseudo-stages that reuse another stage's command + spec asset
+# (GH-63): observe_triage is a cheap sonnet pass over the same OBSERVE.md
+# prompt as observe, so there is one classification bar, not a duplicated
+# prompt asset. The real stage name still drives model lookup and prompt/
+# output filenames — only the *asset* (command file, spec, ticket_context
+# state.stage) is borrowed from the base stage.
+_PROMPT_BASE_STAGE = {"observe_triage": "observe"}
+
+
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file, the inlined orientation + stage
     spec, and the ticket/state context.
@@ -507,7 +516,8 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
     here — resolved from the engine via adw/paths.py — makes the prompt
     self-contained regardless of which repo is being built. Self-hosting the
     content is identical to what the agent used to Read for itself."""
-    command_file = paths.commands_dir() / f"{stage.upper()}.md"
+    base = _PROMPT_BASE_STAGE.get(stage, stage)
+    command_file = paths.commands_dir() / f"{base.upper()}.md"
     if not command_file.exists():
         raise FileNotFoundError(
             f"{command_file} missing — stage entry commands are owned by "
