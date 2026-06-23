@@ -25,7 +25,10 @@ with the reason in `failure_reason`. Never end your turn with a question.
    (the trivial workflow skips planning), work directly from the ticket
    description and acceptance criteria given in this prompt.
 3. Read `stage_specs/implement_feat.md` for conventions and definition of
-   done.
+   done. The plan names the exact files (the file manifest inlined in
+   this prompt, if present). Open those and only those; do not survey
+   the codebase. If the manifest is wrong or insufficient, read more and
+   say so in your summary.
 4. Implement step by step. Match the surrounding code's style. Run the
    build/quick checks the spec names as you go.
 5. Commit everything before you finish (file edits are micro-committed

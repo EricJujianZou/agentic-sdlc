@@ -31,6 +31,7 @@ class StatusBlock:
     suggested_tools: list[str] = field(default_factory=list)
     system_repair_suggested: bool = False
     pr_description: str | None = None
+    file_manifest: dict | None = None
 
 
 def _candidate_objects(text: str):
@@ -68,5 +69,10 @@ def parse_status_block(text: str) -> StatusBlock:
             suggested_tools=list(obj.get("suggested_tools", [])),
             system_repair_suggested=bool(obj.get("system_repair_suggested", False)),
             pr_description=obj.get("pr_description"),
+            file_manifest=(
+                obj.get("file_manifest")
+                if isinstance(obj.get("file_manifest"), dict)
+                else None
+            ),
         )
     raise StatusBlockError("no status block found in stage output")

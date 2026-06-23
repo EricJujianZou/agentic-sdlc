@@ -79,3 +79,30 @@ def test_compose_stage_prompt_includes_prior_outputs(tmp_path):
     impl_prompt = compose_stage_prompt("implement", state, story, run_dir)
     text = impl_prompt.read_text(encoding="utf-8")
     assert "iter01_plan_output.md" in text
+    assert "File manifest" not in text  # no status block in this output, degrades cleanly
+
+
+def test_compose_stage_prompt_inlines_file_manifest(tmp_path):
+    from adw.workflow_runner import compose_stage_prompt
+
+    story = Story(id="GH-61", type="system-repair", priority=1, title="t", description="d",
+                  acceptance_criteria=["c"])
+    state = new_state("GH-61")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    plan_output = (
+        '```json\n'
+        '{"stage": "plan", "ticket_id": "GH-61", "outcome": "success", '
+        '"file_manifest": {"edit": ["adw/status.py"], "read": ["adw/workflow_runner.py:466"]}}\n'
+        '```\n'
+    )
+    (run_dir / "iter01_plan_output.md").write_text(plan_output, encoding="utf-8")
+
+    state.stage = "implement"
+    impl_prompt = compose_stage_prompt("implement", state, story, run_dir)
+    text = impl_prompt.read_text(encoding="utf-8")
+    assert "File manifest" in text
+    assert "open only these" in text.lower()
+    assert "adw/status.py" in text
+    assert "adw/workflow_runner.py:466" in text
