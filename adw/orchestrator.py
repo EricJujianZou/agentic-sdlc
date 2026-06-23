@@ -24,6 +24,10 @@ STAGE_ORDER = ("plan", "implement", "test", "review")
 DOCUMENT_STAGE = "document"
 DECOMPOSE_STAGE = "decompose"
 OBSERVE_STAGE = "observe"
+# Cheap sonnet pre-pass over the same observe prompt (GH-63): run_observer
+# escalates to the opus OBSERVE_STAGE only when this triage classifies the
+# failure as harness-level.
+OBSERVE_TRIAGE_STAGE = "observe_triage"
 
 # invoke_fn(stage, state, story) -> StageResult. Injected so the loop is
 # testable without spawning real agents.
