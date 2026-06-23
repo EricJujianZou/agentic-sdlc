@@ -552,7 +552,7 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
                 "skill_match": story.skill_match,
             },
             "state": {
-                "stage": stage,
+                "stage": base,
                 "iteration": state.iteration,
                 "branch": state.branch,
                 "last_failure": state.last_failure,
