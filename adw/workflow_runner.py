@@ -527,7 +527,7 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
 
     # Inline orientation + spec so a target-cwd agent gets them without a disk read.
     prime = _read_asset(paths.commands_dir() / "PRIME.md")
-    spec_name = _stage_spec_name(stage)
+    spec_name = _stage_spec_name(base)
     spec_text = _read_asset(paths.stage_specs_dir() / spec_name) if spec_name else None
     if prime or spec_text:
         sections.append(
