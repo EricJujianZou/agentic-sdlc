@@ -540,6 +540,14 @@ def _plan_manifest(run_dir: Path) -> str | None:
 # state.stage) is borrowed from the base stage.
 _PROMPT_BASE_STAGE = {"observe_triage": "observe"}
 
+# Mirrors hooks/pretooluse_guard.py HARNESS_DIRS — that file is the source of
+# truth (enforced by the hook); this copy only drives the implement-prompt
+# warning below, since hooks/ has no __init__.py to import from the engine.
+_HARNESS_DIRS = (
+    "adw", "hooks", "workflows", "stage_specs", "skills", "commands",
+    "configs", "plans", ".claude",
+)
+
 
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file, the inlined orientation + stage
