@@ -121,11 +121,16 @@ def invoke_stage(
     model: str,
     cwd: str | Path,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    resume_session_id: str | None = None,
 ) -> StageResult:
     """Run one stage headlessly and parse its status block.
 
     A timeout is reported, not raised: the workflow decides whether it was
     productive (files changed) via git, per the circuit-breaker rules.
+
+    `resume_session_id` is only honored on the host (non-isolation) path: an
+    isolated run gets a fresh container per stage, so its CLI session store
+    is ephemeral and has nothing to resume.
     """
     prompt_path = Path(prompt_path)
     if not prompt_path.exists():
@@ -141,7 +146,7 @@ def invoke_stage(
             stage=stage,
         )
     else:
-        cmd = build_command(stage=stage, model=model)
+        cmd = build_command(stage=stage, model=model, resume_session_id=resume_session_id)
     # ADW_TICKET_RUN switches the hooks (hooks/*.py) into enforcement mode:
     # harness-file edit denial, Stop checklist, auto-commit. ADW_STAGE lets
     # stage-aware hooks skip checks a stage cannot satisfy (a read-only
