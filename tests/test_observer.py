@@ -210,6 +210,26 @@ def test_observe_and_report_swallows_observer_problem(monkeypatch):
     assert called == []  # observer couldn't analyze -> nothing posted
 
 
+def test_is_ticket_level_failure():
+    assert wr._is_ticket_level_failure("circuit open: 2 permission denials")
+    assert wr._is_ticket_level_failure("PERMISSION DENIED on Bash(rm -rf:*)")
+    assert wr._is_ticket_level_failure("3 tests failed in test_invoke.py")
+    assert not wr._is_ticket_level_failure("vague requirements, unclear scope")
+    assert not wr._is_ticket_level_failure(None)
+
+
+def test_observe_and_report_skips_observer_for_ticket_level_reason(monkeypatch):
+    called = []
+    monkeypatch.setattr(wr, "run_observer", lambda *a, **k: called.append("observer") or None)
+    posted = {}
+    monkeypatch.setattr(wr, "_post_observer",
+                        lambda num, body, label: posted.update(num=num, body=body, label=label))
+    wr._observe_and_report(_story("GH-7"), lambda *a, **k: None, "circuit open: 2 permission denials")
+    assert called == []  # observer never invoked
+    assert posted["label"] == wr.CLARIFY_LABEL
+    assert "circuit open" in posted["body"]
+
+
 def test_observe_and_report_noop_for_plain_story(monkeypatch):
     monkeypatch.setattr(wr, "run_observer", lambda *a, **k: ObserverResult(
         "harness", {"title": "t", "evidence": []}, "diag"))
