@@ -369,6 +369,36 @@ def test_pr_title_does_not_double_the_id():
     assert workflow_runner._pr_title(_s("GH-2", "Card primitive")) == "GH-2: Card primitive"
 
 
+# --- _make_invoke session reuse (GH-62) ------------------------------------
+
+def test_make_invoke_resumes_same_stage_but_starts_other_stages_cold(tmp_path, monkeypatch):
+    from adw.invoke import StageResult
+    from adw.state import State
+
+    calls = []
+
+    def _fake_invoke_stage(prompt_path, *, stage, model, cwd, timeout_seconds, resume_session_id=None):
+        calls.append(resume_session_id)
+        return StageResult(status=None, exit_code=0, session_id=f"session-{stage}")
+
+    monkeypatch.setattr(workflow_runner, "invoke_stage", _fake_invoke_stage)
+
+    story = Story(id="GH-62", type="feat", priority=5, title="t",
+                  description="d", acceptance_criteria=["a"])
+    invoke = workflow_runner._make_invoke(
+        story, tmp_path, models={"plan": "opus", "implement": "sonnet"},
+        budgets={"stage_timeout_minutes": 1}, cwd=tmp_path,
+    )
+
+    invoke("plan", State(ticket_id="GH-62", stage="plan", iteration=1), story)
+    invoke("plan", State(ticket_id="GH-62", stage="plan", iteration=2), story)
+    invoke("implement", State(ticket_id="GH-62", stage="implement", iteration=1), story)
+
+    # First plan attempt: no prior session. Retry of plan: resumes it.
+    # implement is a different stage: still cold despite plan having run.
+    assert calls == [None, "session-plan", None]
+
+
 # --- _ensure_work_branch (GH-46) --------------------------------------------
 
 def test_ensure_work_branch_commits_dirty_sync_write_before_resuming(tmp_path, monkeypatch):
