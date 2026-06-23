@@ -390,6 +390,16 @@ def _observe_and_report(
     can be switched off via budgets.observer_enabled.
     """
     number = source_issue_number(story.id)
+    if _is_ticket_level_failure(failure_reason):
+        print(f"observer skipped: ticket-level failure_reason ({failure_reason!r})")
+        if number is not None:
+            body = (
+                f"🔎 `{story.id}` observer skipped — **ticket-level**: {failure_reason}\n\n"
+                "This looks specific to the ticket, not the harness. Clarify or "
+                "refine the issue, then re-run."
+            )
+            _post_observer(number, body, CLARIFY_LABEL)
+        return
     result = run_observer(
         story, invoke_fn, failure_reason,
         state_path=state_path if state_path is not None else paths.state_path(),
