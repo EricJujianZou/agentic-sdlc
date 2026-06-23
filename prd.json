@@ -429,7 +429,7 @@
       ],
       "skill_match": null,
       "passes": false,
-      "status": "open"
+      "status": "blocked"
     },
     {
       "id": "GH-58",
@@ -491,8 +491,8 @@
         "Full suite stays green (`uv run pytest -q`)."
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "open"
+      "passes": true,
+      "status": "done"
     },
     {
       "id": "GH-61",

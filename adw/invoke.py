@@ -59,6 +59,7 @@ def build_command(
     stage: str,
     model: str,
     claude_bin: str | None = None,
+    resume_session_id: str | None = None,
 ) -> list[str]:
     """Argv for one headless stage. The prompt is NOT in the argv: it goes
     to the CLI via stdin, because the Windows npm shim (claude.cmd) routes
@@ -66,13 +67,17 @@ def build_command(
 
     `claude_bin` overrides how the CLI is located: the host path defaults to
     the PATHEXT-resolved shim, but the containerized path passes a bare
-    "claude" so it resolves against the image's PATH, not the host's."""
+    "claude" so it resolves against the image's PATH, not the host's.
+
+    `resume_session_id`, when set, appends `--resume <id>` so a same-stage
+    retry reuses the prior attempt's CLI session (cheap cache-reads instead
+    of a cold re-read of the codebase)."""
     if stage not in STAGE_TOOLS:
         raise ValueError(f"stage must be one of {tuple(STAGE_TOOLS)}, got {stage!r}")
     # On Windows the CLI is an npm shim (claude.cmd), which CreateProcess
     # cannot resolve from a bare name with shell=False; which() returns the
     # full PATHEXT-resolved path on every platform.
-    return [
+    cmd = [
         claude_bin or shutil.which("claude") or "claude",
         "-p",
         "--output-format",
@@ -82,6 +87,9 @@ def build_command(
         "--allowedTools",
         ",".join(STAGE_TOOLS[stage]),
     ]
+    if resume_session_id:
+        cmd += ["--resume", resume_session_id]
+    return cmd
 
 
 def _parse_envelope(stdout: str) -> tuple[str, int, float, str | None, int]:
@@ -113,11 +121,16 @@ def invoke_stage(
     model: str,
     cwd: str | Path,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    resume_session_id: str | None = None,
 ) -> StageResult:
     """Run one stage headlessly and parse its status block.
 
     A timeout is reported, not raised: the workflow decides whether it was
     productive (files changed) via git, per the circuit-breaker rules.
+
+    `resume_session_id` is only honored on the host (non-isolation) path: an
+    isolated run gets a fresh container per stage, so its CLI session store
+    is ephemeral and has nothing to resume.
     """
     prompt_path = Path(prompt_path)
     if not prompt_path.exists():
@@ -133,7 +146,7 @@ def invoke_stage(
             stage=stage,
         )
     else:
-        cmd = build_command(stage=stage, model=model)
+        cmd = build_command(stage=stage, model=model, resume_session_id=resume_session_id)
     # ADW_TICKET_RUN switches the hooks (hooks/*.py) into enforcement mode:
     # harness-file edit denial, Stop checklist, auto-commit. ADW_STAGE lets
     # stage-aware hooks skip checks a stage cannot satisfy (a read-only

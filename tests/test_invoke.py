@@ -34,6 +34,13 @@ def test_build_command_rejects_unknown_stage():
         build_command(stage="deploy", model="opus")
 
 
+def test_build_command_resume_appends_flag_only_when_given():
+    resumed = build_command(stage="plan", model="opus", resume_session_id="s1")
+    cold = build_command(stage="plan", model="opus")
+    assert resumed[resumed.index("--resume") + 1] == "s1"
+    assert "--resume" not in cold
+
+
 def test_parse_envelope_extracts_fields():
     envelope = (
         '{"result": "done {\\"stage\\": \\"plan\\"}", "session_id": "s1", '

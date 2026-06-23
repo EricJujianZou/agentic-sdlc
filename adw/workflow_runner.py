@@ -653,6 +653,12 @@ def _make_invoke(story: Story, run_dir: Path, *, models: dict, budgets: dict, cw
     operates on) and `run_dir` (where its prompt/output land). The sequential
     path passes the target repo; a parallel worker passes its worktree (#4)."""
     timeout_seconds = budgets["stage_timeout_minutes"] * 60
+    # Stage -> last session id, scoped to this story's invoke closure: a
+    # same-stage retry (same model + tool scope, by construction) resumes
+    # the prior attempt's CLI session instead of re-reading the codebase
+    # cold. A different stage, or this story's first attempt at a stage,
+    # has no entry and starts cold.
+    sessions: dict[str, str] = {}
 
     def invoke(stage: str, state: State, story: Story):
         prompt_path = compose_stage_prompt(stage, state, story, run_dir)
@@ -662,7 +668,10 @@ def _make_invoke(story: Story, run_dir: Path, *, models: dict, budgets: dict, cw
             model=models[stage],
             cwd=cwd,
             timeout_seconds=timeout_seconds,
+            resume_session_id=sessions.get(stage),
         )
+        if result.session_id:
+            sessions[stage] = result.session_id
         output_path = run_dir / f"iter{state.iteration:02d}_{stage}_output.md"
         output_text = result.raw_output
         if result.stderr.strip():
