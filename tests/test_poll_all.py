@@ -165,7 +165,7 @@ def _stub_models_budgets(tmp_path, monkeypatch):
     configs = tmp_path / "configs"
     configs.mkdir()
     (configs / "models.json").write_text(
-        json.dumps({s: "m" for s in ("plan", "implement", "test", "review", "decompose", "observe")}),
+        json.dumps({s: "m" for s in ("plan", "implement", "test", "review", "decompose", "observe", "observe_triage")}),
         encoding="utf-8",
     )
     (configs / "budgets.json").write_text(

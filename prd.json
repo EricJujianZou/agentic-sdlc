@@ -475,8 +475,8 @@
         "Self-host behavior is otherwise unchanged; full suite stays green."
       ],
       "skill_match": null,
-      "passes": false,
-      "status": "open"
+      "passes": true,
+      "status": "done"
     },
     {
       "id": "GH-62",

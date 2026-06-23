@@ -24,6 +24,10 @@ STAGE_ORDER = ("plan", "implement", "test", "review")
 DOCUMENT_STAGE = "document"
 DECOMPOSE_STAGE = "decompose"
 OBSERVE_STAGE = "observe"
+# Cheap sonnet pre-pass over the same observe prompt (GH-63): run_observer
+# escalates to the opus OBSERVE_STAGE only when this triage classifies the
+# failure as harness-level.
+OBSERVE_TRIAGE_STAGE = "observe_triage"
 
 # invoke_fn(stage, state, story) -> StageResult. Injected so the loop is
 # testable without spawning real agents.
@@ -359,44 +363,24 @@ def parse_observer_proposal(text: str) -> tuple[str | None, dict | None]:
     return None, None
 
 
-def run_observer(
+def _run_observer_pass(
+    stage: str,
     story: Story,
     invoke_fn: InvokeFn,
-    failure_reason: str,
+    state: State,
     *,
-    state_path: str | Path,
-    runs_root: str | Path | None = None,
+    runs_root: str | Path | None,
 ) -> ObserverResult:
-    """Run the read-only observer once on a non-done ticket (self-heal lens).
-
-    Returns its classification and, for a harness-level diagnosis, a proposed
-    repair. The observer only proposes — the caller (workflow_runner) decides
-    what to surface; the observer never files, edits, or commits anything. The
-    ticket's failure reason is threaded in as state.last_failure so the prompt
-    carries it.
-    """
-    state = State(ticket_id=story.id, stage=OBSERVE_STAGE)
-    # Preserve the breaker's cooldown (S-019). The observer runs after a halt
-    # (every non-done, non-quotad outcome), and a fresh State has
-    # cooldown_until=None — writing that to the run's state.json would wipe the
-    # pause the breaker just set, letting an auto-retry start early. Carry the
-    # prior run's cooldown forward when the existing state belongs to this same
-    # ticket; otherwise there is no cooldown to keep.
-    try:
-        prior = load_state(state_path)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError):
-        prior = None
-    if prior is not None and prior.ticket_id == story.id:
-        state.cooldown_until = prior.cooldown_until
-    state.last_failure = failure_reason
-    save_state(state, state_path)
-    result = invoke_fn(OBSERVE_STAGE, state, story)
+    """Invoke one observer pass (triage or escalate) and log it. Shared by
+    both passes of run_observer so there is one place that turns a
+    StageResult into an ObserverResult (GH-63)."""
+    result = invoke_fn(stage, state, story)
     runlog.write_stage_log(
         story.id,
-        stage=OBSERVE_STAGE,
+        stage=stage,
         iteration=state.iteration,
         payload={
-            "stage": OBSERVE_STAGE,
+            "stage": stage,
             "outcome": result.status.outcome if result.status else None,
             "summary": result.status.summary if result.status else None,
             "parse_error": result.parse_error,
@@ -416,6 +400,47 @@ def run_observer(
         )
     classification, repair = parse_observer_proposal(result.raw_output)
     return ObserverResult(classification, repair, result.status.summary)
+
+
+def run_observer(
+    story: Story,
+    invoke_fn: InvokeFn,
+    failure_reason: str,
+    *,
+    state_path: str | Path,
+    runs_root: str | Path | None = None,
+) -> ObserverResult:
+    """Run the observer on a non-done ticket (self-heal lens): a cheap sonnet
+    triage pass first, escalating to the opus pass only when triage
+    classifies the failure as harness-level (GH-63) — most outcomes are
+    ticket-level, where the opus pass would add cost without changing the
+    verdict.
+
+    Returns the authoritative classification and, for a harness-level
+    diagnosis, a proposed repair. The observer only proposes — the caller
+    (workflow_runner) decides what to surface; it never files, edits, or
+    commits anything. The ticket's failure reason is threaded in as
+    state.last_failure so the prompt carries it.
+    """
+    state = State(ticket_id=story.id, stage=OBSERVE_STAGE)
+    # Preserve the breaker's cooldown (S-019). The observer runs after a halt
+    # (every non-done, non-quotad outcome), and a fresh State has
+    # cooldown_until=None — writing that to the run's state.json would wipe the
+    # pause the breaker just set, letting an auto-retry start early. Carry the
+    # prior run's cooldown forward when the existing state belongs to this same
+    # ticket; otherwise there is no cooldown to keep.
+    try:
+        prior = load_state(state_path)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        prior = None
+    if prior is not None and prior.ticket_id == story.id:
+        state.cooldown_until = prior.cooldown_until
+    state.last_failure = failure_reason
+    save_state(state, state_path)
+    triage = _run_observer_pass(OBSERVE_TRIAGE_STAGE, story, invoke_fn, state, runs_root=runs_root)
+    if triage.classification != "harness":
+        return triage
+    return _run_observer_pass(OBSERVE_STAGE, story, invoke_fn, state, runs_root=runs_root)
 
 
 def _run_document_stage(

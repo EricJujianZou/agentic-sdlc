@@ -66,24 +66,46 @@ def test_parse_missing_or_invalid_classification():
 # --- run_observer -----------------------------------------------------------
 
 def test_run_observer_success(tmp_path):
+    # A harness-classified triage escalates: sonnet triage, then the opus pass.
+    calls = []
+
     def invoke(stage, state, story):
-        assert stage == "observe"
+        calls.append(stage)
         assert state.last_failure == "it broke"  # failure threaded into the prompt state
         return _observe_result(raw=_HARNESS_RAW)
 
     res = run_observer(_story(), invoke, "it broke",
                        state_path=tmp_path / "state.json", runs_root=tmp_path / "runs")
+    assert calls == ["observe_triage", "observe"]
     assert res.problem is None
     assert res.classification == "harness"
     assert res.repair["title"].startswith("system-repair")
 
 
-def test_run_observer_reports_problem_on_non_success(tmp_path):
+def test_run_observer_ticket_triage_does_not_escalate(tmp_path):
+    # A ticket-classified triage is authoritative: one sonnet pass, no opus.
+    calls = []
+
     def invoke(stage, state, story):
+        calls.append(stage)
+        return _observe_result(raw=_TICKET_RAW)
+
+    res = run_observer(_story(), invoke, "it broke",
+                       state_path=tmp_path / "state.json", runs_root=tmp_path / "runs")
+    assert calls == ["observe_triage"]
+    assert res.classification == "ticket"
+
+
+def test_run_observer_reports_problem_on_non_success(tmp_path):
+    calls = []
+
+    def invoke(stage, state, story):
+        calls.append(stage)
         return _observe_result(outcome="blocked", failure_reason="logs unreadable")
 
     res = run_observer(_story(), invoke, "x",
                        state_path=tmp_path / "state.json", runs_root=tmp_path / "runs")
+    assert calls == ["observe_triage"]  # non-success triage short-circuits, no escalation
     assert res.classification is None
     assert res.problem == "logs unreadable"
 
@@ -186,6 +208,26 @@ def test_observe_and_report_swallows_observer_problem(monkeypatch):
     monkeypatch.setattr(wr, "_post_observer", lambda *a, **k: called.append(a))
     wr._observe_and_report(_story("GH-7"), lambda *a, **k: None, "x")
     assert called == []  # observer couldn't analyze -> nothing posted
+
+
+def test_is_ticket_level_failure():
+    assert wr._is_ticket_level_failure("circuit open: 2 permission denials")
+    assert wr._is_ticket_level_failure("PERMISSION DENIED on Bash(rm -rf:*)")
+    assert wr._is_ticket_level_failure("3 tests failed in test_invoke.py")
+    assert not wr._is_ticket_level_failure("vague requirements, unclear scope")
+    assert not wr._is_ticket_level_failure(None)
+
+
+def test_observe_and_report_skips_observer_for_ticket_level_reason(monkeypatch):
+    called = []
+    monkeypatch.setattr(wr, "run_observer", lambda *a, **k: called.append("observer") or None)
+    posted = {}
+    monkeypatch.setattr(wr, "_post_observer",
+                        lambda num, body, label: posted.update(num=num, body=body, label=label))
+    wr._observe_and_report(_story("GH-7"), lambda *a, **k: None, "circuit open: 2 permission denials")
+    assert called == []  # observer never invoked
+    assert posted["label"] == wr.CLARIFY_LABEL
+    assert "circuit open" in posted["body"]
 
 
 def test_observe_and_report_noop_for_plain_story(monkeypatch):

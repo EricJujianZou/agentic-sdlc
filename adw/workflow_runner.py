@@ -323,6 +323,32 @@ def _set_run_label(story: Story, *, add: tuple[str, ...] = (), remove: tuple[str
 SELF_HEAL_LABEL = "self-heal-suggested"   # harness-level: a system-repair is proposed
 CLARIFY_LABEL = "needs-clarification"     # ticket-level: refine the ticket and re-run
 
+# Substrings of failure_reason that are conservatively ticket-level on their
+# face — a guard denial, a circuit-open halt, or a stated test failure — so
+# spending the observer (even the cheap triage pass) adds little self-heal
+# value (GH-63). Kept narrow and named here so it stays trivially tunable;
+# when in doubt, prefer letting the triage pass classify rather than adding
+# to this list — a guard/permission-denial failure has surfaced real harness
+# bugs before (see memory: dogfood-usage-limit-false-positive).
+_TICKET_LEVEL_FAILURE_MARKERS = (
+    "permission denial",
+    "permission denied",
+    "circuit open",
+    "test failed",
+    "tests failed",
+    "pytest",
+    "assertionerror",
+)
+
+
+def _is_ticket_level_failure(reason: str | None) -> bool:
+    """Whether `failure_reason` is conservatively ticket-level on its face,
+    so `_observe_and_report` can skip the observer entirely (GH-63)."""
+    if not reason:
+        return False
+    lowered = reason.lower()
+    return any(marker in lowered for marker in _TICKET_LEVEL_FAILURE_MARKERS)
+
 
 def _post_observer(number: int, body: str, label: str) -> None:
     """Best-effort: comment the observer's verdict on the issue and add a label.
@@ -422,6 +448,16 @@ def _observe_and_report(
     can be switched off via budgets.observer_enabled.
     """
     number = source_issue_number(story.id)
+    if _is_ticket_level_failure(failure_reason):
+        print(f"observer skipped: ticket-level failure_reason ({failure_reason!r})")
+        if number is not None:
+            body = (
+                f"🔎 `{story.id}` observer skipped — **ticket-level**: {failure_reason}\n\n"
+                "This looks specific to the ticket, not the harness. Clarify or "
+                "refine the issue, then re-run."
+            )
+            _post_observer(number, body, CLARIFY_LABEL)
+        return
     result = run_observer(
         story, invoke_fn, failure_reason,
         state_path=state_path if state_path is not None else paths.state_path(),
@@ -554,6 +590,15 @@ def _plan_manifest(run_dir: Path) -> str | None:
     return "\n".join(lines)
 
 
+# Internal pseudo-stages that reuse another stage's command + spec asset
+# (GH-63): observe_triage is a cheap sonnet pass over the same OBSERVE.md
+# prompt as observe, so there is one classification bar, not a duplicated
+# prompt asset. The real stage name still drives model lookup and prompt/
+# output filenames — only the *asset* (command file, spec, ticket_context
+# state.stage) is borrowed from the base stage.
+_PROMPT_BASE_STAGE = {"observe_triage": "observe"}
+
+
 def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) -> Path:
     """Concatenate the stage's command file, the inlined orientation + stage
     spec, and the ticket/state context.
@@ -565,7 +610,8 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
     here — resolved from the engine via adw/paths.py — makes the prompt
     self-contained regardless of which repo is being built. Self-hosting the
     content is identical to what the agent used to Read for itself."""
-    command_file = paths.commands_dir() / f"{stage.upper()}.md"
+    base = _PROMPT_BASE_STAGE.get(stage, stage)
+    command_file = paths.commands_dir() / f"{base.upper()}.md"
     if not command_file.exists():
         raise FileNotFoundError(
             f"{command_file} missing — stage entry commands are owned by "
@@ -575,7 +621,7 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
 
     # Inline orientation + spec so a target-cwd agent gets them without a disk read.
     prime = _read_asset(paths.commands_dir() / "PRIME.md")
-    spec_name = _stage_spec_name(stage)
+    spec_name = _stage_spec_name(base)
     spec_text = _read_asset(paths.stage_specs_dir() / spec_name) if spec_name else None
     if prime or spec_text:
         sections.append(
@@ -600,7 +646,7 @@ def compose_stage_prompt(stage: str, state: State, story: Story, run_dir: Path) 
                 "skill_match": story.skill_match,
             },
             "state": {
-                "stage": stage,
+                "stage": base,
                 "iteration": state.iteration,
                 "branch": state.branch,
                 "last_failure": state.last_failure,
