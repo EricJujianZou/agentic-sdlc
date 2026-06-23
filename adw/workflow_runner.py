@@ -265,6 +265,32 @@ def _set_run_label(story: Story, *, add: tuple[str, ...] = (), remove: tuple[str
 SELF_HEAL_LABEL = "self-heal-suggested"   # harness-level: a system-repair is proposed
 CLARIFY_LABEL = "needs-clarification"     # ticket-level: refine the ticket and re-run
 
+# Substrings of failure_reason that are conservatively ticket-level on their
+# face — a guard denial, a circuit-open halt, or a stated test failure — so
+# spending the observer (even the cheap triage pass) adds little self-heal
+# value (GH-63). Kept narrow and named here so it stays trivially tunable;
+# when in doubt, prefer letting the triage pass classify rather than adding
+# to this list — a guard/permission-denial failure has surfaced real harness
+# bugs before (see memory: dogfood-usage-limit-false-positive).
+_TICKET_LEVEL_FAILURE_MARKERS = (
+    "permission denial",
+    "permission denied",
+    "circuit open",
+    "test failed",
+    "tests failed",
+    "pytest",
+    "assertionerror",
+)
+
+
+def _is_ticket_level_failure(reason: str | None) -> bool:
+    """Whether `failure_reason` is conservatively ticket-level on its face,
+    so `_observe_and_report` can skip the observer entirely (GH-63)."""
+    if not reason:
+        return False
+    lowered = reason.lower()
+    return any(marker in lowered for marker in _TICKET_LEVEL_FAILURE_MARKERS)
+
 
 def _post_observer(number: int, body: str, label: str) -> None:
     """Best-effort: comment the observer's verdict on the issue and add a label.
