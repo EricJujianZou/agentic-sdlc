@@ -66,24 +66,46 @@ def test_parse_missing_or_invalid_classification():
 # --- run_observer -----------------------------------------------------------
 
 def test_run_observer_success(tmp_path):
+    # A harness-classified triage escalates: sonnet triage, then the opus pass.
+    calls = []
+
     def invoke(stage, state, story):
-        assert stage == "observe"
+        calls.append(stage)
         assert state.last_failure == "it broke"  # failure threaded into the prompt state
         return _observe_result(raw=_HARNESS_RAW)
 
     res = run_observer(_story(), invoke, "it broke",
                        state_path=tmp_path / "state.json", runs_root=tmp_path / "runs")
+    assert calls == ["observe_triage", "observe"]
     assert res.problem is None
     assert res.classification == "harness"
     assert res.repair["title"].startswith("system-repair")
 
 
-def test_run_observer_reports_problem_on_non_success(tmp_path):
+def test_run_observer_ticket_triage_does_not_escalate(tmp_path):
+    # A ticket-classified triage is authoritative: one sonnet pass, no opus.
+    calls = []
+
     def invoke(stage, state, story):
+        calls.append(stage)
+        return _observe_result(raw=_TICKET_RAW)
+
+    res = run_observer(_story(), invoke, "it broke",
+                       state_path=tmp_path / "state.json", runs_root=tmp_path / "runs")
+    assert calls == ["observe_triage"]
+    assert res.classification == "ticket"
+
+
+def test_run_observer_reports_problem_on_non_success(tmp_path):
+    calls = []
+
+    def invoke(stage, state, story):
+        calls.append(stage)
         return _observe_result(outcome="blocked", failure_reason="logs unreadable")
 
     res = run_observer(_story(), invoke, "x",
                        state_path=tmp_path / "state.json", runs_root=tmp_path / "runs")
+    assert calls == ["observe_triage"]  # non-success triage short-circuits, no escalation
     assert res.classification is None
     assert res.problem == "logs unreadable"
 
