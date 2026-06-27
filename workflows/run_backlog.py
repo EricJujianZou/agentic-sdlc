@@ -27,6 +27,7 @@ from adw.workflow_runner import (
     BacklogResult,
     STAGE_ORDER_BY_TYPE,
     reap_stale_in_progress,
+    reconcile_completed_against_main,
     run_backlog_loop,
     run_one_story,
     run_parallel_backlog,
@@ -58,6 +59,12 @@ def run_backlog(
     )
     if reclaimed:
         print(f"backlog runner: reclaimed stale in_progress ticket(s): {', '.join(reclaimed)}")
+
+    # GH-78: a ticket already merged to origin/main must never be re-run, even
+    # if the local ledger has drifted (reset/reopen) to a pickable state.
+    reconciled = reconcile_completed_against_main()
+    if reconciled:
+        print(f"backlog runner: reconciled already-merged ticket(s): {', '.join(reconciled)}")
 
     if parallel:
         return run_parallel_backlog(
