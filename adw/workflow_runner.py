@@ -57,6 +57,7 @@ from adw.tickets import (
     pick_next_stories,
     pick_next_story,
     reclaim_stale_in_progress,
+    reconcile_completed,
     save_prd,
 )
 
@@ -211,6 +212,57 @@ def reap_stale_in_progress(
         save_prd(prd, prd_path)
         _commit_bookkeeping(f"chore: reclaim stale in_progress: {', '.join(reclaimed)}")
     return reclaimed
+
+
+def _completed_ticket_ids_on_main() -> set[str]:
+    """Ticket ids whose completion artifact (`docs/changes/<id>.md`) is present
+    on `origin/main` — i.e. already merged. Best-effort: any git failure
+    (offline, no remote, no such ref) yields an empty set so selection still
+    proceeds. Reads only the changelog tree, so it survives a future prd.json
+    reshape (GH-79)."""
+    root = str(paths.target_root())
+    try:
+        subprocess.run(
+            ["git", "fetch", "--quiet", "origin", "main"],
+            cwd=root, capture_output=True, text=True, timeout=60,
+        )
+    except (subprocess.SubprocessError, OSError):
+        pass  # work from whatever origin/main we already have
+    try:
+        proc = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "docs/changes"],
+            cwd=root, capture_output=True, text=True, timeout=30,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return set()
+    if proc.returncode != 0:
+        return set()
+    return {
+        Path(line.strip()).stem
+        for line in proc.stdout.splitlines()
+        if line.strip().endswith(".md")
+    }
+
+
+def reconcile_completed_against_main(
+    *, prd_path: str | Path | None = None, completed_ids: set[str] | None = None,
+) -> list[str]:
+    """Reconcile the local ledger against work already merged to `origin/main`
+    (GH-78): mark already-merged tickets terminal so a `prd.json` that has
+    drifted behind `origin/main` cannot re-select them, and commit the change
+    so the tree stays clean for the next stage. `completed_ids` is injectable
+    for tests; in production it is read from `origin/main`'s changelog. Returns
+    the ids reconciled."""
+    prd_path = paths.prd_path() if prd_path is None else Path(prd_path)
+    ids = _completed_ticket_ids_on_main() if completed_ids is None else completed_ids
+    if not ids:
+        return []
+    prd = load_prd(prd_path)
+    changed = reconcile_completed(prd, ids)
+    if changed:
+        save_prd(prd, prd_path)
+        _commit_bookkeeping(f"chore: reconcile already-merged tickets: {', '.join(changed)}")
+    return changed
 
 
 def _make_verify_fn(budgets: dict, cwd: str | Path | None = None):

@@ -179,12 +179,19 @@ def reclaim_stale_in_progress(
     live_ticket_id: str | None,
     state_age_seconds: float | None,
 ) -> list[str]:
-    """Flip every `in_progress` story back to `open` unless it is provably the
-    one a live run is working (GH-47): `state.json`'s `ticket_id` matches it
-    AND its heartbeat (mtime age) is within `stale_seconds`. A missing
-    heartbeat (`state_age_seconds` or `live_ticket_id` is None) is never
-    treated as live. Pure — no IO; the caller supplies the heartbeat reading.
-    Returns the ids reclaimed, in story order."""
+    """Flip every stranded `in_progress` story back to a pickable state unless
+    it is provably the one a live run is working (GH-47): `state.json`'s
+    `ticket_id` matches it AND its heartbeat (mtime age) is within
+    `stale_seconds`. A missing heartbeat (`state_age_seconds` or
+    `live_ticket_id` is None) is never treated as live. Pure — no IO; the
+    caller supplies the heartbeat reading. Returns the ids reclaimed, in story
+    order.
+
+    A `system-repair` ticket is restored to `blocked`, not `open` (GH-78): it
+    is human-gated (only a human flips it to `open`), so reclaiming a stale one
+    to `open` would silently re-arm it for auto-pick — exactly the gate-bypass
+    that re-ran already-merged GH-56/GH-61. Every other type returns to `open`.
+    """
     reclaimed: list[str] = []
     for s in prd.stories:
         if s.status != "in_progress":
@@ -195,9 +202,27 @@ def reclaim_stale_in_progress(
             and state_age_seconds <= stale_seconds
         )
         if not live:
-            s.status = "open"
+            s.status = "blocked" if s.type == "system-repair" else "open"
             reclaimed.append(s.id)
     return reclaimed
+
+
+def reconcile_completed(prd: Prd, completed_ids: set[str]) -> list[str]:
+    """Mark any story whose work is already merged to `origin/main` (its id is
+    in `completed_ids`) as terminal — `passes=true`, `status='done'` — so a
+    local `prd.json` that has drifted behind `origin/main` can never re-select
+    an already-merged ticket (GH-78). This is the type-agnostic terminal-guard:
+    GH-56 (a feat re-typed to system-repair) and GH-61 were both re-run after
+    merging because the local ledger had been reset to a pickable state. Pure —
+    no IO; the caller supplies the merged-id set. Returns the ids changed, in
+    story order."""
+    changed: list[str] = []
+    for s in prd.stories:
+        if s.id in completed_ids and not (s.passes and s.status == "done"):
+            s.passes = True
+            s.status = "done"
+            changed.append(s.id)
+    return changed
 
 
 def get_story(prd: Prd, story_id: str) -> Story:

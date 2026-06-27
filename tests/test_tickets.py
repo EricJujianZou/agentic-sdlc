@@ -13,6 +13,7 @@ from adw.tickets import (
     pick_next_stories,
     pick_next_story,
     reclaim_stale_in_progress,
+    reconcile_completed,
     save_prd,
 )
 
@@ -276,3 +277,64 @@ def test_reclaim_stale_in_progress_leaves_other_statuses_untouched():
     )
     assert reclaimed == []
     assert [s.status for s in prd.stories] == ["open", "blocked", "quotad", "done"]
+
+
+def test_reclaim_stale_in_progress_system_repair_returns_to_blocked():
+    # GH-78: a stale system-repair ticket is human-gated, so reclaiming it must
+    # restore `blocked` (not `open`), or it silently re-arms for auto-pick.
+    prd = Prd(
+        project="p",
+        stories=[
+            story(id="S-001", type="feat", status="in_progress"),
+            story(id="S-002", type="system-repair", status="in_progress"),
+        ],
+    )
+    reclaimed = reclaim_stale_in_progress(
+        prd, stale_seconds=60, live_ticket_id=None, state_age_seconds=None,
+    )
+    assert reclaimed == ["S-001", "S-002"]
+    assert prd.stories[0].status == "open"        # feat -> open
+    assert prd.stories[1].status == "blocked"     # system-repair -> blocked (gated)
+
+
+# --- reconcile_completed (GH-78 terminal-guard) -----------------------------
+
+
+def test_reconcile_completed_marks_merged_ticket_terminal():
+    # A ticket whose work is already merged (id in completed_ids) is forced
+    # terminal, even if the local ledger drifted back to a pickable state.
+    prd = Prd(
+        project="p",
+        stories=[story(id="GH-61", type="system-repair", status="open", passes=False)],
+    )
+    changed = reconcile_completed(prd, {"GH-61"})
+    assert changed == ["GH-61"]
+    assert prd.stories[0].passes is True
+    assert prd.stories[0].status == "done"
+
+
+def test_reconcile_completed_is_idempotent_and_ignores_unknown_ids():
+    prd = Prd(
+        project="p",
+        stories=[
+            story(id="GH-61", status="done", passes=True),   # already terminal
+            story(id="GH-99", status="open", passes=False),  # not merged
+        ],
+    )
+    # GH-61 already terminal -> no change; GH-2 not present -> ignored.
+    assert reconcile_completed(prd, {"GH-61", "GH-2"}) == []
+    assert prd.stories[1].status == "open"  # untouched
+
+
+def test_reconcile_completed_only_touches_matching_stories():
+    prd = Prd(
+        project="p",
+        stories=[
+            story(id="GH-56", type="feat", status="open", passes=False),
+            story(id="GH-57", type="feat", status="open", passes=False),
+        ],
+    )
+    changed = reconcile_completed(prd, {"GH-56"})
+    assert changed == ["GH-56"]
+    assert (prd.stories[0].passes, prd.stories[0].status) == (True, "done")
+    assert (prd.stories[1].passes, prd.stories[1].status) == (False, "open")

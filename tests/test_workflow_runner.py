@@ -452,6 +452,35 @@ def test_pr_title_does_not_double_the_id():
     assert workflow_runner._pr_title(_s("GH-2", "Card primitive")) == "GH-2: Card primitive"
 
 
+def test_reconcile_completed_against_main_persists_and_short_circuits(tmp_path, monkeypatch):
+    # GH-78: the wrapper forces an already-merged ticket terminal and persists
+    # it. Inject completed_ids so no real git is needed, and stub the commit.
+    from adw.tickets import Prd, Story as _Story, load_prd, save_prd
+
+    prd_path = tmp_path / "prd.json"
+    save_prd(
+        Prd(project="p", stories=[_Story(
+            id="GH-61", type="system-repair", priority=1, title="t",
+            description="d", acceptance_criteria=["a"], passes=False, status="open",
+        )]),
+        prd_path,
+    )
+    monkeypatch.setattr(workflow_runner, "_commit_bookkeeping", lambda msg: None)
+
+    # No merged ids -> no work, no write.
+    assert workflow_runner.reconcile_completed_against_main(
+        prd_path=prd_path, completed_ids=set()
+    ) == []
+
+    # GH-61 already merged -> forced terminal and persisted to disk.
+    changed = workflow_runner.reconcile_completed_against_main(
+        prd_path=prd_path, completed_ids={"GH-61"}
+    )
+    assert changed == ["GH-61"]
+    reloaded = load_prd(prd_path)
+    assert (reloaded.stories[0].passes, reloaded.stories[0].status) == (True, "done")
+
+
 # --- _make_invoke session reuse (GH-62) ------------------------------------
 
 def test_make_invoke_resumes_same_stage_but_starts_other_stages_cold(tmp_path, monkeypatch):
@@ -611,7 +640,10 @@ def test_reap_stale_in_progress_flips_stranded_ticket_and_commits(tmp_path, monk
 
     assert reclaimed == ["GH-46"]
     saved = json.loads((repo / "prd.json").read_text(encoding="utf-8"))
-    assert saved["stories"][0]["status"] == "open"
+    # GH-78: a stale *system-repair* ticket is restored to its human-gated
+    # `blocked` state, not `open` (reclaiming it to `open` re-armed it for the
+    # auto-pick that re-ran already-merged GH-56/GH-61).
+    assert saved["stories"][0]["status"] == "blocked"
     assert _run_git(repo, "status", "--porcelain") == ""
     assert "reclaim stale in_progress" in _run_git(repo, "log", "-1", "--format=%s")
 
