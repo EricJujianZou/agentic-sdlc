@@ -78,18 +78,32 @@ def check_command(command: str, cwd: str) -> None:
         deny("push/merge while on main is blocked: agents work on adw/<ticket-id> branches")
 
 
+def _story_type(project_dir: Path, ticket_id: str) -> str | None:
+    """The `type` of story `ticket_id`, from its sharded `prd/<id>.json` shard
+    (GH-79), falling back to a legacy single-file `prd.json`."""
+    shard = project_dir / "prd" / f"{ticket_id}.json"
+    if shard.exists():
+        try:
+            return json.loads(shard.read_text(encoding="utf-8")).get("type")
+        except (OSError, json.JSONDecodeError):
+            return None
+    try:
+        prd = json.loads((project_dir / "prd.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    for story in prd.get("stories", []):
+        if story.get("id") == ticket_id:
+            return story.get("type")
+    return None
+
+
 def is_system_repair_run(project_dir: Path) -> bool:
     """True when the active ticket (state.json) is a system-repair story."""
     try:
         state = json.loads((project_dir / "state.json").read_text(encoding="utf-8"))
-        prd = json.loads((project_dir / "prd.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    ticket_id = state.get("ticket_id")
-    for story in prd.get("stories", []):
-        if story.get("id") == ticket_id:
-            return story.get("type") == "system-repair"
-    return False
+    return _story_type(project_dir, state.get("ticket_id")) == "system-repair"
 
 
 def check_file_edit(tool_input: dict, project_dir: Path) -> None:

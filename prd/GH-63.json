@@ -1,0 +1,15 @@
+{
+  "id": "GH-63",
+  "type": "system-repair",
+  "priority": 3,
+  "title": "Right-size and gate the expensive opus stages (decompose + observer)",
+  "description": "## Problem\n\n`configs/models.json` runs `decompose` and `observe` on `claude-opus-4-8`.\nDecompose only expands a terse ticket into acceptance criteria (sonnet is plenty).\nThe observer runs a whole-repo **opus** diagnosis on *every* non-`done` outcome,\nincluding clearly ticket-level failures (e.g. a guard denial or a test failure with\na stated `failure_reason`) where its self-heal value is low.\n\n## Approach\n\n- `decompose` -> sonnet.\n- Observer: run a cheap sonnet **triage** first and escalate to opus only when the\n  failure looks harness-level; and **skip** the observer entirely when\n  `failure_reason` clearly indicates a ticket-level cause.",
+  "acceptance_criteria": [
+    "Decompose uses a non-opus model.",
+    "The observer does not spend opus on a clearly ticket-level failure; it escalates",
+    "Self-host behavior is otherwise unchanged; full suite stays green."
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

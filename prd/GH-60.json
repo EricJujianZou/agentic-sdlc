@@ -1,0 +1,18 @@
+{
+  "id": "GH-60",
+  "type": "system-repair",
+  "priority": 1,
+  "title": "detect_usage_limit false-positives on a blocked stage whose output mentions usage limits (self-halts the backlog)",
+  "description": "## Problem\n\nThe circuit breaker's quota detection (`adw/safety.py` `_evaluate`) opens the\ncircuit with `USAGE_LIMIT_HALT_REASON` whenever a stage did **not** succeed AND\n`detect_usage_limit(raw_output + stderr)` matches. The non-success gate\n(`stage_succeeded = result.status is not None and result.status.outcome == \"success\"`)\nwas added (S-015/S-018) so a stage's own prose about usage limits could not\nself-trip the matcher. But a legitimate **`blocked`** outcome is also\nnon-success, so a stage that *correctly* reports `blocked` and whose output\nhappens to contain a usage-limit phrase is falsely classified as a provider\nquota halt \u2014 and a bogus fallback cooldown (`now + usage_limit_cooldown_minutes`)\nis stamped, pausing the whole backlog.\n\n## Evidence (GH-56, 2026-06-22 12:26Z overnight run)\n\n- GH-56's plan stage **succeeded** (exit 0, no timeout, full 12.7 KB plan, 26,385\n  tokens) and returned `outcome: blocked` for a real reason (a `feat` ticket\n  cannot edit harness dirs; see companion note below).\n- Its plan output contains \"...run for hours (until the ~5h **session limit**)\",\n  which matches the `\\bsession limit\\b` pattern in `_USAGE_LIMIT_PATTERNS`.\n- `not stage_succeeded` is True (outcome is `blocked`), so detection fired ->\n  ticket marked `quotad`, cooldown stamped as the **fallback** `now + 300min`\n  (`2026-06-22T17:31:55.856290Z` = run-end + exactly 5h; no real reset was\n  parsed \u2014 confirming no genuine provider message was ever received).\n- That bogus 5-hour cooldown then blocked every subsequent poll (12:34Z, 13:34Z:\n  \"circuit cooldown active\"), so GH-58 and GH-59 never ran.\n\nThis is a recurrence of the 2026-06-19 false positive in a new shape (a `blocked`\noutcome, not a `success` one).\n\n## Approach (proposed)\n\nA genuine provider usage limit cuts the CLI turn off mid-stream, so the stage\ncannot return ANY parseable structured status block \u2014 `result.status is None`.\nGate detection on that, not on \"non-success\":\n\n- Change the guard from `not stage_succeeded` to `result.status is None` (no\n  verdict at all = genuinely cut off), and/or scan only `result.stderr` / the\n  `rate_limit_event` CLI signal, never the agent's `raw_output` prose.\n\nPrefer the `result.status is None` gate \u2014 minimal and it matches the real\ncut-off semantics.",
+  "acceptance_criteria": [
+    "A stage that returns ANY structured outcome (`blocked`, `done`, `success`,",
+    "A genuine cut-off (`result.status is None`) carrying a usage-limit signal still",
+    "Unit test: a `blocked` StageResult whose `raw_output` contains \"session limit\"",
+    "Full suite stays green (`uv run pytest -q`).",
+    "**Filed human-gated (no `adw` label) on purpose:** this fix sits in the very",
+    "**Companion finding (separate, not this ticket):** GH-56 is mis-typed `feat`"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

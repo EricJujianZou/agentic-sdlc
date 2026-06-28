@@ -1,0 +1,16 @@
+{
+  "id": "GH-61",
+  "type": "system-repair",
+  "priority": 2,
+  "title": "Plan emits a file manifest so downstream stages stop re-surveying the repo",
+  "description": "## Problem\n\nEvery stage is a separate cold `claude -p` process (`adw/invoke.py` \u2014 no\n`--resume`, no shared session), so plan -> implement -> test -> review each\nre-explore the codebase from scratch. Measured 2026-06-22: GH-56's plan stage was\n**26,385 tokens**, of which ~90% was the agent's own `Read`/`Grep`/`Glob` (the\nfixed scaffolding is only ~2K). The downstream stages re-pay similar reads at full\nprice. This repeated exploration is the dominant per-ticket token cost.\n\n## Approach\n\n- The plan stage emits a **machine-readable file manifest** in its status block:\n  the files it will edit plus the key files to read for context (it already cites\n  `file:line` refs in prose; formalize them).\n- `compose_stage_prompt` (`adw/workflow_runner.py`) inlines the latest plan's\n  manifest directly into the implement/test/review prompts (today it only lists\n  prior-output *paths* to `Read`).\n- Command files (IMPLEMENT/TEST/REVIEW) gain a rule: \"the plan names the exact\n  files; open only those, do not survey the codebase. If the manifest is wrong or\n  insufficient, you may read more and say so.\" (Graceful degradation.)",
+  "acceptance_criteria": [
+    "The plan status block carries a structured file manifest (files-to-edit +",
+    "Implement/test/review prompts inline that manifest; downstream stages are told",
+    "A representative ticket shows reduced downstream-stage reads (token usage is",
+    "Full suite stays green (`uv run pytest -q`)."
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

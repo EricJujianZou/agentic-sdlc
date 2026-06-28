@@ -1,0 +1,18 @@
+{
+  "id": "S-005",
+  "type": "system-repair",
+  "priority": 4,
+  "title": "Backlog runner: outer loop over open stories",
+  "description": "v1 runs one ticket per human invocation. Add workflows/run_backlog.py (improvements C6, snarktank/ralph pattern): a thin outer loop that, while open stories with passes=false remain, invokes the per-ticket workflow for the next story, honoring the circuit-breaker cooldown gate between tickets and stopping on the first blocked/halted outcome instead of skipping it. The inner safety model is untouched; the runner adds no new authority.",
+  "acceptance_criteria": [
+    "workflows/run_backlog.py loops: pick next open story, run its workflow, repeat until no open stories remain",
+    "An active cooldown in state.json pauses or stops the loop; it is never silently overridden",
+    "A blocked or halted ticket stops the loop with a clear printed reason (no skipping to the next story)",
+    "A --max-tickets N flag bounds the loop (bounded everything, architecture.md principle 5)",
+    "Unit tests cover loop termination on: backlog empty, blocked outcome, cooldown, and max-tickets",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

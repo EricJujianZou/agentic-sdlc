@@ -1,0 +1,18 @@
+{
+  "id": "S-012",
+  "type": "system-repair",
+  "priority": 13,
+  "title": "One-shot intake to backlog runner (manual; no daemon or triggers)",
+  "description": "Honoring the no-triggers decision, the harness adds no scheduler. Add workflows/poll_once.py: one pass that runs sync_issues (ingest adw-labeled GitHub issues into prd.json), then run_backlog over the open stories with the existing cooldown and breaker gates and a --max-tickets bound. One launch equals one pass: no loop, no timer, no background thread. README documents how a human can optionally wire it to Windows Task Scheduler or cron, explicitly outside the harness authority.",
+  "acceptance_criteria": [
+    "workflows/poll_once.py runs sync_issues then run_backlog in one process; a sync failure (e.g. offline) stops before the backlog with a clear message and never runs on a partial sync",
+    "It adds no daemon, timer, or background thread: exactly one pass per invocation",
+    "--max-tickets and the cooldown gate are honored; an active cooldown stops the pass without overriding it",
+    "README documents optional OS-scheduler wiring as a human opt-in, clearly out of harness scope",
+    "Unit tests cover sync-then-backlog ordering, stop-on-sync-failure, and the max-tickets bound with injected fakes (no live API)",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

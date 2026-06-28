@@ -1,0 +1,18 @@
+{
+  "id": "S-001",
+  "type": "feat",
+  "priority": 1,
+  "title": "Ticket dashboard: local static page rendering prd.json stories",
+  "description": "Build a zero-build local dashboard so a human can view the ticket backlog and live story state in a browser instead of a Notion board. Static HTML + vanilla JS/CSS only, living in a new dashboard/ directory. The page fetches ../prd.json and renders one card per story, grouped into columns by status. It is served with a plain static file server from the repo root (browsers block fetch over file://), e.g. `uv run python -m http.server 8000`, then opened at http://localhost:8000/dashboard/. No frameworks, no build step, no new Python dependencies.",
+  "acceptance_criteria": [
+    "dashboard/index.html exists and contains all markup, styles, and script (or links only to sibling files inside dashboard/); no framework, bundler, or CDN dependency",
+    "When served from the repo root with a static file server, the page fetches prd.json and renders one card per story showing id, type, title, priority, and acceptance criteria",
+    "Cards are grouped into four columns by status: open, in_progress, blocked, done; a story with passes=true is visually marked as passing",
+    "If prd.json cannot be fetched or parsed, the page shows a readable error message instead of a blank screen",
+    "A comment at the top of dashboard/index.html documents the serve command and URL",
+    "A pytest test (tests/test_dashboard.py) asserts dashboard/index.html exists and references prd.json, and the full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

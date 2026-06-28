@@ -13,7 +13,7 @@ import adw.workflow_runner as workflow_runner
 from adw import paths
 from adw.github import GitHubError
 from adw.orchestrator import TicketOutcome
-from adw.tickets import Story
+from adw.tickets import Story, load_prd
 from adw.workflow_runner import (
     _ensure_work_branch,
     _make_verify_fn,
@@ -592,11 +592,11 @@ def test_reap_stale_in_progress_flips_stranded_ticket_and_commits(tmp_path, monk
     )
 
     assert reclaimed == ["GH-46"]
-    saved = json.loads((repo / "prd.json").read_text(encoding="utf-8"))
+    saved = load_prd(repo / "prd.json")
     # GH-78: a stale *system-repair* ticket is restored to its human-gated
     # `blocked` state, not `open` (reclaiming it to `open` re-armed it for the
     # auto-pick that re-ran already-merged GH-56/GH-61).
-    assert saved["stories"][0]["status"] == "blocked"
+    assert saved.stories[0].status == "blocked"
     assert _run_git(repo, "status", "--porcelain") == ""
     assert "reclaim stale in_progress" in _run_git(repo, "log", "-1", "--format=%s")
 
@@ -618,6 +618,6 @@ def test_reap_stale_in_progress_leaves_live_ticket_alone(tmp_path, monkeypatch):
     )
 
     assert reclaimed == []
-    saved = json.loads((repo / "prd.json").read_text(encoding="utf-8"))
-    assert saved["stories"][0]["status"] == "in_progress"
+    saved = load_prd(repo / "prd.json")
+    assert saved.stories[0].status == "in_progress"
     assert _run_git(repo, "rev-parse", "HEAD") == head_before

@@ -1,0 +1,15 @@
+{
+  "id": "GH-64",
+  "type": "system-repair",
+  "priority": 3,
+  "title": "Budget-aware blocker handling: fast-stop + type-conditional edit policy in implement",
+  "description": "## Problem\n\nOn 2026-06-22 GH-56 burned ~26K tokens producing a **complete** plan it already\nknew would be guard-denied (a `feat` ticket whose implementation edits harness\ndirs). Separately, implement on such a ticket would attempt `Write`s the guard\ndenies, retry, and burn the permission-denial budget \u2014 a known-failed path it is\ntold nothing about up front.\n\n## Approach\n\n- Add a rule to the read-only command files (PLAN/DECOMPOSE/REVIEW): \"on a hard\n  structural blocker, report `blocked` immediately \u2014 do not produce the full\n  deliverable.\"\n- Inject the guard's type-based edit policy into the **implement** prompt by ticket\n  type: for a non-`system-repair` ticket, \"you may not create/edit under `adw/`,\n  `workflows/`, `configs/` \u2014 the guard denies it; if the plan requires that, report\n  `blocked`.\" So implement never attempts a known-denied write.",
+  "acceptance_criteria": [
+    "Plan/decompose/review stop and report `blocked` on a hard blocker without",
+    "The implement prompt states the type-conditional harness-edit prohibition; a",
+    "Full suite stays green (`uv run pytest -q`)."
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "S-003",
+  "type": "system-repair",
+  "priority": 2,
+  "title": "Circuit breaker: trip immediately on repeated dead-on-arrival stages",
+  "description": "Test run 2 burned all iterations re-trying identical instant failures: the CLI exited non-zero with 0 tokens used and empty output, three times in a row, and the breaker never fired because the same_error_loops threshold (5) can never be reached before max_iterations (5) under default budgets. Add an instant-failure rule to adw/safety.py CircuitBreaker: a stage result with exit_code != 0 AND tokens_used == 0 AND empty raw output counts as dead-on-arrival; after 2 consecutive such results, open the circuit regardless of other thresholds. Make the threshold a budgets.json knob (instant_failure_cap, default 2) wired through SafetyConfig.from_budgets like permission_denial_cap. Evidence: observability/test_run1.md follow-up 1 and the run 2 row of its table.",
+  "acceptance_criteria": [
+    "CircuitBreaker.record opens the circuit (returns a halt reason naming instant failure) after 2 consecutive dead-on-arrival results: exit_code != 0, tokens_used == 0, empty raw output",
+    "A successful or token-consuming stage result resets the consecutive counter",
+    "The threshold is read from configs/budgets.json key instant_failure_cap (default 2) via SafetyConfig.from_budgets",
+    "Unit tests cover: trip at 2 consecutive instant failures, reset on a live result, and config override of the cap",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

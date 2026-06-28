@@ -1,0 +1,16 @@
+{
+  "id": "GH-62",
+  "type": "system-repair",
+  "priority": 3,
+  "title": "Reuse the CLI session across same-stage retries to cache loaded context",
+  "description": "## Problem\n\n`invoke_stage` (`adw/invoke.py`) captures `session_id` from the CLI envelope but\ndiscards it. A retry of the *same* stage spawns a fresh process that re-reads the\ncodebase at full price, even though the CLI's prompt cache would make a resumed\nsession's prior reads cheap cache-reads (~10% cost).\n\n## Approach\n\nWhen re-invoking the **same** stage within a ticket (same model + same scoped\ntools), pass `--resume <session_id>` from the prior attempt so the model keeps its\nloaded context. Cross-*stage* reuse is out of scope: stages change model\n(opus<->sonnet) and tool scope, so their sessions are not interchangeable.",
+  "acceptance_criteria": [
+    "A same-stage retry resumes the prior attempt's session via `--resume` when model",
+    "A fresh stage, a different model, or a first attempt still starts cold.",
+    "Breaker / iteration accounting is unchanged.",
+    "Full suite stays green (`uv run pytest -q`)."
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}
