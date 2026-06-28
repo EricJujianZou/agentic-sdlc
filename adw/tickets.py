@@ -62,15 +62,21 @@ def _validate_story(raw: dict, index: int, errors: list[str]) -> None:
         errors.append(f"{where}: passes must be a boolean")
 
 
-def load_prd(path: str | Path) -> Prd:
-    raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    errors: list[str] = []
-    if not isinstance(raw.get("project"), str) or not raw.get("project"):
+def _shard_dir(path: str | Path) -> Path:
+    """The sharded ticket store anchored at `path` (the canonical prd.json
+    location): one file per story under the sibling `prd/` directory."""
+    return Path(path).parent / "prd"
+
+
+def _build_prd(project, raw_stories: list, where: str, *, extra_errors=()) -> Prd:
+    """Validate raw story dicts + a project label into a `Prd`, or raise.
+
+    Shared by the sharded and legacy-single-file readers so both enforce the
+    same schema and the same error format.
+    """
+    errors: list[str] = list(extra_errors)
+    if not isinstance(project, str) or not project:
         errors.append("project: must be a non-empty string")
-    raw_stories = raw.get("stories")
-    if not isinstance(raw_stories, list):
-        errors.append("stories: must be a list")
-        raw_stories = []
     for i, story in enumerate(raw_stories):
         _validate_story(story, i, errors)
     ids = [s.get("id") for s in raw_stories]
@@ -78,9 +84,9 @@ def load_prd(path: str | Path) -> Prd:
     if duplicates:
         errors.append(f"stories: duplicate ids {sorted(duplicates)}")
     if errors:
-        raise PrdValidationError(f"{path}:\n" + "\n".join(errors))
+        raise PrdValidationError(f"{where}:\n" + "\n".join(errors))
     return Prd(
-        project=raw["project"],
+        project=project,
         stories=[
             Story(
                 id=s["id"],
@@ -96,6 +102,57 @@ def load_prd(path: str | Path) -> Prd:
             for s in raw_stories
         ],
     )
+
+
+def _load_sharded(shard_dir: Path) -> Prd:
+    """Read `prd/_meta.json` (project) + every `prd/<id>.json` story shard.
+
+    Stories are returned sorted by id — order is not stored on disk, so an
+    unchanged story always reloads identically and the pickers (which re-sort
+    by (priority, id)) never depend on it.
+    """
+    meta = json.loads((shard_dir / "_meta.json").read_text(encoding="utf-8"))
+    extra: list[str] = []
+    raw_stories: list[dict] = []
+    for shard in shard_dir.glob("*.json"):
+        if shard.name == "_meta.json":
+            continue
+        story = json.loads(shard.read_text(encoding="utf-8"))
+        # The id lives in the file (source of truth); the filename is just its
+        # location. Assert they agree as a cheap integrity check on hand-edits.
+        if story.get("id") != shard.stem:
+            extra.append(f"{shard.name}: id {story.get('id')!r} does not match filename")
+        raw_stories.append(story)
+    raw_stories.sort(key=lambda s: str(s.get("id")))
+    return _build_prd(meta.get("project"), raw_stories, str(shard_dir), extra_errors=extra)
+
+
+def _load_legacy(path: Path) -> Prd:
+    """Read a pre-sharding single-file `prd.json` (read-only fallback)."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw_stories = raw.get("stories")
+    if not isinstance(raw_stories, list):
+        return _build_prd(raw.get("project"), [], str(path), extra_errors=["stories: must be a list"])
+    return _build_prd(raw.get("project"), raw_stories, str(path))
+
+
+def load_prd(path: str | Path) -> Prd:
+    """Load the ticket store anchored at `path` (the canonical prd.json location).
+
+    Storage is sharded (GH-79): one file per story under the sibling `prd/`
+    directory, plus `prd/_meta.json` for the project label. Two ticket branches
+    that edit different stories touch different files, so their PRs merge to
+    main without a prd conflict. If the shard directory is absent we fall back
+    to reading a legacy single-file `prd.json` (read-only), so unmigrated
+    branches and target repos still load until they drain.
+    """
+    path = Path(path)
+    shard_dir = _shard_dir(path)
+    if (shard_dir / "_meta.json").exists():
+        return _load_sharded(shard_dir)
+    if path.exists():
+        return _load_legacy(path)
+    raise FileNotFoundError(path)
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -125,8 +182,31 @@ def _atomic_write_text(path: Path, text: str) -> None:
 
 
 def save_prd(prd: Prd, path: str | Path) -> None:
-    payload = {"project": prd.project, "stories": [asdict(s) for s in prd.stories]}
-    _atomic_write_text(Path(path), json.dumps(payload, indent=2) + "\n")
+    """Persist the store as shards under the sibling `prd/` directory (GH-79).
+
+    Each story serializes to `prd/<id>.json` deterministically (stable dataclass
+    field order, `ensure_ascii=True`) so an unchanged story writes byte-identical
+    content — no git diff, no commit churn, nothing to conflict on. The project
+    label goes to `prd/_meta.json`. Stories that disappeared from the store have
+    their shards removed. A legacy single-file `prd.json` at `path` is left
+    untouched (read-only tombstone) until stale branches drain.
+    """
+    shard_dir = _shard_dir(path)
+    shard_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write_text(
+        shard_dir / "_meta.json",
+        json.dumps({"project": prd.project}, indent=2) + "\n",
+    )
+    keep = set()
+    for story in prd.stories:
+        keep.add(story.id)
+        _atomic_write_text(
+            shard_dir / f"{story.id}.json",
+            json.dumps(asdict(story), indent=2) + "\n",
+        )
+    for shard in shard_dir.glob("*.json"):
+        if shard.name != "_meta.json" and shard.stem not in keep:
+            shard.unlink()
 
 
 def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story | None:

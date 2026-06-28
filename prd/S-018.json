@@ -1,0 +1,17 @@
+{
+  "id": "S-018",
+  "type": "system-repair",
+  "priority": 1,
+  "title": "Recognize and parse the real Claude subscription session-limit message",
+  "description": "The quotad work (S-015) was built against a guessed usage-limit format and never fired on the real subscription message captured 2026-06-20: \"You've hit your session limit \u00b7 resets 1:10am (America/Toronto)\". detect_usage_limit() missed it (no 'session limit' pattern) and _parse_usage_reset() returned None (the reset clause is neither a Unix epoch nor ISO-8601), so a real session limit was misclassified as an output-decline halt (S-017). Add a 'session limit' detection pattern and a 'resets <h>[:<mm>] <am|pm> (<IANA tz>)' reset-clause parser that resolves the next future UTC instant via zoneinfo, with tzdata declared so it works on Windows and a try/except fallback so a missing/unknown tz degrades to the configured cooldown rather than raising. Hand-implemented (not dogfooded) per the quota_resilience_plan tzdata risk note.",
+  "acceptance_criteria": [
+    "detect_usage_limit recognizes the real session-limit message; the existing four patterns still match their samples; benign prose still returns False",
+    "_parse_usage_reset returns the correct future UTC instant for 'resets 1:10am (America/Toronto)' given a frozen now, rolls to the next day when that time already passed, and returns None (never raises) for an unknown tz or an unparseable clause",
+    "A real session-limit stage result routes through the quotad path (USAGE_LIMIT_HALT_REASON), not output-decline or dead-on-arrival",
+    "tzdata is a declared dependency so timezone resolution works on Windows; if absent, reset parsing degrades to None rather than raising",
+    "Unit tests cover detection, reset parse (frozen now, same-day roll, unknown-tz None), and the quotad routing; full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "GH-53",
+  "type": "system-repair",
+  "priority": 3,
+  "title": "Cross-repo self-heal: route harness-level observer findings to the engine repo as a triage-gated system-repair issue",
+  "description": "## Problem\n\nWhen the harness runs cross-repo (a downstream user with their own fork building\ntheir own target repo), a **harness-level** failure has nowhere to go. The\nobserver already classifies harness-level vs ticket-level findings and posts the\ndiagnosis to the run's source issue / phone (`_observe_and_report` /\n`_post_harness_observation` in `adw/workflow_runner.py`), but that report lands in\nthe **downstream target repo** \u2014 the engine owner never sees it. So engine bugs\nfound by a second user (exactly the bugs self-hosting can't surface) don't flow\nback upstream.\n\n## Approach (decided)\n\nRoute the observer's harness-level finding to the **engine repo's issue tracker**,\nas a **system-repair issue** (a report) \u2014 not a PR. At detection time the agent is\nmid-run on a *target* ticket and has not (and may not) touched engine code, so\nthere is no fix to PR; the upstream harness dogfoods the fix on its own side once\nthe issue is triaged in. This reuses the observer + `adw/github.py` issue-filing\nthat already exist; it is not a new subsystem or a hook.\n\nTrigger: observer result is harness-level **AND** the run is cross-repo\n(`paths.target_root() != paths.engine_root()`). A self-hosted run (target ==\nengine) keeps today's behavior exactly.",
+  "acceptance_criteria": [
+    "On a harness-level observer finding during a **cross-repo** run, a",
+    "The engine repo slug is configurable (e.g. `ADW_ENGINE_REPO` /",
+    "**Human-label-gated:** the filed issue does NOT carry the `adw` label (so it is",
+    "**Deduped:** before filing, existing open issues are checked by a fingerprint",
+    "**Best-effort, never fatal:** any failure (missing token scope on the engine",
+    "A self-hosted run (target == engine) is unchanged: no upstream issue is filed.",
+    "Unit tests with a fake GitHub client cover: a cross-repo harness-level finding",
+    "Full suite stays green (`uv run pytest -q`)."
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

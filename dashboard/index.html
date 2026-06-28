@@ -302,16 +302,39 @@
       });
     }
 
+    async function loadSharded() {
+      // Sharded store (GH-79): one file per story under ../prd/, enumerated via
+      // the static server's directory index. Returns null if there is no prd/
+      // directory (an unmigrated repo), so the caller can fall back to prd.json.
+      const listing = await fetch("../prd/");
+      if (!listing.ok) return null;
+      const doc = new DOMParser().parseFromString(await listing.text(), "text/html");
+      const names = Array.from(doc.querySelectorAll("a"))
+        .map(a => a.getAttribute("href"))
+        .filter(h => h && h.endsWith(".json") && !h.endsWith("_meta.json"))
+        .map(h => h.split("/").pop());
+      const stories = await Promise.all(names.map(async name => {
+        const r = await fetch("../prd/" + name);
+        if (!r.ok) throw new Error("HTTP " + r.status + " on prd/" + name);
+        return r.json();
+      }));
+      return { stories };
+    }
+
     (async function load() {
       try {
-        const response = await fetch("../prd.json");
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status + " " + response.statusText);
+        let data = await loadSharded();
+        if (data === null) {
+          // Pre-sharding fallback: a single ../prd.json file.
+          const response = await fetch("../prd.json");
+          if (!response.ok) {
+            throw new Error("HTTP " + response.status + " " + response.statusText);
+          }
+          data = await response.json();
         }
-        const data = await response.json();
         render(data);
       } catch (err) {
-        showError("Could not load prd.json: " + err.message);
+        showError("Could not load the prd store: " + err.message);
       }
     })();
   </script>

@@ -107,7 +107,9 @@ def test_cross_repo_prd_roundtrip(monkeypatch, tmp_path):
               description="d", acceptance_criteria=["a"]),
     ])
     save_prd(prd, paths.prd_path())
-    assert (tmp_path / "prd.json").exists()
+    # The store shards into the target's prd/ directory, never the engine.
+    assert (tmp_path / "prd" / "S-001.json").exists()
+    assert (tmp_path / "prd" / "_meta.json").exists()
     reloaded = load_prd(paths.prd_path())
     assert reloaded.project == "other-project"
     # The engine's own prd.json is untouched — the write landed in the target.

@@ -1,0 +1,18 @@
+{
+  "id": "GH-51",
+  "type": "system-repair",
+  "priority": 3,
+  "title": "PR body should follow the repo PR template, authored by the review stage",
+  "description": "## Problem\n\nHarness-opened PRs don't reflect the repo's own PR template\n(`.github/PULL_REQUEST_TEMPLATE.md`). The template only auto-fills the GitHub\nweb compose box; the harness opens PRs via the REST API\n(`adw/workflow_runner.py::_notify_github` \u2192 `open_or_update_pr`) with an explicit\nbody, which bypasses the template. That body comes from\n`adw/github.py::pr_body(story, outcome)`, which restates the ticket\n(`## Outcome` + `**Ticket:** id \u2014 title` + the ticket *description* verbatim +\n`Closes #n`). It has no access to what the stages actually did, so a reviewer\ncan't see *what changed / tradeoffs / risks* without reading the diff (see #50).\n\n## Approach (decided)\n\nAuthor the PR body in the **review stage**, not a hook. Review is the only stage\nthat has read the full diff and judged it against the criteria, so it is the\nnatural author of a human-facing change summary; a PreToolUse-style hook is the\nwrong mechanism (it gates tool calls, can't intercept the urllib PR creation,\nand has no view of the diff). Ride the existing status-block \u2192 `TicketOutcome` \u2192\n`_notify_github` seam.\n\nThis is an **enhancement with a fallback**, not a replacement: review emits the\ndescription when it runs; `pr_body()` uses it when present and otherwise keeps\ntoday's body.\n\n### Accepted caveat (as-is, do NOT over-engineer)\n\nPipelines that skip review keep the current body: `STAGE_ORDER_BY_TYPE`\n(`adw/workflow_runner.py`) has **bug skip review and chore skip plan+review**,\nand `_notify_github` also fires on `blocked` outcomes where review didn't pass.\nThose PRs keeping the plain ticket-description body is acceptable \u2014 no extra work\nto special-case them.",
+  "acceptance_criteria": [
+    "`stage_specs/review_feat.md` instructs the review stage to emit a",
+    "The status-block model/parser and `TicketOutcome` (`adw/orchestrator.py`)",
+    "`adw/github.py::pr_body()` renders `pr_description` when present (keeping the",
+    "Pipelines that skip review (bug/chore) and non-done/blocked outcomes keep the",
+    "Unit tests cover: `pr_body()` with and without `pr_description`; a review",
+    "Full suite stays green (`uv run pytest -q`)."
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

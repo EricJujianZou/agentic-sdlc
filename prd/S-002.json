@@ -1,0 +1,16 @@
+{
+  "id": "S-002",
+  "type": "system-repair",
+  "priority": 1,
+  "title": "Add 'you are headless' rule to all stage command prompts",
+  "description": "In test runs 3-4, stage agents that hit contradictory constraints ended their turn by asking the nonexistent human a question ('Two ways forward, your call') instead of reporting blocked in the status block; run 3's planner lost its entire plan text that way because only the final message survives a stage. Add an explicit rule to every stage command file (commands/PLAN.md, IMPLEMENT.md, TEST.md, REVIEW.md, and PRIME.md if it gives behavioral instructions): you are running headless, nobody will ever answer a question, and any contradiction or blocker must be reported as outcome=blocked in the structured status block with the reason in failure_reason. Evidence: observability/test_run1.md follow-up 2.",
+  "acceptance_criteria": [
+    "Each of commands/PLAN.md, commands/IMPLEMENT.md, commands/TEST.md, commands/REVIEW.md contains an explicit headless rule: no human will answer questions, and contradictions/blockers must be reported as outcome=blocked in the status block instead of asking",
+    "The rule names the status block as the only channel for blockers (failure_reason carries the why)",
+    "A pytest test asserts the headless rule text is present in all four stage command files so it cannot silently regress",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}
