@@ -122,7 +122,7 @@ def sync_issues(prd: Prd, issues: list[dict]) -> tuple[list[Story], list[tuple[s
     for issue in issues:
         sid = issue_story_id(issue)
         if sid in existing_ids:
-            skipped.append((sid, "already synced"))
+            skipped.append((sid, ROUTINE_SKIP_REASON))
             continue
         reason = skip_reason(issue)
         if reason:
