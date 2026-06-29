@@ -18,6 +18,7 @@ from adw.github import GitHubError, get_token, list_adw_issues, repo_slug
 from adw.tickets import Prd, Story, load_prd, save_prd
 
 _TYPE_LABELS = {"feat", "bug", "chore", "system-repair"}
+ROUTINE_SKIP_REASON = "already synced"
 
 
 def issue_story_id(issue: dict) -> str:
