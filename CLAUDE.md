@@ -25,7 +25,9 @@ toward caution over speed; use judgment on trivial tasks._
   memory) before moving on. Don't silently route around it.
 - **Self-heal the bugs you hit.** A harness/repo bug (not a typo) is work, not
   an obstacle to route around — fixing itself is what this repo is *for*.
-  Default: file a `system-repair` GitHub issue (`adw` + a type label) and let the
+  Default: file a `system-repair` GitHub issue — label it `adw` + `system-repair`,
+  where `system-repair` IS its one required type label (adding a second type like
+  `bug`/`feat` makes `sync_issues` skip it, so it is never worked) — and let the
   harness dogfood the fix on its next poll. Fix it yourself on a branch + PR
   (never push `main`) only when it's trivial, or when the bug sits in the very
   path the harness would need to fix it (so it can't safely dogfood). The same
