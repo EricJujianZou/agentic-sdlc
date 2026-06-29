@@ -271,6 +271,7 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
         return SweepResult(0, f"discovery failed: {exc}")
 
     active_repos: list[Path] = []
+    repo_slugs: dict[Path, tuple[str, str]] = {}
     for descriptor in descriptors:
         repo_path = ensure_clone(descriptor)
         if repo_path is None:
@@ -282,6 +283,7 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
             print(f"sync: skipping {descriptor.slug}: {exc}")
             continue
         active_repos.append(repo_path)
+        repo_slugs[repo_path] = (descriptor.owner, descriptor.name)
 
     if not active_repos:
         return SweepResult(0, "no repos with open adw issues to work")
