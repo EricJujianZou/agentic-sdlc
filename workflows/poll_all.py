@@ -36,7 +36,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent  # engine root, for imports
 sys.path.insert(0, str(REPO_ROOT))
 
 from adw import paths
-from adw.github import GitHubError, engine_repo_slug, get_token, list_account_repos, list_adw_issues, repo_slug
+from adw.github import (
+    GitHubError,
+    engine_repo_slug,
+    get_token,
+    in_flight_ref,
+    list_account_repos,
+    list_adw_issues,
+    repo_slug,
+)
 from adw.locks import DEFAULT_STALE_SECONDS, LockHeld, single_flight
 from adw.state import load_state
 from adw.tickets import load_prd, pick_next_story
