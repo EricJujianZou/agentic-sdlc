@@ -293,14 +293,25 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
     iterations = max_iterations or budgets["max_iterations_default"]
 
     tickets_run = 0
+    in_flight_skips: dict[Path, set[str]] = {}
     while active_repos:
         repo_path = active_repos.pop(0)
         with _target(repo_path):
             try:
                 reap_stale_in_progress(stale_seconds=stale_seconds)
-                story = pick_next_story(load_prd(paths.prd_path()))
+                story = pick_next_story(
+                    load_prd(paths.prd_path()), exclude=in_flight_skips.get(repo_path)
+                )
                 if story is None:
                     continue  # backlog empty here — drop from rotation
+                owner, repo = repo_slugs[repo_path]
+                token = get_token()
+                ref = in_flight_ref(owner, repo, story.id, token, repo_path)
+                if ref is not None:
+                    print(f"skipped: {story.id} already in flight ({ref})")
+                    in_flight_skips.setdefault(repo_path, set()).add(story.id)
+                    active_repos.append(repo_path)
+                    continue
                 stage_order = STAGE_ORDER_BY_TYPE.get(story.type)
                 if stage_order is None:
                     continue  # defensive: schema restricts type, but never dispatch blind
