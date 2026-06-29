@@ -243,11 +243,12 @@ def test_sweep_isolates_one_repo_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(poll_all, "ensure_clone", lambda d: repo_paths[d.name])
     monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
     monkeypatch.setattr(poll_all, "reap_stale_in_progress", lambda **k: [])
+    monkeypatch.setattr(poll_all, "in_flight_ref", lambda *a, **k: None)
     _stub_models_budgets(tmp_path, monkeypatch)
 
     remaining = {"good": 1, "bad": 1}
 
-    def fake_pick_next_story(prd):
+    def fake_pick_next_story(prd, **kwargs):
         name = paths.target_root().name
         if remaining.get(name, 0) > 0:
             remaining[name] -= 1
