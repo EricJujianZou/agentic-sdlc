@@ -154,3 +154,37 @@ def test_poll_lock_path_is_per_target_and_outside_repo(monkeypatch, tmp_path):
     assert a != b
     assert a.parent == tmp_path / "local" / "adw" / "locks"
     assert a.suffix == ".lock"
+
+
+# --- format_sync_message (GH-88) -------------------------------------------
+
+
+def test_format_sync_message_non_routine_skip_named_in_log():
+    """A non-routine skip (two type labels) must surface the issue ID and reason."""
+    reason = "expected exactly one type label ... got ['bug', 'system-repair']"
+    msg = format_sync_message([], [("GH-87", reason)])
+    # The detail must appear in format_summary_line output too (AC1)
+    res = PollResult(synced=True, sync_message=msg, backlog=_backlog())
+    line = format_summary_line(res, started_at=_T0, finished_at=_T0)
+    assert "GH-87" in line
+    assert "expected exactly one type label" in line
+    assert "1 skipped" in line
+
+
+def test_format_sync_message_routine_skip_counted_but_not_named():
+    """'already synced' skips are counted but the issue ID must not appear."""
+    msg = format_sync_message([], [("GH-5", ROUTINE_SKIP_REASON)])
+    assert "1 skipped" in msg
+    assert "GH-5" not in msg
+
+
+def test_format_sync_message_long_reason_stays_one_bounded_line():
+    """A very long non-routine reason must not produce a multi-line log entry."""
+    long_reason = "x" * 500
+    msg = format_sync_message([], [("GH-99", long_reason)])
+    res = PollResult(synced=True, sync_message=msg, backlog=_backlog())
+    line = format_summary_line(res, started_at=_T0, finished_at=_T0)
+    assert "\n" not in line
+    # The sync field in the line is _clip'd to _LOG_FIELD_CAP; verify the full
+    # line is bounded (sync field + surrounding fixed text <= some reasonable cap)
+    assert len(line) <= _LOG_FIELD_CAP + 200  # generous for the fixed parts
