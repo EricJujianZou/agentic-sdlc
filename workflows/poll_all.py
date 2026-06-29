@@ -305,7 +305,6 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
                 if story is None:
                     continue  # backlog empty here — drop from rotation
                 owner, repo = repo_slugs[repo_path]
-                token = get_token()
                 ref = in_flight_ref(owner, repo, story.id, token, repo_path)
                 if ref is not None:
                     print(f"skipped: {story.id} already in flight ({ref})")
