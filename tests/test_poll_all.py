@@ -284,9 +284,10 @@ def test_sweep_quotad_writes_global_breaker_and_halts(tmp_path, monkeypatch):
     monkeypatch.setattr(poll_all, "ensure_clone", lambda d: repo_paths[d.name])
     monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
     monkeypatch.setattr(poll_all, "reap_stale_in_progress", lambda **k: [])
+    monkeypatch.setattr(poll_all, "in_flight_ref", lambda *a, **k: None)
     _stub_models_budgets(tmp_path, monkeypatch)
 
-    monkeypatch.setattr(poll_all, "pick_next_story", lambda prd: _story(sid="GH-1"))
+    monkeypatch.setattr(poll_all, "pick_next_story", lambda prd, **kwargs: _story(sid="GH-1"))
     monkeypatch.setattr(poll_all, "load_prd", lambda path: object())
     monkeypatch.setattr(
         poll_all, "run_one_story",
