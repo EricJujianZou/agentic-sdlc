@@ -7,12 +7,15 @@ import datetime
 from adw.workflow_runner import BacklogResult
 from workflows.poll_once import (
     PollResult,
+    _LOG_FIELD_CAP,
     append_log,
     default_log_path,
     format_summary_line,
+    format_sync_message,
     poll_lock_path,
     poll_once,
 )
+from workflows.sync_issues import ROUTINE_SKIP_REASON
 
 
 def _backlog(clean=True, ran=2, reason="reached --max-tickets (2)") -> BacklogResult:
