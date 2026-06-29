@@ -321,11 +321,13 @@ def test_sweep_skips_in_flight_story_but_runs_lower_priority(tmp_path, monkeypat
     _stub_models_budgets(tmp_path, monkeypatch)
 
     stories = {"GH-1": _story(sid="GH-1"), "GH-2": _story(sid="GH-2")}
+    remaining = {"GH-1": 1, "GH-2": 1}
 
     def fake_pick_next_story(prd, exclude=None):
         exclude = exclude or set()
         for sid in ("GH-1", "GH-2"):
-            if sid not in exclude:
+            if sid not in exclude and remaining.get(sid, 0) > 0:
+                remaining[sid] -= 1
                 return stories[sid]
         return None
 
