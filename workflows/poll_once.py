@@ -34,7 +34,7 @@ from adw.github import GitHubError
 from adw.locks import DEFAULT_STALE_SECONDS, LockHeld, single_flight
 from adw.workflow_runner import BacklogResult
 from workflows.run_backlog import DEFAULT_MAX_TICKETS, run_backlog
-from workflows.sync_issues import pull_and_sync
+from workflows.sync_issues import ROUTINE_SKIP_REASON, pull_and_sync
 
 # sync_fn() -> (ok, message); backlog_fn() -> BacklogResult. Injected so the
 # pass is testable without live GitHub or real workflows.
