@@ -18,6 +18,7 @@ from adw.github import (
     comment_on_issue,
     create_issue,
     engine_repo_slug,
+    in_flight_ref,
     list_account_repos,
     list_open_issues,
     open_or_update_pr,
