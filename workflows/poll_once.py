@@ -186,7 +186,7 @@ def main() -> int:
             added, skipped = pull_and_sync()
         except GitHubError as exc:
             return False, f"sync failed (offline or no credential?): {exc}"
-        return True, f"synced: +{len(added)} new story(ies), {len(skipped)} skipped"
+        return True, format_sync_message(added, skipped)
 
     def backlog_fn() -> BacklogResult:
         return run_backlog(args.max_tickets, args.max_iterations)
