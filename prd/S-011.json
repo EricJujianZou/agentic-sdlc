@@ -1,0 +1,18 @@
+{
+  "id": "S-011",
+  "type": "system-repair",
+  "priority": 10,
+  "title": "Repo-agnostic engine: run the harness against any target repo",
+  "description": "Every module hardcodes REPO_ROOT = Path(__file__).parent.parent, so the harness only operates on its own repo. Make the engine resolve a target repo from ADW_REPO (else the git top-level of cwd, else the engine repo for self-hosting). Per-project mutable state (prd.json, state.json, run logs, .claude/settings.json) lives in the target repo; prompt/command assets and configs/ default to the engine but a target-side .adw/ override wins if present. Package the engine so it is installable and invokable from any repo. This is the unlock for using the harness to build other projects.",
+  "acceptance_criteria": [
+    "A single resolver (e.g. adw/paths.py) returns the target root from ADW_REPO, else `git rev-parse --show-toplevel`, else the engine repo; all modules use it instead of the hardcoded REPO_ROOT",
+    "prd.json, state.json, and run logs are read/written in the target repo; commands/ and configs/ resolve from the engine unless a target .adw/commands or .adw/configs exists, which takes precedence",
+    "Running ADW_REPO=/path/to/project against a workflow operates entirely on that project (branch, commits, logs land there) and leaves the engine repo untouched",
+    "With ADW_REPO unset and cwd in the engine repo, behavior is unchanged (self-hosting preserved)",
+    "A documented .adw/ skeleton (prd.json, configs, .claude/settings.json) turns a fresh repo into a target with no code copied",
+    "Unit tests cover path resolution (env override, git-toplevel fallback, per-project config override) against a temp repo; full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

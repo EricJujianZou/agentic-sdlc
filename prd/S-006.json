@@ -1,0 +1,18 @@
+{
+  "id": "S-006",
+  "type": "system-repair",
+  "priority": 5,
+  "title": "GitHub Issues intake + done/blocked notifications (phone-facing backlog)",
+  "description": "Bridge to the remote-operation goal: tickets arranged from a phone, outcomes reported back to it. Intake: a sync script pulls GitHub Issues labeled adw from the repo into prd.json stories (issue body carries description + acceptance criteria; labels carry type/priority), so the GitHub mobile app becomes the write-capable taskboard. Outbound: when a workflow finishes a ticket, it opens/updates a PR for the adw/<id> branch and comments the outcome (done/blocked + reason) on the source issue, so GitHub push notifications reach the phone. Requires the existing git-credential token; no new services.",
+  "acceptance_criteria": [
+    "workflows/sync_issues.py converts open GitHub Issues labeled adw into valid prd.json stories with a deterministic id mapping and never duplicates existing stories",
+    "Malformed issues are skipped with a printed reason, never written into prd.json",
+    "On ticket completion the workflow opens (or updates) a PR for adw/<id> and comments done/blocked + reason on the source issue",
+    "All GitHub calls go through the REST API with the locally stored credential; the scripts degrade with a clear error when offline",
+    "Unit tests cover the issue-to-story mapping and skip logic with fixture payloads (no live API in tests)",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

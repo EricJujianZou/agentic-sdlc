@@ -1,0 +1,18 @@
+{
+  "id": "S-007",
+  "type": "system-repair",
+  "priority": 6,
+  "title": "Container isolation for unattended runs",
+  "description": "The loop currently runs on the bare Win11 host - the one open violation of the safety floor (improvements C1, highest-leverage safety item; adopt the textcortex/claude-code-sandbox Docker pattern). Run ADW_TICKET_RUN stage sessions inside a container with the repo mounted, no real credentials beyond a scoped git token, and network restricted to what stages need. This is the precondition for genuinely unattended operation and for any future --skip-permissions mode.",
+  "acceptance_criteria": [
+    "Stage invocations run inside a container when an isolation flag is set; the host filesystem outside the repo mount is unreachable",
+    "No host credentials are visible inside the container beyond the scoped git push token",
+    "Hooks (PreToolUse guard, Stop checklist, autocommit) still function inside the container",
+    "A documented fallback runs stages on the host exactly as today when isolation is off",
+    "README documents the isolation setup and its limits",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

@@ -48,7 +48,12 @@ from adw.github import (
 from adw.locks import DEFAULT_STALE_SECONDS, LockHeld, single_flight
 from adw.state import load_state
 from adw.tickets import load_prd, pick_next_story
-from adw.workflow_runner import STAGE_ORDER_BY_TYPE, reap_stale_in_progress, run_one_story
+from adw.workflow_runner import (
+    STAGE_ORDER_BY_TYPE,
+    reap_stale_in_progress,
+    reconcile_completed_against_main,
+    run_one_story,
+)
 from workflows.sync_issues import pull_and_sync
 
 
@@ -299,6 +304,7 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
         with _target(repo_path):
             try:
                 reap_stale_in_progress(stale_seconds=stale_seconds)
+                reconcile_completed_against_main()  # GH-78: never re-pick already-merged work
                 story = pick_next_story(
                     load_prd(paths.prd_path()), exclude=in_flight_skips.get(repo_path)
                 )

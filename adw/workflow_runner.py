@@ -57,6 +57,7 @@ from adw.tickets import (
     pick_next_stories,
     pick_next_story,
     reclaim_stale_in_progress,
+    reconcile_completed,
     save_prd,
 )
 
@@ -83,6 +84,50 @@ def _git(*args: str) -> str:
     return proc.stdout.strip()
 
 
+def _ref_exists(ref: str) -> bool:
+    try:
+        subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", ref],
+            cwd=paths.target_root(), capture_output=True, text=True, check=True,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def _new_branch_base() -> str | None:
+    if "origin" in _git("remote").split():
+        try:
+            _git("fetch", "--quiet", "origin", "main")
+        except subprocess.CalledProcessError:
+            pass
+    for candidate in ("origin/main", "main"):
+        if _ref_exists(candidate):
+            return candidate
+    return None
+
+
+def _snapshot_tracked_dirty() -> dict[str, bytes]:
+    # `_git()` strips the whole output, which would eat the leading status
+    # space of the first porcelain line and shift its fixed-column parse —
+    # call subprocess directly here so column offsets stay accurate.
+    proc = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=paths.target_root(), capture_output=True, text=True, check=True,
+    )
+    snapshot: dict[str, bytes] = {}
+    for line in proc.stdout.splitlines():
+        status, rel = line[:2], line[3:]
+        if "D" in status:
+            continue
+        if "->" in rel:
+            rel = rel.split("->", 1)[1].strip()
+        path = paths.target_root() / rel
+        if path.is_file():
+            snapshot[rel] = path.read_bytes()
+    return snapshot
+
+
 def _ensure_work_branch(branch: str) -> None:
     if _git("branch", "--list", branch):
         # GH-46: sync may have left an uncommitted prd.json write on the
@@ -91,7 +136,21 @@ def _ensure_work_branch(branch: str) -> None:
         _commit_bookkeeping("chore: persist sync before resuming work branch")
         _git("checkout", branch)
     else:
-        _git("checkout", "-b", branch)
+        # GH-58: cut new branches from a clean base (origin/main, else main)
+        # rather than current HEAD, which may be a previous/dead ticket
+        # branch left behind by an interrupted run. `checkout -f -b` never
+        # aborts on a dirty tree, so any uncommitted sync write (e.g. a
+        # fresh prd.json) is snapshotted first and restored after, landing
+        # as an uncommitted change on the new branch for `_mark_in_progress`
+        # to pick up and commit.
+        base = _new_branch_base()
+        if base is None:
+            _git("checkout", "-b", branch)
+        else:
+            dirty = _snapshot_tracked_dirty()
+            _git("checkout", "-f", "-b", branch, base)
+            for rel, data in dirty.items():
+                (paths.target_root() / rel).write_bytes(data)
 
 
 def _commit_bookkeeping(message: str) -> None:
@@ -131,6 +190,57 @@ def reap_stale_in_progress(
         save_prd(prd, prd_path)
         _commit_bookkeeping(f"chore: reclaim stale in_progress: {', '.join(reclaimed)}")
     return reclaimed
+
+
+def _completed_ticket_ids_on_main() -> set[str]:
+    """Ticket ids whose completion artifact (`docs/changes/<id>.md`) is present
+    on `origin/main` — i.e. already merged. Best-effort: any git failure
+    (offline, no remote, no such ref) yields an empty set so selection still
+    proceeds. Reads only the changelog tree, so it survives a future prd.json
+    reshape (GH-79)."""
+    root = str(paths.target_root())
+    try:
+        subprocess.run(
+            ["git", "fetch", "--quiet", "origin", "main"],
+            cwd=root, capture_output=True, text=True, timeout=60,
+        )
+    except (subprocess.SubprocessError, OSError):
+        pass  # work from whatever origin/main we already have
+    try:
+        proc = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "docs/changes"],
+            cwd=root, capture_output=True, text=True, timeout=30,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return set()
+    if proc.returncode != 0:
+        return set()
+    return {
+        Path(line.strip()).stem
+        for line in proc.stdout.splitlines()
+        if line.strip().endswith(".md")
+    }
+
+
+def reconcile_completed_against_main(
+    *, prd_path: str | Path | None = None, completed_ids: set[str] | None = None,
+) -> list[str]:
+    """Reconcile the local ledger against work already merged to `origin/main`
+    (GH-78): mark already-merged tickets terminal so a `prd.json` that has
+    drifted behind `origin/main` cannot re-select them, and commit the change
+    so the tree stays clean for the next stage. `completed_ids` is injectable
+    for tests; in production it is read from `origin/main`'s changelog. Returns
+    the ids reconciled."""
+    prd_path = paths.prd_path() if prd_path is None else Path(prd_path)
+    ids = _completed_ticket_ids_on_main() if completed_ids is None else completed_ids
+    if not ids:
+        return []
+    prd = load_prd(prd_path)
+    changed = reconcile_completed(prd, ids)
+    if changed:
+        save_prd(prd, prd_path)
+        _commit_bookkeeping(f"chore: reconcile already-merged tickets: {', '.join(changed)}")
+    return changed
 
 
 def _make_verify_fn(budgets: dict, cwd: str | Path | None = None):
@@ -208,12 +318,21 @@ def _notify_github(
     try:
         token = get_token()
         owner, repo = repo_slug()
-        open_or_update_pr(
-            owner, repo, token,
-            head=branch, base="main",
-            title=_pr_title(story),
-            body=pr_body(story, outcome, pr_description),
-        )
+        # Only a `done` outcome opens a PR. A non-done outcome (blocked/halted/
+        # quotad) is not review-ready, so it surfaces no PR (GH-83): the work
+        # still sits on the pushed branch for inspection, and the outcome
+        # comment below still fires, so the phone is notified either way. This
+        # reverses GH-59/#69, which opened a PR for a blocked ticket that held
+        # partial work — the owner prefers no PR on any non-done outcome.
+        if outcome == "done":
+            open_or_update_pr(
+                owner, repo, token,
+                head=branch, base="main",
+                title=_pr_title(story),
+                body=pr_body(story, outcome, pr_description),
+            )
+        else:
+            print(f"PR skipped for {story.id}: outcome {outcome} is not done")
         issue_number = source_issue_number(story.id)
         if issue_number is not None:
             comment_on_issue(

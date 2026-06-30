@@ -1,0 +1,16 @@
+{
+  "id": "S-020",
+  "type": "system-repair",
+  "priority": 2,
+  "title": "Scheduled poll pass is self-auditable via an out-of-repo log",
+  "description": "The registered \\ADW\\ task ran poll_once.py with no output redirection, so a 29-minute pass that committed nothing and exited 0 was unexplainable after the fact. Make poll_once self-log independent of how the task is registered: append one bounded, timestamped summary line per pass (start time, elapsed seconds, sync outcome, tickets run, stop reason) to a log outside the repo (default %LOCALAPPDATA%/adw/poll.log, overridable by --log-path / $ADW_POLL_LOG). A failure to write the log is swallowed and never affects the pass; the working tree is never touched. README documents the self-log and labels re-registering the scheduled task (for a redirected stdout) an out-of-agent-scope human/admin action.",
+  "acceptance_criteria": [
+    "poll_once appends a single bounded timestamped summary line per invocation to a configurable log outside the repo, covering sync outcome, tickets run, and stop reason; a write failure is swallowed and never affects the pass",
+    "The log path is configurable (--log-path / $ADW_POLL_LOG) and the working tree is never touched",
+    "README documents the self-log and the one-time admin re-registration of the scheduled task, labeled an out-of-agent-scope human action",
+    "Unit tests cover the summary line for a synced/ran pass and a stop-before-backlog pass with the log path injected; full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

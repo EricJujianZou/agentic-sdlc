@@ -1,0 +1,18 @@
+{
+  "id": "S-010",
+  "type": "system-repair",
+  "priority": 9,
+  "title": "Deterministic test-evidence re-run in the orchestrator before accepting done",
+  "description": "From improvements C3 (frankbria/ralph-claude-code pattern), promoted out of task.md ideas. Today adw/orchestrator.py run_ticket accepts a ticket as done on the dual gate alone (review outcome=success AND exit_signal=true), which trusts the test stage's self-reported green suite. Add a deterministic re-run of `uv run pytest -q` inside run_ticket itself - the orchestrator's own subprocess, not a stage agent's self-report - after the dual gate passes and BEFORE the document stage runs. A non-zero result prevents done: the outcome downgrades to blocked/halted with the failing summary captured in state.json last_failure, and the document stage does not run. A green result lets the existing done path (document stage, then done) proceed unchanged. This is the in-harness mirror of S-009's CI gate and the prerequisite for auto-merging trivial tickets without a human reading the diff.",
+  "acceptance_criteria": [
+    "run_ticket, after the dual gate passes and before invoking the document stage, runs `uv run pytest -q` via subprocess and inspects the exit code - the orchestrator's own check, never a stage self-report",
+    "A non-zero pytest result prevents done: outcome becomes blocked (or halted), the captured failing summary is written to state.json last_failure, and the document stage is not invoked",
+    "A green pytest result lets the existing document-then-done path proceed unchanged",
+    "The pytest command and its timeout are configs/budgets.json knobs, not hardcoded",
+    "Unit tests with a stubbed subprocess runner cover: green re-run still yields done, red re-run blocks done with the failure recorded; no real pytest is spawned in the unit test",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

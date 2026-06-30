@@ -1,0 +1,18 @@
+{
+  "id": "S-013",
+  "type": "system-repair",
+  "priority": 11,
+  "title": "decompose stage: terse/phone tickets auto-expanded into acceptance criteria",
+  "description": "Phone-filed issues are painful to write with full acceptance criteria (issue #16 came in with quote-bar formatting and was skipped). Wire the currently-vestigial decompose model entry into a real read-only stage that, for a ticket lacking acceptance criteria, expands its title and body into structured criteria before the plan stage. Relax sync_issues so a terse issue (no Acceptance Criteria heading, leading quote bars or indentation tolerated) is accepted with empty criteria instead of skipped; the workflow runs decompose first and the orchestrator persists the proposed criteria to prd.json (agents never self-write prd).",
+  "acceptance_criteria": [
+    "commands/DECOMPOSE.md plus a stage_specs contract and STAGE_TOOLS[decompose] (read-only: Read, Glob, Grep, and the read-only git rules) are registered; configs/models.json already maps decompose",
+    "A story with empty acceptance_criteria triggers the decompose stage before plan; the orchestrator writes the proposed criteria into the story in prd.json",
+    "A story that already has acceptance_criteria skips decompose entirely (no behavior change for fully-specified tickets)",
+    "sync_issues accepts an issue with no Acceptance Criteria section and tolerates leading quote bars/indentation, instead of skipping; a genuinely empty issue (no title and no body) is still skipped with a printed reason",
+    "Decompose obeys the headless rule: too-vague input is reported as outcome=blocked, never asked; its output is bounded",
+    "Unit tests cover: decompose runs only when criteria absent, criteria persisted to prd, sync accepts a terse/quote-barred issue; full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

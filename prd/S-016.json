@@ -1,0 +1,19 @@
+{
+  "id": "S-016",
+  "type": "system-repair",
+  "priority": 2,
+  "title": "Phone-facing lifecycle board via GitHub stage labels (no new frontend)",
+  "description": "The only phone-facing board today is GitHub itself, and the orchestrator already maintains issue labels (adw/workflow_runner.py _set_run_label: in-progress/done/blocked, plus the observer's self-heal-suggested/needs-clarification). Make the issue reflect the SDLC stage the ticket is currently in, so a GitHub Projects board (a one-time human setup) can show Plan/Do/Check/Review-gate/Blocked columns without any new frontend, API, or backend. As a GH-sourced ticket advances stages, the orchestrator updates a mutually-exclusive stage label on the source issue (stage:plan, stage:implement, stage:test, stage:review, stage:document) via the same best-effort, injected per-stage-transition mechanism as the S-014 progress callback, so the orchestrator stays the only component that talks to GitHub and stage agents never do. Label changes are quiet (GitHub does not push phone notifications for label edits, unlike comments), so this adds board state without notification spam. Best-effort throughout: any GitHub/credential/offline failure is printed and swallowed and never changes the ticket outcome. Plain S-NNN stories (no source issue) are no-ops. The terminal in-progress/done/blocked/quotad labels and the S-014 per-stage comments are preserved.",
+  "acceptance_criteria": [
+    "As a GH-<n> story advances stages, the orchestrator sets a mutually-exclusive stage label on the source issue (one of stage:plan, stage:implement, stage:test, stage:review, stage:document) reflecting the current stage; the previous stage label is removed when the next is added so exactly one stage label is present",
+    "Stage labels are driven from the orchestrator on each stage transition through an injected, best-effort callback (the same injection pattern as the S-014 progress_fn), so stage agents never call GitHub directly and the orchestrator remains the sole GitHub authority",
+    "All stage-label updates are best-effort: any GitHub, credential, or offline failure is printed and swallowed, never changing the ticket's outcome or halting the run",
+    "Plain S-NNN stories (no source issue) trigger no stage-label calls; the existing in-progress/done/blocked/quotad labels and the S-014 per-stage comments are preserved, not removed or duplicated",
+    "README documents the one-time manual GitHub Projects setup that maps these labels to board columns (Plan / Do / Check / Review-gate / Blocked), labeled an out-of-agent-scope human action that a headless run never attempts and never reports blocked on",
+    "Unit tests with a fake GitHub client cover: the stage label is set and the prior one swapped on each transition for a GH story, no stage-label calls for an S-NNN story, and a GitHub failure is swallowed",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

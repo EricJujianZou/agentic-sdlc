@@ -1,0 +1,18 @@
+{
+  "id": "S-004",
+  "type": "system-repair",
+  "priority": 3,
+  "title": "Bug + trivial workflows so bug/chore tickets become runnable",
+  "description": "architecture.md names bug_plan_implement_test.py and trivial_implement_test.py but only feat_full_cycle.py exists, so ticket types bug and chore are schema-valid but unrunnable (audit finding A3, plans/improvements.md). Compose the two workflows from existing adw/ pieces: bug runs plan -> implement -> test (no review stage; the test stage's regression evidence is the gate), trivial runs implement -> test for chore-sized changes. Factor shared setup (branch, prompt composition, invoke wiring) out of feat_full_cycle.py rather than copying it.",
+  "acceptance_criteria": [
+    "workflows/bug_plan_implement_test.py runs plan, implement, test stages for a ticket and honors the same breaker, budgets, and state bookkeeping as feat_full_cycle",
+    "workflows/trivial_implement_test.py runs implement, test stages with the same guarantees",
+    "Shared orchestration setup is factored so the three workflows do not triplicate prompt-composition or git bookkeeping code",
+    "Stage order remains owned by the workflow scripts, never by prompts",
+    "Unit tests cover stage sequencing of both new workflows with a fake invoke_fn",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}
