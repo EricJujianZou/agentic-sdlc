@@ -1,0 +1,23 @@
+{
+  "id": "GH-56",
+  "type": "system-repair",
+  "priority": 2,
+  "title": "Multi-repo driver: auto-discover, auto-clone, and sweep all adw backlogs until quota (sequential v1)",
+  "description": "## Problem\n\nCross-repo work has no unattended path. `ADW_REPO` selects one target per\nprocess; an interactive `$env:ADW_REPO` never reaches the Task Scheduler job\n(it's a separate process tree reading the persistent environment, where the var\nis empty by design); so the overnight automation only ever works the engine\nitself. Per-repo scheduled tasks + env vars don't scale. The repo-agnostic\nengine (S-011) was step one toward multi-repo; this is the driver layer on top.\n\nNote: syncing/retrieving issues is already deterministic Python (no LLM, no\ntokens) \u2014 `workflows/sync_issues.py` (REST + regex). Token cost is only the\nwork stages (plan/implement/test/review). So sweeping every repo's issues is\nfree; the only bounded resource is the work, which the circuit breaker already\ngoverns. Hence: no artificial ticket cap \u2014 work until quota'd or backlogs empty.\n\n## Decisions (locked)\n\n- **Discovery:** auto-discover all the account's GitHub repos that have \u22651 open\n  `adw`-labeled issue (no maintained list).\n- **Local clones:** auto-clone any missing repo into a managed dir.\n- **No global cap:** sweep and work as much as possible until quota'd or empty.\n- **Shared breaker/quota:** ONE account-wide breaker + cooldown across all repos.\n- **Ordering:** round-robin one ticket per repo (so a quota wall mid-sweep leaves\n  some progress everywhere rather than starving later repos).\n- **Sequential v1** \u2014 parallel deferred until the #4 worktree work lands.\n\n## Approach\n\nA new driver (e.g. `workflows/poll_all.py`) that:\n1. Discovers targets: list the account's repos via the API, keep those with an\n   open `adw` issue.\n2. Ensures local clones: clone missing repos into a managed dir; resolve each\n   repo's working-tree path (idempotent; `git fetch` if already present).\n3. Syncs every repo (reuse `sync_issues`), populating each repo's own `prd.json`.\n4. Works tickets round-robin across repos until the shared breaker trips (quota)\n   or all backlogs are empty \u2014 reusing `run_one_story`/`run_ticket` per ticket,\n   re-resolving `paths.target_root()` per repo (clear its `lru_cache` between\n   repos).\n5. On quota: the current repo's ticket goes `quotad`; the driver writes the\n   GLOBAL cooldown and stops the whole sweep.\n6. Resumes on the next scheduled firing once the global cooldown elapses\n   (`quotad` + open tickets are picked up automatically).\n\n## Key new pieces\n\n- Repo **discovery** (API: list repos \u2192 filter to those with an open `adw` issue).\n- **Auto-clone manager** (managed dir, idempotent).\n- **Driver loop** with per-repo `target_root` cache reset + per-repo failure\n  isolation (one repo's clone/sync/ticket error never aborts the sweep).\n- **Lift the breaker cooldown to a global, out-of-repo store** (e.g.\n  `%LOCALAPPDATA%/adw/breaker.json`) \u2014 checked before the sweep, written on a\n  quota halt. This is the core change that makes the breaker account-wide instead\n  of per-`state.json`.\n- **Round-robin** cross-repo ticket selection.\n\n## Reuses unchanged\n\n`sync_issues`, `run_one_story`/`run_ticket`, the `quotad` path\n(`_finalize_story`: no PR, observer skipped, cooldown from parsed reset time),\nthe GH-47 stale-`in_progress` reaper, the autocommit/guard/stop hooks, per-repo\n`prd.json`/`state.json`.\n\n## Deferred / out of scope\n\n- Parallel cross-repo execution (needs the unmerged #4 worktrees).\n- GitHub Project (v2) as a discovery source (GraphQL; the label scan covers v1).\n- Wake-at-exact-reset precision (hourly re-fire + cooldown gate suffices).",
+  "acceptance_criteria": [
+    "One invocation discovers all repos with an open `adw` issue, auto-clones any",
+    "The circuit breaker / cooldown is account-wide: a quota halt in ANY repo writes",
+    "Per-repo failure isolation: a clone error, sync error, or bad ticket in one",
+    "No artificial ticket cap \u2014 the breaker is the only stop (besides empty",
+    "Self-host (no other repos with `adw` issues) behaves like today.",
+    "Unit tests with a fake API/invoke cover: discovery + filter, round-robin across",
+    "Full suite stays green (`uv run pytest -q`).",
+    "Auto-discover means any repo ever labeled `adw` joins the sweep (intentional).",
+    "Auto-clone writes to disk / pulls over the network.",
+    "A no-cap sweep can run for hours (until the ~5h session limit) \u2014 fine",
+    "The account-wide quota is the real ceiling; the global breaker must trip"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

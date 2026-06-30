@@ -1,0 +1,16 @@
+{
+  "id": "S-019",
+  "type": "system-repair",
+  "priority": 2,
+  "title": "Observer must not wipe the run's circuit-breaker cooldown",
+  "description": "adw/orchestrator.py run_observer wrote a fresh State (cooldown_until=None) to the run's state.json, overwriting the cooldown the breaker had just set on a halt (evidence: S-017's state.json showed cooldown_until=null despite the circuit having opened). That lets an auto-retry start before the cooldown elapses, defeating the breaker's pause for every non-quota halt (the quotad path already skips the observer). Fix: run_observer loads the existing state.json and carries cooldown_until forward when it belongs to the same ticket, preserving the pause while still threading last_failure into the observe prompt.",
+  "acceptance_criteria": [
+    "After a halt that set cooldown_until, running the observer leaves cooldown_until intact in state.json while still presenting the failure reason to the observe stage",
+    "check_cooldown still reports an active cooldown after the observer has run on a non-quota halt",
+    "A leftover state.json for a different ticket does not leak its cooldown onto the observe run",
+    "Unit tests cover: cooldown survives an observer run, observer still receives last_failure, and a different-ticket cooldown is ignored; full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}

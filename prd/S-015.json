@@ -1,0 +1,19 @@
+{
+  "id": "S-015",
+  "type": "system-repair",
+  "priority": 1,
+  "title": "Quota-limit interruptions become resumable (quotad status), not blocked",
+  "description": "On a Claude subscription the 5-hour usage limit can halt a run mid-ticket. Today that is mishandled three ways. (A) When the breaker detects a usage limit (adw/safety.py detect_usage_limit) it opens the circuit with the generic circuit_cooldown_minutes (30 min), far shorter than the ~5h reset, so the scheduled poll retries every cooldown window and hits the wall again. (B) The usage halt returns outcome=halted, and adw/workflow_runner.py _finalize_story marks any non-done outcome status='blocked' \u2014 which pick_next_story never auto-picks again (tickets.py) \u2014 so a perfectly good ticket interrupted only by quota is sidelined until a human reopens it, and during one outage the breaker marches through and wrongly blocks several legitimate tickets one per cooldown cycle. (C) _finalize_story runs the whole-repo opus observer on every non-done outcome, so a usage halt spends a big agent call precisely when we just ran out of usage. Fix all three by making a quota interruption a first-class, auto-resumable state called 'quotad' (distinct from 'blocked' = needs human attention). The cooldown for a usage-limit halt is set to the reset time parsed from the failure text when present, else a configurable usage_limit_cooldown_minutes (default 300) from configs/budgets.json. The breaker/orchestrator surface a distinct 'quotad' outcome for the usage-limit halt only; other halts stay 'halted'. _finalize_story handles 'quotad' specially: status='quotad', a 'quotad' GitHub label, NO PR opened (work is incomplete), and the observer is skipped. pick_next_story treats 'quotad' stories as eligible so they resume automatically once the cooldown elapses (check_cooldown still gates when), while 'blocked' stays human-gated.",
+  "acceptance_criteria": [
+    "'quotad' is added to STORY_STATUSES in adw/tickets.py and accepted by load_prd validation and mark_story; existing statuses are unchanged",
+    "adw/safety.py: on a detected usage limit the breaker sets state.cooldown_until from a reset time parsed out of the failure text when one is present (e.g. an ISO timestamp or a 'resets'/'try again' clause), else from a configurable usage_limit_cooldown_minutes (default 300) read via SafetyConfig.from_budgets / configs/budgets.json; the generic circuit_cooldown_minutes no longer governs a usage-limit halt",
+    "The usage-limit halt is surfaced as a distinct 'quotad' outcome from adw/orchestrator.py run_ticket (not 'halted'); every other breaker halt still returns 'halted'",
+    "adw/workflow_runner.py _finalize_story handles a 'quotad' outcome by marking the story status='quotad', adding a 'quotad' issue label (best-effort, no-op for plain S-NNN), opening NO PR, and NOT running the observer; the existing done/blocked/halted handling is otherwise unchanged",
+    "adw/tickets.py pick_next_story (and pick_next_stories) treat status=='quotad' stories as eligible to pick alongside 'open', so a quota-interrupted ticket auto-resumes once its cooldown elapses; status=='blocked' remains excluded (human-gated)",
+    "Unit tests cover: reset-time parsed from a sample usage-limit message and the configurable fallback when absent; run_ticket returns 'quotad' for a usage-limit halt and 'halted' for a non-usage halt; _finalize_story on 'quotad' sets the status/label and skips both the PR and the observer; pick_next_story picks a 'quotad' story",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": true,
+  "status": "done"
+}
