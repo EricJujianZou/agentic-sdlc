@@ -1,0 +1,11 @@
+{
+  "id": "GH-87",
+  "type": "system-repair",
+  "priority": 2,
+  "title": "poll_all reworks open adw issues that already have an open PR / adw branch",
+  "description": "## Problem\n\n`workflows/poll_all.py` discovery (`discover_targets` -> `list_adw_issues`) treats every **open** issue labeled `adw` as live backlog. It never checks whether the issue's work is already **in flight** \u2014 i.e. whether there is already:\n\n- an open PR whose head is `adw/<id>`, or\n- an existing `adw/<id>` branch on origin (or in the managed clone).\n\nSo an issue whose PR is open and merely awaiting a human merge \u2014 but not yet closed \u2014 gets re-worked from scratch in a fresh clone, duplicating effort and corrupting state.\n\n## Evidence (first live multi-repo sweep, 2026-06-29)\n\n- `EricJujianZou/design-system` GH-2 (Card) and GH-3 (Typography) already had open PRs **#6 / #7** since 2026-06-21. The sweep re-worked both.\n- The fresh clone created `adw/GH-2` with no knowledge of origin's existing `adw/GH-2`, so the branch push failed non-fast-forward (`push of adw/GH-2 failed, continuing without it`). Harmless to origin, but wasted a full ticket run.\n- Both issues ended with contradictory labels (`BLOCKED` + `DONE`), needing manual cleanup.\n\n## Root cause\n\nSame reason they were picked at all: the issues were never closed (their PRs were never merged), so they still match `open + adw`. Closing the loop (merge -> issue auto-closes) is the human's job; until then the sweep should leave in-flight tickets alone rather than redo them.\n\n## Proposed fix\n\nBefore working a discovered issue, skip it when work is already in flight:\n\n- query open PRs for a head ref of `adw/<id>`, and/or check origin for an existing `adw/<id>` branch;\n- if found, log `skipped: <id> already in flight (PR #N / branch exists)` and drop it from the rotation rather than re-running stages.\n\nNote: `poll_once` (single-repo) shares the same sync / `pick_next_story` path and likely the same gap, so the guard should live where both can use it.",
+  "acceptance_criteria": [],
+  "skill_match": null,
+  "passes": false,
+  "status": "open"
+}

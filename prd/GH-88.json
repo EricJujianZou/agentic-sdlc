@@ -1,0 +1,11 @@
+{
+  "id": "GH-88",
+  "type": "system-repair",
+  "priority": 3,
+  "title": "poll_once log hides which issue sync skipped and why (silent never-worked issues)",
+  "description": "## Problem\n\nWhen `sync_issues` skips an issue, the only signal a scheduled `poll_once` pass\nleaves is a bare **count** in the poll log:\n\n```\n... | sync: synced: +0 new story(ies), 1 skipped | ran 0 ticket(s); ...\n```\n\nIt never says **which** issue was skipped or **why**. A malformed issue (e.g. two\ntype labels, or no usable body) is therefore silently never-worked \u2014 it just rots,\nand the operator only notices because \"nothing is happening.\" The reason already\nexists: `sync_issues.skip_reason` returns it and `sync_issues.main()` prints it \u2014\nbut `poll_once` discards the per-issue `(sid, reason)` pairs and logs only\n`len(skipped)`.\n\n## Evidence (2026-06-29)\n\nA `system-repair` issue (engine GH-87) was filed with two type labels\n(`bug` + `system-repair`). `skip_reason` rejected it (\"expected exactly one type\nlabel ... got ['bug', 'system-repair']\") on every pass. The poll log showed only\n`1 skipped` for hours; the issue never entered the prd and was never worked. The\ncause was only found by manually re-running `skip_reason`.\n\n## Proposed fix\n\nSurface skipped issues in the poll-log summary line (bounded, one line as usual):\ninclude each skipped `sid: reason`, or at least the ids, when `skipped` is\nnon-empty \u2014 e.g. `... 1 skipped (GH-87: expected exactly one type label ...)`.\n`poll_once.sync_fn` already receives `(added, skipped)` from `pull_and_sync`; it\njust needs to thread the reasons into `format_summary_line` instead of dropping\nthem. Keep the field clipped so one pass stays one tidy line.\n\n## Note\n\nThis is observability only \u2014 it does not change which issues are worked. A\nseparate doc fix clarifies that `system-repair` IS the type label (don't add a\nsecond), which is the specific malformation that triggered this.",
+  "acceptance_criteria": [],
+  "skill_match": null,
+  "passes": false,
+  "status": "open"
+}
