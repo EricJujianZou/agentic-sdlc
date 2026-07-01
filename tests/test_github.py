@@ -18,6 +18,7 @@ from adw.github import (
     comment_on_issue,
     create_issue,
     engine_repo_slug,
+    in_flight_ref,
     list_account_repos,
     list_open_issues,
     open_or_update_pr,
@@ -314,6 +315,25 @@ def test_list_account_repos_pages_until_short_page(monkeypatch):
     repos = list_account_repos("tok", "EricJujianZou")
     assert len(repos) == 101
     assert len(calls) == 2
+
+
+def test_in_flight_ref_finds_open_pr(monkeypatch):
+    monkeypatch.setattr("adw.github.api_request", lambda method, path, token, payload=None: [{"number": 6}])
+    assert in_flight_ref("acme", "repo", "GH-2", "tok") == "PR #6"
+
+
+def test_in_flight_ref_finds_branch_when_no_pr(monkeypatch):
+    monkeypatch.setattr("adw.github.api_request", lambda method, path, token, payload=None: [])
+    with patch("adw.github.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout="abc123\trefs/heads/adw/GH-2\n")
+        assert in_flight_ref("acme", "repo", "GH-2", "tok") == "branch adw/GH-2"
+
+
+def test_in_flight_ref_none_when_neither(monkeypatch):
+    monkeypatch.setattr("adw.github.api_request", lambda method, path, token, payload=None: [])
+    with patch("adw.github.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout="")
+        assert in_flight_ref("acme", "repo", "GH-2", "tok") is None
 
 
 def test_api_request_offline_raises_github_error(monkeypatch):
