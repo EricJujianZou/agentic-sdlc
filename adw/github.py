@@ -206,6 +206,36 @@ def open_or_update_pr(
     )
 
 
+def in_flight_ref(
+    owner: str, repo: str, ticket_id: str, token: str, repo_root: Path | str | None = None
+) -> str | None:
+    """Human-readable reason (`"PR #6"` / `"branch adw/GH-2"`) when `ticket_id`'s
+    work is already in flight (open PR or existing origin branch), else None.
+
+    Fails open on any GitHub/git error — a failed check must never block a
+    sweep from picking a ticket it would otherwise have picked."""
+    head = f"adw/{ticket_id}"
+    try:
+        prs = api_request(
+            "GET", f"/repos/{owner}/{repo}/pulls?state=open&head={owner}:{head}", token
+        )
+        if prs:
+            return f"PR #{prs[0]['number']}"
+    except GitHubError:
+        pass
+    try:
+        proc = subprocess.run(
+            ["git", "ls-remote", "--heads", "origin", head],
+            cwd=str(repo_root) if repo_root else None,
+            capture_output=True, text=True, check=True,
+        )
+        if proc.stdout.strip():
+            return f"branch {head}"
+    except (subprocess.CalledProcessError, OSError):
+        pass
+    return None
+
+
 def comment_on_issue(owner: str, repo: str, token: str, number: int, body: str) -> dict:
     """Post a comment on an issue."""
     return api_request(

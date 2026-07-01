@@ -461,7 +461,7 @@
       ],
       "skill_match": null,
       "passes": true,
-      "status": "done"
+      "status": "quotad"
     },
     {
       "id": "GH-63",
@@ -523,6 +523,40 @@
         "Full suite stays green (`uv run pytest -q`).",
         "**Filed human-gated (no `adw` label) on purpose:** this fix sits in the very",
         "**Companion finding (separate, not this ticket):** GH-56 is mis-typed `feat`"
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
+      "id": "GH-88",
+      "type": "system-repair",
+      "priority": 3,
+      "title": "poll_once log hides which issue sync skipped and why (silent never-worked issues)",
+      "description": "## Problem\n\nWhen `sync_issues` skips an issue, the only signal a scheduled `poll_once` pass\nleaves is a bare **count** in the poll log:\n\n```\n... | sync: synced: +0 new story(ies), 1 skipped | ran 0 ticket(s); ...\n```\n\nIt never says **which** issue was skipped or **why**. A malformed issue (e.g. two\ntype labels, or no usable body) is therefore silently never-worked \u2014 it just rots,\nand the operator only notices because \"nothing is happening.\" The reason already\nexists: `sync_issues.skip_reason` returns it and `sync_issues.main()` prints it \u2014\nbut `poll_once` discards the per-issue `(sid, reason)` pairs and logs only\n`len(skipped)`.\n\n## Evidence (2026-06-29)\n\nA `system-repair` issue (engine GH-87) was filed with two type labels\n(`bug` + `system-repair`). `skip_reason` rejected it (\"expected exactly one type\nlabel ... got ['bug', 'system-repair']\") on every pass. The poll log showed only\n`1 skipped` for hours; the issue never entered the prd and was never worked. The\ncause was only found by manually re-running `skip_reason`.\n\n## Proposed fix\n\nSurface skipped issues in the poll-log summary line (bounded, one line as usual):\ninclude each skipped `sid: reason`, or at least the ids, when `skipped` is\nnon-empty \u2014 e.g. `... 1 skipped (GH-87: expected exactly one type label ...)`.\n`poll_once.sync_fn` already receives `(added, skipped)` from `pull_and_sync`; it\njust needs to thread the reasons into `format_summary_line` instead of dropping\nthem. Keep the field clipped so one pass stays one tidy line.\n\n## Note\n\nThis is observability only \u2014 it does not change which issues are worked. A\nseparate doc fix clarifies that `system-repair` IS the type label (don't add a\nsecond), which is the specific malformation that triggered this.",
+      "acceptance_criteria": [
+        "When `sync_fn` in `poll_once.main()` encounters issues skipped for a reason other than 'already synced', the sync message it returns includes each such issue's ID and skip reason, e.g. `1 skipped (GH-87: expected exactly one type label ...)`",
+        "Issues skipped solely because they are already in the prd ('already synced') continue to be counted in the total but are not individually named in the summary line, preventing routine noise on every pass",
+        "The poll log line produced by `format_summary_line` remains a single bounded line per pass; the new skipped-issue detail is subject to the existing `_clip`/`_LOG_FIELD_CAP` mechanism so a long reason or many skipped IDs cannot break the one-line invariant",
+        "A unit test in `tests/test_poll_once.py` covers the case where a non-routine skip (e.g. two type labels) is present and asserts the skipped issue's ID and reason appear in `format_summary_line` output",
+        "`uv run pytest -q` stays green"
+      ],
+      "skill_match": null,
+      "passes": true,
+      "status": "done"
+    },
+    {
+      "id": "GH-87",
+      "type": "system-repair",
+      "priority": 2,
+      "title": "poll_all reworks open adw issues that already have an open PR / adw branch",
+      "description": "## Problem\n\n`workflows/poll_all.py` discovery (`discover_targets` -> `list_adw_issues`) treats every **open** issue labeled `adw` as live backlog. It never checks whether the issue's work is already **in flight** \u2014 i.e. whether there is already:\n\n- an open PR whose head is `adw/<id>`, or\n- an existing `adw/<id>` branch on origin (or in the managed clone).\n\nSo an issue whose PR is open and merely awaiting a human merge \u2014 but not yet closed \u2014 gets re-worked from scratch in a fresh clone, duplicating effort and corrupting state.\n\n## Evidence (first live multi-repo sweep, 2026-06-29)\n\n- `EricJujianZou/design-system` GH-2 (Card) and GH-3 (Typography) already had open PRs **#6 / #7** since 2026-06-21. The sweep re-worked both.\n- The fresh clone created `adw/GH-2` with no knowledge of origin's existing `adw/GH-2`, so the branch push failed non-fast-forward (`push of adw/GH-2 failed, continuing without it`). Harmless to origin, but wasted a full ticket run.\n- Both issues ended with contradictory labels (`BLOCKED` + `DONE`), needing manual cleanup.\n\n## Root cause\n\nSame reason they were picked at all: the issues were never closed (their PRs were never merged), so they still match `open + adw`. Closing the loop (merge -> issue auto-closes) is the human's job; until then the sweep should leave in-flight tickets alone rather than redo them.\n\n## Proposed fix\n\nBefore working a discovered issue, skip it when work is already in flight:\n\n- query open PRs for a head ref of `adw/<id>`, and/or check origin for an existing `adw/<id>` branch;\n- if found, log `skipped: <id> already in flight (PR #N / branch exists)` and drop it from the rotation rather than re-running stages.\n\nNote: `poll_once` (single-repo) shares the same sync / `pick_next_story` path and likely the same gap, so the guard should live where both can use it.",
+      "acceptance_criteria": [
+        "A shared helper (usable by both poll_all.py and poll_once's path) detects, for a given owner/repo/ticket id, whether an open PR exists with head ref adw/<id> (reusing the existing `pulls?state=open&head=` query pattern in adw/github.py) or whether an adw/<id> branch already exists on origin",
+        "discover_targets/list_adw_issues filtering (or the equivalent pick_next_story path) excludes an issue from the working set when this in-flight check returns true, logging a message of the form 'skipped: <id> already in flight (PR #N / branch exists)'",
+        "An issue with no open PR and no existing adw/<id> branch is still picked and worked normally (no regression to the existing discovery/pick behavior)",
+        "A unit test in tests/test_poll_all.py (and/or tests/test_tickets.py) covers both cases: an in-flight ticket is skipped, and a non-in-flight ticket is still picked",
+        "The full suite uv run pytest -q stays green"
       ],
       "skill_match": null,
       "passes": true,

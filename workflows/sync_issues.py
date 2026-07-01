@@ -18,6 +18,7 @@ from adw.github import GitHubError, get_token, list_adw_issues, repo_slug
 from adw.tickets import Prd, Story, load_prd, save_prd
 
 _TYPE_LABELS = {"feat", "bug", "chore", "system-repair"}
+ROUTINE_SKIP_REASON = "already synced"
 
 
 def issue_story_id(issue: dict) -> str:
@@ -121,7 +122,7 @@ def sync_issues(prd: Prd, issues: list[dict]) -> tuple[list[Story], list[tuple[s
     for issue in issues:
         sid = issue_story_id(issue)
         if sid in existing_ids:
-            skipped.append((sid, "already synced"))
+            skipped.append((sid, ROUTINE_SKIP_REASON))
             continue
         reason = skip_reason(issue)
         if reason:
