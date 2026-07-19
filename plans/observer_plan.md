@@ -65,7 +65,7 @@ when filing is wired (it already lands `status=blocked`, human-gated).
 - `adw/workflow_runner.py` — `_observe_and_report`, `_format_repair_comment`,
   `_post_observer`, the `self-heal-suggested` / `needs-clarification` labels, and
   the wiring in both non-done paths of `run_one_story`.
-- `configs/models.json` (observe → opus), `configs/budgets.json`
+- `configs/models.json` (observe → sonnet-5), `configs/budgets.json`
   (`observer_enabled`).
 
 ## Tests

@@ -41,7 +41,7 @@ The workflow parses this (it is the *only* completion signal — see safety plan
 
 | Phase | Default tier | Rationale |
 |---|---|---|
-| decompose / plan / review | Opus-tier | Judgment-heavy; errors here are expensive downstream |
+| decompose / plan / review | Sonnet-tier | Judgment-heavy, but opus-tier drained the subscription quota (2026-07-17); sonnet-5 is the cost/quality balance |
 | implement | Sonnet-tier | Volume work; bounded by tests and review |
 | trivial tickets, classification steps | Haiku-tier | Cheap, fast |
 

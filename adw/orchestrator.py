@@ -24,8 +24,8 @@ STAGE_ORDER = ("plan", "implement", "test", "review")
 DOCUMENT_STAGE = "document"
 DECOMPOSE_STAGE = "decompose"
 OBSERVE_STAGE = "observe"
-# Cheap sonnet pre-pass over the same observe prompt (GH-63): run_observer
-# escalates to the opus OBSERVE_STAGE only when this triage classifies the
+# Cheap pre-pass over the same observe prompt (GH-63): run_observer
+# escalates to the full OBSERVE_STAGE only when this triage classifies the
 # failure as harness-level.
 OBSERVE_TRIAGE_STAGE = "observe_triage"
 
@@ -410,10 +410,10 @@ def run_observer(
     state_path: str | Path,
     runs_root: str | Path | None = None,
 ) -> ObserverResult:
-    """Run the observer on a non-done ticket (self-heal lens): a cheap sonnet
-    triage pass first, escalating to the opus pass only when triage
+    """Run the observer on a non-done ticket (self-heal lens): a cheap
+    triage pass first, escalating to the full observe pass only when triage
     classifies the failure as harness-level (GH-63) — most outcomes are
-    ticket-level, where the opus pass would add cost without changing the
+    ticket-level, where the full pass would add cost without changing the
     verdict.
 
     Returns the authoritative classification and, for a harness-level
