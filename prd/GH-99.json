@@ -1,0 +1,16 @@
+{
+  "id": "GH-99",
+  "type": "system-repair",
+  "priority": 1,
+  "title": "system-repair: parse_decompose_criteria reads stale field name after prompt-asset rename",
+  "description": "From the observer diagnosis on #94: commit 27e1fa9 (merged via PR #95 into main) updated commands/DECOMPOSE.md and stage_specs/decompose_feat.md to have the decompose agent emit its output under `proposed_criteria` instead of `acceptance_criteria`, but did not update adw/orchestrator.py's parse_decompose_criteria, which still does obj.get(\"acceptance_criteria\") and therefore always returns None. run_decompose then reports 'decompose succeeded but emitted no acceptance_criteria' and blocks the ticket even when the agent emitted a well-formed, non-empty proposed_criteria array (see GH-94's iter01_decompose_output.md). This affects every ticket routed through decompose.",
+  "acceptance_criteria": [
+    "parse_decompose_criteria in adw/orchestrator.py reads the `proposed_criteria` key from the decompose stage's JSON status block",
+    "A decompose stage output with outcome: success and a non-empty proposed_criteria array causes run_decompose to return that list instead of blocking with 'no acceptance_criteria'",
+    "A regression test asserts parse_decompose_criteria extracts criteria from a payload keyed proposed_criteria",
+    "Full suite uv run pytest -q stays green"
+  ],
+  "skill_match": null,
+  "passes": false,
+  "status": "in_progress"
+}
