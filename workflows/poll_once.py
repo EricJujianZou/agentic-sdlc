@@ -34,7 +34,7 @@ from adw.github import GitHubError
 from adw.locks import DEFAULT_STALE_SECONDS, LockHeld, single_flight
 from adw.workflow_runner import BacklogResult
 from workflows.run_backlog import DEFAULT_MAX_TICKETS, run_backlog
-from workflows.sync_issues import pull_and_sync
+from workflows.sync_issues import ROUTINE_SKIP_REASON, pull_and_sync
 
 # sync_fn() -> (ok, message); backlog_fn() -> BacklogResult. Injected so the
 # pass is testable without live GitHub or real workflows.
@@ -148,6 +148,22 @@ def append_log(log_path: str | Path, line: str) -> None:
         pass
 
 
+def format_sync_message(added: list, skipped: list[tuple[str, str]]) -> str:
+    """Build the sync summary string for a pass.
+
+    Non-routine skips (anything other than ROUTINE_SKIP_REASON) are named
+    individually so silent never-worked issues surface in the log. Routine
+    'already synced' skips are counted but not named (they would add noise
+    on every pass).
+    """
+    msg = f"synced: +{len(added)} new story(ies), {len(skipped)} skipped"
+    notable = [(sid, r) for sid, r in skipped if r != ROUTINE_SKIP_REASON]
+    if notable:
+        detail = "; ".join(f"{sid}: {r}" for sid, r in notable)
+        msg += f" ({detail})"
+    return msg
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -170,7 +186,7 @@ def main() -> int:
             added, skipped = pull_and_sync()
         except GitHubError as exc:
             return False, f"sync failed (offline or no credential?): {exc}"
-        return True, f"synced: +{len(added)} new story(ies), {len(skipped)} skipped"
+        return True, format_sync_message(added, skipped)
 
     def backlog_fn() -> BacklogResult:
         return run_backlog(args.max_tickets, args.max_iterations)
