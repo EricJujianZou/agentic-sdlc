@@ -334,7 +334,7 @@ def run_decompose(
         return None, result.status.failure_reason or f"decompose {result.status.outcome}"
     criteria = parse_decompose_criteria(result.raw_output)
     if not criteria:
-        return None, "decompose succeeded but emitted no acceptance_criteria"
+        return None, "decompose succeeded but emitted no proposed_criteria"
     return criteria, None
 
 
