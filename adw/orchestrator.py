@@ -285,11 +285,11 @@ def _finish(
 
 
 def parse_decompose_criteria(text: str) -> list[str] | None:
-    """Extract the acceptance_criteria array the decompose stage emits in its
+    """Extract the proposed_criteria array the decompose stage emits in its
     status block. Returns the cleaned non-empty list, or None if absent/empty.
     Reuses the same last-object-wins JSON scan the status parser uses."""
     for obj in _candidate_objects(text):
-        ac = obj.get("acceptance_criteria")
+        ac = obj.get("proposed_criteria")
         if isinstance(ac, list):
             cleaned = [c.strip() for c in ac if isinstance(c, str) and c.strip()]
             if cleaned:
