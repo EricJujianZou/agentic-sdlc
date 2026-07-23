@@ -58,7 +58,7 @@ def _run(result, tmp_path):
 
 
 def test_run_decompose_success_returns_criteria(tmp_path):
-    raw = '{"stage": "decompose", "ticket_id": "S-001", "outcome": "success", "acceptance_criteria": ["a", "b"]}'
+    raw = '{"stage": "decompose", "ticket_id": "S-001", "outcome": "success", "proposed_criteria": ["a", "b"]}'
     criteria, problem, calls = _run(_result(raw=raw), tmp_path)
     assert criteria == ["a", "b"]
     assert problem is None
