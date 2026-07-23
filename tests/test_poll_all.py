@@ -197,6 +197,7 @@ def test_sweep_round_robins_across_repos(tmp_path, monkeypatch):
     monkeypatch.setattr(poll_all, "ensure_clone", lambda d: repo_paths[d.name])
     monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
     monkeypatch.setattr(poll_all, "reap_stale_in_progress", lambda **k: [])
+    monkeypatch.setattr(poll_all, "in_flight_ref", lambda *a, **k: None)
     _stub_models_budgets(tmp_path, monkeypatch)
 
     # Each repo has exactly one open story; track which repo (by target_root)
@@ -204,7 +205,7 @@ def test_sweep_round_robins_across_repos(tmp_path, monkeypatch):
     remaining = {name: 1 for name in repo_paths}
     order = []
 
-    def fake_pick_next_story(prd):
+    def fake_pick_next_story(prd, **kwargs):
         name = paths.target_root().name
         if remaining.get(name, 0) > 0:
             remaining[name] -= 1
@@ -242,11 +243,12 @@ def test_sweep_isolates_one_repo_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(poll_all, "ensure_clone", lambda d: repo_paths[d.name])
     monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
     monkeypatch.setattr(poll_all, "reap_stale_in_progress", lambda **k: [])
+    monkeypatch.setattr(poll_all, "in_flight_ref", lambda *a, **k: None)
     _stub_models_budgets(tmp_path, monkeypatch)
 
     remaining = {"good": 1, "bad": 1}
 
-    def fake_pick_next_story(prd):
+    def fake_pick_next_story(prd, **kwargs):
         name = paths.target_root().name
         if remaining.get(name, 0) > 0:
             remaining[name] -= 1
@@ -282,9 +284,10 @@ def test_sweep_quotad_writes_global_breaker_and_halts(tmp_path, monkeypatch):
     monkeypatch.setattr(poll_all, "ensure_clone", lambda d: repo_paths[d.name])
     monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
     monkeypatch.setattr(poll_all, "reap_stale_in_progress", lambda **k: [])
+    monkeypatch.setattr(poll_all, "in_flight_ref", lambda *a, **k: None)
     _stub_models_budgets(tmp_path, monkeypatch)
 
-    monkeypatch.setattr(poll_all, "pick_next_story", lambda prd: _story(sid="GH-1"))
+    monkeypatch.setattr(poll_all, "pick_next_story", lambda prd, **kwargs: _story(sid="GH-1"))
     monkeypatch.setattr(poll_all, "load_prd", lambda path: object())
     monkeypatch.setattr(
         poll_all, "run_one_story",
@@ -302,6 +305,83 @@ def test_sweep_quotad_writes_global_breaker_and_halts(tmp_path, monkeypatch):
     result = poll_all.sweep()
     assert "quotad" in result.stop_reason
     assert written["until_iso"] == cooldown_iso
+
+
+def test_sweep_skips_in_flight_story_but_runs_lower_priority(tmp_path, monkeypatch):
+    monkeypatch.setattr(poll_all, "read_global_cooldown", lambda: None)
+    monkeypatch.setattr(poll_all, "get_token", lambda: "tok")
+    monkeypatch.setattr(poll_all, "engine_repo_slug", lambda: ("acme", "engine"))
+
+    repos = [poll_all.RepoDescriptor("acme", "repo-a", "url-a")]
+    monkeypatch.setattr(poll_all, "discover_targets", lambda token, owner: repos)
+    repo_path = tmp_path / "repo-a"
+    monkeypatch.setattr(poll_all, "ensure_clone", lambda d: repo_path)
+    monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
+    monkeypatch.setattr(poll_all, "reap_stale_in_progress", lambda **k: [])
+    _stub_models_budgets(tmp_path, monkeypatch)
+
+    stories = {"GH-1": _story(sid="GH-1"), "GH-2": _story(sid="GH-2")}
+    remaining = {"GH-1": 1, "GH-2": 1}
+
+    def fake_pick_next_story(prd, exclude=None):
+        exclude = exclude or set()
+        for sid in ("GH-1", "GH-2"):
+            if sid not in exclude and remaining.get(sid, 0) > 0:
+                remaining[sid] -= 1
+                return stories[sid]
+        return None
+
+    monkeypatch.setattr(poll_all, "pick_next_story", fake_pick_next_story)
+    monkeypatch.setattr(poll_all, "load_prd", lambda path: object())
+    monkeypatch.setattr(
+        poll_all, "in_flight_ref",
+        lambda owner, repo, ticket_id, token, repo_root=None: "PR #6" if ticket_id == "GH-1" else None,
+    )
+    run_ids = []
+    monkeypatch.setattr(
+        poll_all, "run_one_story",
+        lambda story, stage_order, **k: (run_ids.append(story.id), TicketOutcome(story.id, "done", stages_run=["plan"]))[1],
+    )
+
+    result = poll_all.sweep()
+    assert run_ids == ["GH-2"]
+    assert result.tickets_run == 1
+
+
+def test_sweep_picks_non_in_flight_story_normally(tmp_path, monkeypatch):
+    monkeypatch.setattr(poll_all, "read_global_cooldown", lambda: None)
+    monkeypatch.setattr(poll_all, "get_token", lambda: "tok")
+    monkeypatch.setattr(poll_all, "engine_repo_slug", lambda: ("acme", "engine"))
+
+    repos = [poll_all.RepoDescriptor("acme", "repo-a", "url-a")]
+    monkeypatch.setattr(poll_all, "discover_targets", lambda token, owner: repos)
+    repo_path = tmp_path / "repo-a"
+    monkeypatch.setattr(poll_all, "ensure_clone", lambda d: repo_path)
+    monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
+    monkeypatch.setattr(poll_all, "reap_stale_in_progress", lambda **k: [])
+    _stub_models_budgets(tmp_path, monkeypatch)
+
+    remaining = {"GH-1": 1}
+
+    def fake_pick_next_story(prd, exclude=None):
+        exclude = exclude or set()
+        if remaining.get("GH-1", 0) > 0 and "GH-1" not in exclude:
+            remaining["GH-1"] -= 1
+            return _story(sid="GH-1")
+        return None
+
+    monkeypatch.setattr(poll_all, "pick_next_story", fake_pick_next_story)
+    monkeypatch.setattr(poll_all, "load_prd", lambda path: object())
+    monkeypatch.setattr(poll_all, "in_flight_ref", lambda *a, **k: None)
+    run_ids = []
+    monkeypatch.setattr(
+        poll_all, "run_one_story",
+        lambda story, stage_order, **k: (run_ids.append(story.id), TicketOutcome(story.id, "done", stages_run=["plan"]))[1],
+    )
+
+    result = poll_all.sweep()
+    assert run_ids == ["GH-1"]
+    assert result.tickets_run == 1
 
 
 def test_sweep_no_active_repos_after_clone_failures(monkeypatch):
@@ -335,8 +415,9 @@ def test_sweep_self_host_only_engine_has_issues(tmp_path, monkeypatch):
     monkeypatch.setattr(poll_all, "ensure_clone", fake_ensure_clone)
     monkeypatch.setattr(poll_all, "pull_and_sync", lambda: ([], []))
     monkeypatch.setattr(poll_all, "reap_stale_in_progress", lambda **k: [])
+    monkeypatch.setattr(poll_all, "in_flight_ref", lambda *a, **k: None)
     _stub_models_budgets(tmp_path, monkeypatch)
-    monkeypatch.setattr(poll_all, "pick_next_story", lambda prd: None)
+    monkeypatch.setattr(poll_all, "pick_next_story", lambda prd, **kwargs: None)
     monkeypatch.setattr(poll_all, "load_prd", lambda path: object())
 
     result = poll_all.sweep()

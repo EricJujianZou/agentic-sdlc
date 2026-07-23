@@ -220,6 +220,19 @@ def test_pick_next_story_skips_non_open_and_returns_none_when_done():
     assert pick_next_story(prd) is None
 
 
+def test_pick_next_story_exclude_drops_candidate():
+    prd = Prd(
+        project="p",
+        stories=[
+            story(id="S-001", priority=1),
+            story(id="S-002", priority=2),
+        ],
+    )
+    assert pick_next_story(prd, exclude={"S-001"}).id == "S-002"
+    assert pick_next_story(prd, exclude={"S-001", "S-002"}) is None
+    assert pick_next_story(prd).id == "S-001"  # no exclude: regression-free
+
+
 def test_pick_next_story_picks_quotad_but_not_blocked():
     prd = Prd(
         project="p",

@@ -36,7 +36,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent  # engine root, for imports
 sys.path.insert(0, str(REPO_ROOT))
 
 from adw import paths
-from adw.github import GitHubError, engine_repo_slug, get_token, list_account_repos, list_adw_issues, repo_slug
+from adw.github import (
+    GitHubError,
+    engine_repo_slug,
+    get_token,
+    in_flight_ref,
+    list_account_repos,
+    list_adw_issues,
+    repo_slug,
+)
 from adw.locks import DEFAULT_STALE_SECONDS, LockHeld, single_flight
 from adw.state import load_state
 from adw.tickets import load_prd, pick_next_story
@@ -268,6 +276,7 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
         return SweepResult(0, f"discovery failed: {exc}")
 
     active_repos: list[Path] = []
+    repo_slugs: dict[Path, tuple[str, str]] = {}
     for descriptor in descriptors:
         repo_path = ensure_clone(descriptor)
         if repo_path is None:
@@ -279,6 +288,7 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
             print(f"sync: skipping {descriptor.slug}: {exc}")
             continue
         active_repos.append(repo_path)
+        repo_slugs[repo_path] = (descriptor.owner, descriptor.name)
 
     if not active_repos:
         return SweepResult(0, "no repos with open adw issues to work")
@@ -288,15 +298,25 @@ def sweep(*, max_iterations: int | None = None, stale_seconds: float = 2 * 60 * 
     iterations = max_iterations or budgets["max_iterations_default"]
 
     tickets_run = 0
+    in_flight_skips: dict[Path, set[str]] = {}
     while active_repos:
         repo_path = active_repos.pop(0)
         with _target(repo_path):
             try:
                 reap_stale_in_progress(stale_seconds=stale_seconds)
                 reconcile_completed_against_main()  # GH-78: never re-pick already-merged work
-                story = pick_next_story(load_prd(paths.prd_path()))
+                story = pick_next_story(
+                    load_prd(paths.prd_path()), exclude=in_flight_skips.get(repo_path)
+                )
                 if story is None:
                     continue  # backlog empty here — drop from rotation
+                owner, repo = repo_slugs[repo_path]
+                ref = in_flight_ref(owner, repo, story.id, token, repo_path)
+                if ref is not None:
+                    print(f"skipped: {story.id} already in flight ({ref})")
+                    in_flight_skips.setdefault(repo_path, set()).add(story.id)
+                    active_repos.append(repo_path)
+                    continue
                 stage_order = STAGE_ORDER_BY_TYPE.get(story.type)
                 if stage_order is None:
                     continue  # defensive: schema restricts type, but never dispatch blind

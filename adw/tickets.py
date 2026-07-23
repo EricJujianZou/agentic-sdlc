@@ -209,7 +209,9 @@ def save_prd(prd: Prd, path: str | Path) -> None:
             shard.unlink()
 
 
-def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story | None:
+def pick_next_story(
+    prd: Prd, *, types: tuple[str, ...] | None = None, exclude: set[str] | None = None
+) -> Story | None:
     """Highest-priority story with passes=false and status=open.
 
     If `types` is given, only stories of those types are considered, so each
@@ -219,6 +221,10 @@ def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story 
     flips them to 'open'. A 'quotad' story (halted only by a provider usage
     limit, S-015) is picked alongside 'open' so it auto-resumes once its
     cooldown elapses; 'blocked' stays human-gated and excluded.
+
+    `exclude` drops story ids already known to be in flight elsewhere (a
+    sweep's per-repo skip set, GH-87) without touching the picker's pure,
+    network-free contract.
     """
     candidates = [
         s
@@ -226,6 +232,7 @@ def pick_next_story(prd: Prd, *, types: tuple[str, ...] | None = None) -> Story 
         if not s.passes
         and s.status in ("open", "quotad")
         and (types is None or s.type in types)
+        and (exclude is None or s.id not in exclude)
     ]
     if not candidates:
         return None
