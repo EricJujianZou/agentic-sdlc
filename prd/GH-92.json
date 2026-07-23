@@ -1,0 +1,17 @@
+{
+  "id": "GH-92",
+  "type": "system-repair",
+  "priority": 5,
+  "title": "Cross-repo backlog advances without human merges; never rebuild completed-but-unmerged tickets",
+  "description": "When building a **target repo** (cross-repo mode, `ADW_REPO` set \u2014 e.g. `scholarship-factory`) that has several **independent** open tickets, the backlog cannot advance without a human merging each PR, and the harness **re-runs already-built tickets**, burning quota.\n\n**Observed (scholarship-factory, 2026-07-09):** overnight, GH-11 and GH-12 built and opened PRs, then the poller **re-picked and rebuilt GH-12 every stale-window (~60 min) for hours**, never advancing to the independent GH-13..16. state.json stayed pinned to GH-12.\n\n## Root cause\n\nThe only terminal guard that survives across passes is `reconcile_completed_against_main` (`adw/workflow_runner.py`), which marks a ticket done **only when `docs/changes/<id>.md` is present on `origin/main`** \u2014 i.e. after **merge**. Ticket branches are cut from `main`, so a completed-but-unmerged ticket's `status=done` (which lives only on its unmerged branch) is invisible on the next pass. `pick_next_story` (`adw/tickets.py`) then sees it `open` again and re-selects it; `reap_stale_in_progress` (GH-47) recycles it every stale-window. Net: the backlog **stalls on the lowest unmerged ticket** and never drains independent work while the human is away. There is a guard for already-**merged** tickets (GH-78) and for **interrupted** ones (GH-47), but **none for completed-but-unmerged** ones.\n\n## Desired\n\nIndependent tickets drain **unattended** \u2014 each built once, its PR left open for human review \u2014 without requiring merges between them, and **without ever rebuilding** work already completed on a pushed branch / open PR.",
+  "acceptance_criteria": [
+    "A ticket whose work is already completed on a pushed branch `adw/<id>` (its completion artifact `docs/changes/<id>.md` exists on `origin/adw/<id>`, and/or an open PR exists for that branch) is treated as terminal-for-selection: it is **not** re-picked or rebuilt on subsequent passes, even before its PR merges.",
+    "Given N independent open tickets and **no** human merges, successive poll passes build each ticket **exactly once** and advance to the next, leaving N open PRs \u2014 not looping on the lowest-id ticket.",
+    "Already-merged tickets remain terminal (existing `reconcile_completed_against_main` behavior preserved); interrupted/stale `in_progress` reclamation (GH-47) preserved.",
+    "A regression test simulates: complete ticket A (branch pushed, PR open, unmerged), then run selection again -> it picks ticket B, not A.",
+    "Existing engine suite stays green (`uv run pytest -q`)."
+  ],
+  "skill_match": null,
+  "passes": false,
+  "status": "open"
+}

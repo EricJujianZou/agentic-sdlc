@@ -1,0 +1,11 @@
+{
+  "id": "GH-94",
+  "type": "feat",
+  "priority": 5,
+  "title": "Add a --dry-run flag to poll_once",
+  "description": "poll_once should support --dry-run: sync issues and print which tickets it would work in what order, without invoking any stage.",
+  "acceptance_criteria": [],
+  "skill_match": null,
+  "passes": false,
+  "status": "open"
+}
