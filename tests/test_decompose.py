@@ -26,20 +26,25 @@ def _result(outcome="success", *, raw="", failure=None):
 def test_parse_extracts_criteria_from_status_block():
     raw = (
         'prose...\n```json\n{"stage": "decompose", "ticket_id": "S-001", '
-        '"outcome": "success", "acceptance_criteria": ["one", "two"]}\n```'
+        '"outcome": "success", "proposed_criteria": ["one", "two"]}\n```'
     )
     assert parse_decompose_criteria(raw) == ["one", "two"]
 
 
+def test_parse_extracts_criteria_keyed_proposed_criteria():
+    raw = '{"proposed_criteria": ["x", "y"]}'
+    assert parse_decompose_criteria(raw) == ["x", "y"]
+
+
 def test_parse_cleans_blank_entries():
-    raw = '{"acceptance_criteria": ["  keep  ", "", "  ", "also"]}'
+    raw = '{"proposed_criteria": ["  keep  ", "", "  ", "also"]}'
     assert parse_decompose_criteria(raw) == ["keep", "also"]
 
 
 def test_parse_returns_none_when_absent():
     assert parse_decompose_criteria('{"stage": "decompose", "outcome": "blocked"}') is None
     assert parse_decompose_criteria("no json here") is None
-    assert parse_decompose_criteria('{"acceptance_criteria": []}') is None
+    assert parse_decompose_criteria('{"proposed_criteria": []}') is None
 
 
 # --- run_decompose ----------------------------------------------------------
