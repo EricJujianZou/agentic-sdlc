@@ -45,6 +45,6 @@ result to `prd.json`. You never edit files.
 
 ## Definition of done
 
-A status block with `outcome: "success"` and a non-empty `acceptance_criteria`
+A status block with `outcome: "success"` and a non-empty `proposed_criteria`
 array of single, checkable statements; or `outcome: "blocked"` with an empty
 array and a `failure_reason` naming what the ticket fails to specify.

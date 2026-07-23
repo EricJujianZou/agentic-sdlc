@@ -170,7 +170,7 @@ or reports `blocked` because it's missing.
 | File | Knobs |
 |---|---|
 | `configs/budgets.json` | max iterations (5), per-ticket token budget (2M), stage timeout (15 min), circuit cooldown (30 min) |
-| `configs/models.json` | model per stage — opus for plan/review/decompose, sonnet for implement/test, haiku for trivial |
+| `configs/models.json` | model per stage — claude-sonnet-5 for all stages, haiku for trivial |
 | `.claude/settings.json` | hook wiring (don't remove; the hooks are the hard guarantees) |
 
 By default the harness operates on its own repo. To build a *different* repo,

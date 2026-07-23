@@ -1,0 +1,17 @@
+{
+  "id": "GH-93",
+  "type": "system-repair",
+  "priority": 5,
+  "title": "Cross-repo bookkeeping hygiene: don't commit per-run state.json to target; stop prd-shard merge conflicts",
+  "description": "Building a **target repo** commits **per-run bookkeeping** into the target's tracked tree, which then conflicts on every PR merge and (for `state.json`) disturbs the heartbeat the reaper relies on.\n\n**Observed (scholarship-factory, 2026-07-09):** merging the GH-12 PR required hand-resolving conflicts in `state.json` (the per-run heartbeat) and `prd/GH-11.json` / `prd/GH-12.json` (ledger shards) \u2014 pure bookkeeping noise, on top of the one real code conflict (`__init__.py`). Every unattended merge hits this, so a human cannot merge these while asleep.\n\n## Root cause\n\n- **`state.json` is committed in the target.** It is the per-run heartbeat; the engine's own reaper comment (`adw/workflow_runner.py::reap_stale_in_progress`) states *\"state.json is gitignored, so its mtime is a heartbeat git never disturbs.\"* But a freshly-bootstrapped **target** repo does **not** gitignore it, so the auto-commit hook commits it, it conflicts on merge, and its mtime is disturbed by branch checkouts \u2014 undermining the reaper the harness depends on.\n- **prd ledger shards conflict across branches.** Sharding (GH-79) claims \"two branches editing different stories don't conflict,\" but every pass rewrites **every** shard (sync + reconcile touch all stories), so two branches carry a different `status` for the **same** shard (e.g. `prd/GH-11.json`) and collide on merge.\n\n## Desired\n\nUnattended cross-repo builds do not generate bookkeeping merge conflicts, so a human can merge (or auto-merge) PRs without hand-resolving engine noise. Note: the ledger (`prd/`) must stay functional for status tracking \u2014 the fix is to stop cross-branch churn, not to blindly gitignore the whole ledger.",
+  "acceptance_criteria": [
+    "A freshly bootstrapped/onboarded target repo has `state.json` (and any other per-run heartbeat/scratch) **gitignored and untracked**, so it is never committed, never conflicts on merge, and the reaper heartbeat works as designed.",
+    "prd ledger writes are scoped so a ticket branch modifies/commits only the shard(s) for the story it worked (or the ledger is otherwise kept out of cross-branch conflict), so two independent ticket PRs merge with **no** prd-shard conflict.",
+    "Onboarding/bootstrap applies the above to **target** repos, not just the engine's own repo.",
+    "Regression test: two independent ticket branches built from `main` merge cleanly with no `state.json` or prd-shard conflict.",
+    "Existing engine suite stays green (`uv run pytest -q`)."
+  ],
+  "skill_match": null,
+  "passes": false,
+  "status": "open"
+}

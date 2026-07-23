@@ -1,9 +1,9 @@
 {
-  "_comment": "Model per phase (plans/harness_plan.md §3). Deterministic — no in-prompt model choices. Opus stages pinned to claude-opus-4-8 explicitly (2026-06-11: the bare 'opus' tier alias is ambiguous now that 'fable' exists as a separate top-tier alias, and a fable-routed run burned the session limit). decompose only expands acceptance criteria, so it runs on sonnet (GH-63). observe_triage is a cheap sonnet pre-pass over the same observe prompt; run_observer only escalates to the opus 'observe' pass when triage classifies the failure as harness-level (GH-63).",
+  "_comment": "Model per phase (plans/harness_plan.md §3). Deterministic — no in-prompt model choices. All stages pinned to claude-sonnet-5 (2026-07-17: opus-4-8 stages switched to sonnet to preserve the Claude subscription quota; explicit model IDs kept — the bare tier aliases are ambiguous now that 'fable' exists as a separate top-tier alias, and a fable-routed run burned the session limit). decompose only expands acceptance criteria, so it runs on sonnet (GH-63). observe_triage is a cheap pre-pass over the same observe prompt; run_observer only escalates to the full 'observe' pass when triage classifies the failure as harness-level (GH-63).",
   "decompose": "claude-sonnet-5",
-  "plan": "claude-opus-4-8",
-  "review": "claude-opus-4-8",
-  "observe": "claude-opus-4-8",
+  "plan": "claude-sonnet-5",
+  "review": "claude-sonnet-5",
+  "observe": "claude-sonnet-5",
   "observe_triage": "claude-sonnet-5",
   "implement": "claude-sonnet-5",
   "test": "claude-sonnet-5",
