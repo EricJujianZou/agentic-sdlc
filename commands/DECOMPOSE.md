@@ -32,7 +32,7 @@ tokens proposing criteria first.
    the test suite stays green when the work touches code.
 
 End your reply with exactly this status block (JSON, the last thing in the
-message). Put the proposed criteria in the `acceptance_criteria` array — the
+message). Put the proposed criteria in the `proposed_criteria` array — the
 workflow reads them from here and writes them to `prd.json`:
 
 ```json
@@ -46,7 +46,7 @@ workflow reads them from here and writes them to `prd.json`:
   "files_changed": 0,
   "suggested_tools": [],
   "system_repair_suggested": false,
-  "acceptance_criteria": [
+  "proposed_criteria": [
     "First concrete, checkable criterion",
     "Second criterion",
     "Full suite uv run pytest -q stays green"
@@ -54,5 +54,5 @@ workflow reads them from here and writes them to `prd.json`:
 }
 ```
 
-On `outcome: "blocked"` (too vague to decompose), leave `acceptance_criteria`
+On `outcome: "blocked"` (too vague to decompose), leave `proposed_criteria`
 empty and explain in `failure_reason` what is missing.
