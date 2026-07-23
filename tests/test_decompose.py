@@ -77,10 +77,10 @@ def test_run_decompose_blocked_returns_problem(tmp_path):
 
 
 def test_run_decompose_success_without_criteria_is_a_problem(tmp_path):
-    # outcome success but the agent emitted no acceptance_criteria array.
+    # outcome success but the agent emitted no proposed_criteria array.
     criteria, problem, _ = _run(_result("success", raw='{"outcome": "success"}'), tmp_path)
     assert criteria is None
-    assert "no acceptance_criteria" in problem
+    assert "no proposed_criteria" in problem
 
 
 def test_run_decompose_no_status_block_is_a_problem(tmp_path):
