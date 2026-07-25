@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-07-25T19:52:28.120548+00:00",
+  "mode": "working_tree",
+  "scope": {
+    "merge_base": "cda154c15e72d9e273519faab78dff307d27af42",
+    "changed_files": [],
+    "violations": [],
+    "scope_ok": true
+  },
+  "tests_tampered": false,
+  "tampered_files": [],
+  "tasks": {
+    "base": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "8 passed in 0.11s"
+    },
+    "T01": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "5 failed in 0.26s"
+    },
+    "T02": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "4 failed in 0.14s"
+    },
+    "T03": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "5 failed, 1 passed in 0.18s"
+    },
+    "T04": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "5 failed in 0.19s"
+    },
+    "T05": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "5 failed in 0.24s"
+    },
+    "T06": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "5 failed in 0.44s"
+    },
+    "T07": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "5 failed in 0.16s"
+    },
+    "T08": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "6 failed in 0.27s"
+    },
+    "T09": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "6 failed in 0.19s"
+    },
+    "T10": {
+      "status": "fail",
+      "returncode": 1,
+      "summary": "6 failed in 0.18s"
+    }
+  },
+  "counts": {
+    "passed": 1,
+    "failed": 10,
+    "total": 11
+  }
+}

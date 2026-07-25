@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-07-25T19:52:38.797562+00:00",
+  "mode": "replay",
+  "scope": {
+    "merge_base": "cda154c15e72d9e273519faab78dff307d27af42",
+    "changed_files": [],
+    "violations": [],
+    "scope_ok": true
+  },
+  "tests_tampered": false,
+  "tampered_files": [],
+  "replay": {
+    "merge_base": "cda154c15e72d9e273519faab78dff307d27af42",
+    "commits_graded": 0,
+    "timeline": [],
+    "regressions": []
+  }
+}
