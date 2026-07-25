@@ -2,12 +2,13 @@
 
 import csv
 import json
+import os
 
 from .ledger import Entry, Ledger
 
 
-def save(ledger: Ledger, path: str) -> None:
-    data = {
+def _to_dict(ledger: Ledger) -> dict:
+    return {
         "entries": [
             {
                 "date": e.date,
@@ -19,13 +20,9 @@ def save(ledger: Ledger, path: str) -> None:
         ],
         "budgets": dict(ledger.budgets),
     }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
 
 
-def load(path: str) -> Ledger:
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+def _from_dict(data: dict) -> Ledger:
     ledger = Ledger()
     for row in data["entries"]:
         ledger.add(
@@ -39,6 +36,33 @@ def load(path: str) -> Ledger:
     for category, limit in data.get("budgets", {}).items():
         ledger.set_budget(category, limit)
     return ledger
+
+
+def save(ledger: Ledger, path: str, name: str | None = None) -> None:
+    if name is None:
+        data = _to_dict(ledger)
+    else:
+        data = {"ledgers": {}}
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                existing = json.load(f)
+            if "ledgers" in existing:
+                data["ledgers"] = existing["ledgers"]
+        data["ledgers"][name] = _to_dict(ledger)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def load(path: str, name: str | None = None) -> Ledger:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    if "ledgers" in data:
+        if name is None:
+            raise KeyError("multi-ledger file requires a ledger name")
+        return _from_dict(data["ledgers"][name])
+    if name is not None and name != "default":
+        raise KeyError(name)
+    return _from_dict(data)
 
 
 def export_csv(ledger: Ledger, path: str) -> None:

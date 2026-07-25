@@ -10,6 +10,7 @@ from .ledger import Entry, Ledger
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ledgerlite")
     p.add_argument("--file", default="ledger.json", help="path to the ledger JSON file")
+    p.add_argument("--ledger", default=None, help="name of the ledger inside the file")
     sub = p.add_subparsers(dest="command", required=True)
 
     add = sub.add_parser("add", help="add an entry")
@@ -28,19 +29,22 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _load(path: str) -> Ledger:
+def _load(path: str, name: str | None = None) -> Ledger:
     if os.path.exists(path):
-        return storage.load(path)
+        try:
+            return storage.load(path, name)
+        except KeyError:
+            return Ledger()
     return Ledger()
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    ledger = _load(args.file)
+    ledger = _load(args.file, args.ledger)
 
     if args.command == "add":
         ledger.add(Entry(args.date, args.amount, args.note, category=args.category))
-        storage.save(ledger, args.file)
+        storage.save(ledger, args.file, args.ledger)
         print("added")
     elif args.command == "list":
         for e in ledger.entries():
