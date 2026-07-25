@@ -3,6 +3,15 @@
 from dataclasses import dataclass
 
 
+def normalize_date(date: str) -> str:
+    """Return *date* in zero-padded ISO form ``YYYY-MM-DD``."""
+    parts = date.split("-")
+    if len(parts) != 3:
+        return date
+    year, month, day = parts
+    return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+
+
 @dataclass
 class Entry:
     """A single expense entry.
@@ -14,6 +23,9 @@ class Entry:
     amount: float
     note: str = ""
     category: str = "uncategorized"
+
+    def __post_init__(self) -> None:
+        self.date = normalize_date(self.date)
 
 
 class Ledger:
