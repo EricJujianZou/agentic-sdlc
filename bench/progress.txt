@@ -1,2 +1,3 @@
 Run tests from repo root: `uv run pytest bench/target/tests/... -q` (conftest puts bench/target on sys.path).
 Trap: root .gitignore ignores state.json -> commit bench/state.json with `git add -f`.
+All dates are normalized to zero-padded YYYY-MM-DD in Entry.__post_init__ (ledger.normalize_date); date[:7] prefix comparisons are safe.

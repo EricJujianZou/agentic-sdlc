@@ -4,6 +4,7 @@
   "current": null,
   "completed": [
     "T01: Entry.category (default 'uncategorized'); Ledger.totals_by_category(); storage save/load 'category' key; cli add --category, list shows category.",
-    "T02: report.monthly_summary(ledger,year,month) -> {category: total} for that month (empty months -> {})."
+    "T02: report.monthly_summary(ledger,year,month) -> {category: total} for that month (empty months -> {}).",
+    "T03: ledger.normalize_date(date)->'YYYY-MM-DD'; Entry.__post_init__ normalizes self.date (applies to storage.load too)."
   ]
 }
