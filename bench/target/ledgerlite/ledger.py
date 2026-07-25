@@ -1,6 +1,7 @@
 """Core ledger data model."""
 
-from dataclasses import dataclass
+import calendar
+from dataclasses import dataclass, replace
 
 
 def normalize_date(date: str) -> str:
@@ -44,6 +45,16 @@ class Ledger:
 
     def add(self, entry: Entry) -> None:
         self._entries.append(entry)
+
+    def add_recurring(self, entry: Entry, months: int) -> None:
+        """Add *entry* plus one copy per following month (day clamped)."""
+        year, month, day = (int(p) for p in entry.date.split("-"))
+        for offset in range(months):
+            total = month - 1 + offset
+            y = year + total // 12
+            m = total % 12 + 1
+            d = min(day, calendar.monthrange(y, m)[1])
+            self.add(replace(entry, date=f"{y:04d}-{m:02d}-{d:02d}"))
 
     def remove(self, index: int) -> Entry:
         """Remove and return the entry at *index* (in entries() order)."""
