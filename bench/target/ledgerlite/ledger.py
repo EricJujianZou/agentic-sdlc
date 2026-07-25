@@ -112,6 +112,30 @@ class Ledger:
         """All entries, sorted by date."""
         return sorted(self._entries, key=lambda e: e.date)
 
+    def query(
+        self,
+        category: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        text: str | None = None,
+    ) -> list[Entry]:
+        """Entries matching all given filters, in date-sorted order."""
+        low = normalize_date(date_from) if date_from is not None else None
+        high = normalize_date(date_to) if date_to is not None else None
+        needle = text.lower() if text is not None else None
+        results = []
+        for e in self.entries():
+            if category is not None and e.category != category:
+                continue
+            if low is not None and e.date < low:
+                continue
+            if high is not None and e.date > high:
+                continue
+            if needle is not None and needle not in e.note.lower():
+                continue
+            results.append(e)
+        return results
+
     def total(self) -> float:
         return self.total_cents() / 100
 

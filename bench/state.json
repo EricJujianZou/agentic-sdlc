@@ -10,6 +10,7 @@
     "T05: storage.export_csv(ledger,path) -> header date,amount,category,note; amounts .2f; newline=''.",
     "T06: storage.save/load(path, name=None); named -> {'ledgers':{name:obj}} (siblings preserved), legacy+name='default' bridge; storage._to_dict/_from_dict are the single serialization point; cli --ledger NAME.",
     "T07: Ledger.add_recurring(entry, months) adds months copies, monthly, day clamped via calendar.monthrange.",
-    "T08: money is int cents. Entry is a plain class: amount_cents, amount float property, Entry.from_cents(date,cents,category,note); Ledger.total_cents(); report + storage cents-exact (JSON has amount and amount_cents)."
+    "T08: money is int cents. Entry is a plain class: amount_cents, amount float property, Entry.from_cents(date,cents,category,note); Ledger.total_cents(); report + storage cents-exact (JSON has amount and amount_cents).",
+    "T09: Ledger.query(category=None,date_from=None,date_to=None,text=None) -> date-sorted list; bounds inclusive+normalized; text is case-insensitive note substring."
   ]
 }
