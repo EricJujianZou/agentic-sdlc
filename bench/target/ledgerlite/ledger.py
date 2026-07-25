@@ -36,6 +36,11 @@ class Ledger:
 
     def __init__(self) -> None:
         self._entries: list[Entry] = []
+        self.budgets: dict[str, float] = {}
+
+    def set_budget(self, category: str, limit: float) -> None:
+        """Record a monthly spending limit for *category*."""
+        self.budgets[category] = limit
 
     def add(self, entry: Entry) -> None:
         self._entries.append(entry)

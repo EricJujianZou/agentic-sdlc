@@ -19,6 +19,17 @@ def monthly_summary(ledger: Ledger, year: int, month: int) -> dict[str, float]:
     return summary
 
 
+def budget_warnings(ledger: Ledger, year: int, month: int) -> dict[str, float]:
+    """Category -> overage for budgeted categories exceeding their limit."""
+    spent = monthly_summary(ledger, year, month)
+    warnings: dict[str, float] = {}
+    for category, limit in ledger.budgets.items():
+        overage = spent.get(category, 0.0) - limit
+        if overage > 0:
+            warnings[category] = overage
+    return warnings
+
+
 def format_month(ledger: Ledger, year: int, month: int) -> str:
     """One-line human-readable summary for a month."""
     return f"{year:04d}-{month:02d}: {month_total(ledger, year, month):.2f}"
