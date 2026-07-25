@@ -76,37 +76,75 @@ class Ledger:
     def __init__(self) -> None:
         self._entries: list[Entry] = []
         self.budgets: dict[str, float] = {}
+        self._history: list[tuple] = []
+
+    def _discard(self, entry: Entry) -> None:
+        """Remove *entry* by identity."""
+        for i, existing in enumerate(self._entries):
+            if existing is entry:
+                del self._entries[i]
+                return
 
     def set_budget(self, category: str, limit: float) -> None:
         """Record a monthly spending limit for *category*."""
+        had = category in self.budgets
+        self._history.append(("set_budget", category, had, self.budgets.get(category)))
         self.budgets[category] = limit
 
     def add(self, entry: Entry) -> None:
         self._entries.append(entry)
+        self._history.append(("add", entry))
 
     def add_recurring(self, entry: Entry, months: int) -> None:
         """Add *entry* plus one copy per following month (day clamped)."""
         year, month, day = (int(p) for p in entry.date.split("-"))
+        created: list[Entry] = []
         for offset in range(months):
             total = month - 1 + offset
             y = year + total // 12
             m = total % 12 + 1
             d = min(day, calendar.monthrange(y, m)[1])
-            self.add(
-                Entry.from_cents(
-                    f"{y:04d}-{m:02d}-{d:02d}",
-                    entry.amount_cents,
-                    entry.category,
-                    entry.note,
-                )
+            copy = Entry.from_cents(
+                f"{y:04d}-{m:02d}-{d:02d}",
+                entry.amount_cents,
+                entry.category,
+                entry.note,
             )
+            self._entries.append(copy)
+            created.append(copy)
+        self._history.append(("add_recurring", created))
 
     def remove(self, index: int) -> Entry:
         """Remove and return the entry at *index* (in entries() order)."""
         ordered = self.entries()
         entry = ordered[index]
-        self._entries.remove(entry)
+        self._discard(entry)
+        self._history.append(("remove", entry))
         return entry
+
+    def undo(self, n: int = 1) -> int:
+        """Revert the last *n* mutating operations; return how many were undone."""
+        undone = 0
+        for _ in range(n):
+            if not self._history:
+                break
+            op = self._history.pop()
+            kind = op[0]
+            if kind == "add":
+                self._discard(op[1])
+            elif kind == "add_recurring":
+                for entry in op[1]:
+                    self._discard(entry)
+            elif kind == "remove":
+                self._entries.append(op[1])
+            elif kind == "set_budget":
+                _, category, had, previous = op
+                if had:
+                    self.budgets[category] = previous
+                else:
+                    self.budgets.pop(category, None)
+            undone += 1
+        return undone
 
     def entries(self) -> list[Entry]:
         """All entries, sorted by date."""

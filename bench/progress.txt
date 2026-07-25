@@ -3,3 +3,4 @@ Trap: root .gitignore ignores state.json -> commit bench/state.json with `git ad
 All dates are normalized to zero-padded YYYY-MM-DD in Entry.__post_init__ (ledger.normalize_date); date[:7] prefix comparisons are safe.
 storage._to_dict/_from_dict are the ONLY serialization point: schema changes go there (legacy and multi-ledger formats both use them).
 Money lives in Entry.amount_cents (int); amount is a read/write float property. Sum cents then divide by 100 -- never sum floats. Entry is no longer a dataclass (no dataclasses.replace); copy via Entry.from_cents.
+Mutations must be recorded in Ledger._history for undo (T10); add_recurring appends via self._entries directly so it stays ONE history item.
