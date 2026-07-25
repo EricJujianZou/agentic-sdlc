@@ -8,7 +8,12 @@ from .ledger import Entry, Ledger
 def save(ledger: Ledger, path: str) -> None:
     data = {
         "entries": [
-            {"date": e.date, "amount": e.amount, "note": e.note}
+            {
+                "date": e.date,
+                "amount": e.amount,
+                "note": e.note,
+                "category": e.category,
+            }
             for e in ledger.entries()
         ]
     }
@@ -21,5 +26,12 @@ def load(path: str) -> Ledger:
         data = json.load(f)
     ledger = Ledger()
     for row in data["entries"]:
-        ledger.add(Entry(row["date"], row["amount"], row.get("note", "")))
+        ledger.add(
+            Entry(
+                row["date"],
+                row["amount"],
+                row.get("note", ""),
+                category=row.get("category", "uncategorized"),
+            )
+        )
     return ledger

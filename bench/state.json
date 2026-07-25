@@ -1,0 +1,8 @@
+{
+  "arm": "A",
+  "branch": "bench/armA-1",
+  "current": null,
+  "completed": [
+    "T01: Entry.category (default 'uncategorized'); Ledger.totals_by_category(); storage save/load 'category' key; cli add --category, list shows category."
+  ]
+}
