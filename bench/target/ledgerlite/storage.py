@@ -1,5 +1,6 @@
 """Persist a ledger to a JSON file."""
 
+import csv
 import json
 
 from .ledger import Entry, Ledger
@@ -38,3 +39,11 @@ def load(path: str) -> Ledger:
     for category, limit in data.get("budgets", {}).items():
         ledger.set_budget(category, limit)
     return ledger
+
+
+def export_csv(ledger: Ledger, path: str) -> None:
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["date", "amount", "category", "note"])
+        for e in ledger.entries():
+            writer.writerow([e.date, f"{e.amount:.2f}", e.category, e.note])

@@ -4,6 +4,7 @@
     "T01": "Entry.category (default 'uncategorized'), Ledger.totals_by_category() -> dict[str,float], storage save/load 'category' key (load defaults), CLI add --category + category in list line",
     "T02": "report.monthly_summary(ledger, year, month) -> dict[category, total] for that month only, omits empty categories",
     "T03": "ledger.normalize_date() + Entry.__post_init__ zero-pad dates to YYYY-MM-DD (covers storage.load too)",
-    "T04": "Ledger.budgets dict + set_budget(); report.budget_warnings(y,m) -> {category: overage}; storage persists 'budgets' object"
+    "T04": "Ledger.budgets dict + set_budget(); report.budget_warnings(y,m) -> {category: overage}; storage persists 'budgets' object",
+    "T05": "storage.export_csv(ledger, path): header date,amount,category,note; rows in entries() order; amount %.2f; newline=''"
   }
 }
