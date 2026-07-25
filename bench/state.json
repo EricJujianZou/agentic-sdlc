@@ -1,0 +1,6 @@
+{
+  "current": null,
+  "completed": {
+    "T01": "Entry.category (default 'uncategorized'), Ledger.totals_by_category() -> dict[str,float], storage save/load 'category' key (load defaults), CLI add --category + category in list line"
+  }
+}

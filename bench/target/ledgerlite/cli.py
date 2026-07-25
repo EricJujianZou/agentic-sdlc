@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--date", required=True)
     add.add_argument("--amount", type=float, required=True)
     add.add_argument("--note", default="")
+    add.add_argument("--category", default="uncategorized")
 
     sub.add_parser("list", help="list entries")
     sub.add_parser("total", help="print the grand total")
@@ -38,12 +39,12 @@ def main(argv=None) -> int:
     ledger = _load(args.file)
 
     if args.command == "add":
-        ledger.add(Entry(args.date, args.amount, args.note))
+        ledger.add(Entry(args.date, args.amount, args.note, category=args.category))
         storage.save(ledger, args.file)
         print("added")
     elif args.command == "list":
         for e in ledger.entries():
-            print(f"{e.date}\t{e.amount:.2f}\t{e.note}")
+            print(f"{e.date}\t{e.amount:.2f}\t{e.category}\t{e.note}")
     elif args.command == "total":
         print(f"{ledger.total():.2f}")
     elif args.command == "report":

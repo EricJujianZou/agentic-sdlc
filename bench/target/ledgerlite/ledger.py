@@ -13,6 +13,7 @@ class Entry:
     date: str
     amount: float
     note: str = ""
+    category: str = "uncategorized"
 
 
 class Ledger:
@@ -34,6 +35,12 @@ class Ledger:
     def entries(self) -> list[Entry]:
         """All entries, sorted by date."""
         return sorted(self._entries, key=lambda e: e.date)
+
+    def totals_by_category(self) -> dict[str, float]:
+        totals: dict[str, float] = {}
+        for e in self._entries:
+            totals[e.category] = totals.get(e.category, 0.0) + e.amount
+        return totals
 
     def total(self) -> float:
         return sum(e.amount for e in self._entries)
