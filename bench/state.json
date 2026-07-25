@@ -9,6 +9,7 @@
     "T06": "storage.save/load(path, name=None): name=None keeps legacy format; named uses {'ledgers': {name: obj}} preserving siblings; legacy+name='default' bridge; CLI top-level --ledger",
     "T07": "Ledger.add_recurring(entry, months): monthly copies from entry.date, template day clamped per month via calendar.monthrange, year rollover",
     "T08": "Entry is a plain class storing amount_cents:int; amount is a read-only float property; Entry.from_cents(date, cents, category, note); Ledger.total_cents(); report + totals summed in cents; JSON stores amount and amount_cents (load prefers cents)",
-    "T09": "Ledger.query(category, date_from, date_to, text) AND-combined, inclusive normalized date bounds, case-insensitive note substring, date-sorted"
+    "T09": "Ledger.query(category, date_from, date_to, text) AND-combined, inclusive normalized date bounds, case-insensitive note substring, date-sorted",
+    "T10": "Ledger._history records add/remove/add_recurring/set_budget; undo(n=1) reverts in reverse order and returns count undone"
   }
 }

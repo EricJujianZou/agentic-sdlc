@@ -69,32 +69,38 @@ class Ledger:
     def __init__(self) -> None:
         self._entries: list[Entry] = []
         self.budgets: dict[str, float] = {}
+        self._history: list[tuple] = []
 
     def add(self, entry: Entry) -> None:
         self._entries.append(entry)
+        self._history.append(("add", entry))
 
     def add_recurring(self, entry: Entry, months: int) -> None:
         """Add *months* copies of *entry*, one per following calendar month."""
         year, month, day = (int(part) for part in entry.date.split("-"))
+        generated: list[Entry] = []
         for offset in range(months):
             total = month - 1 + offset
             y = year + total // 12
             m = total % 12 + 1
             d = min(day, calendar.monthrange(y, m)[1])
-            self.add(
-                Entry.from_cents(
-                    f"{y:04d}-{m:02d}-{d:02d}",
-                    entry.amount_cents,
-                    category=entry.category,
-                    note=entry.note,
-                )
+            created = Entry.from_cents(
+                f"{y:04d}-{m:02d}-{d:02d}",
+                entry.amount_cents,
+                category=entry.category,
+                note=entry.note,
             )
+            self._entries.append(created)
+            generated.append(created)
+        self._history.append(("add_recurring", generated))
 
     def remove(self, index: int) -> Entry:
         """Remove and return the entry at *index* (in entries() order)."""
         ordered = self.entries()
         entry = ordered[index]
-        self._entries.remove(entry)
+        position = self._entries.index(entry)
+        del self._entries[position]
+        self._history.append(("remove", entry, position))
         return entry
 
     def entries(self) -> list[Entry]:
@@ -126,7 +132,31 @@ class Ledger:
         return result
 
     def set_budget(self, category: str, limit: float) -> None:
+        previous = self.budgets.get(category)
+        self._history.append(("set_budget", category, previous))
         self.budgets[category] = limit
+
+    def undo(self, n: int = 1) -> int:
+        """Revert the last *n* mutating operations; return how many were undone."""
+        undone = 0
+        while undone < n and self._history:
+            op = self._history.pop()
+            kind = op[0]
+            if kind == "add":
+                self._entries.remove(op[1])
+            elif kind == "add_recurring":
+                for created in op[1]:
+                    self._entries.remove(created)
+            elif kind == "remove":
+                self._entries.insert(op[2], op[1])
+            elif kind == "set_budget":
+                _, category, previous = op
+                if previous is None:
+                    self.budgets.pop(category, None)
+                else:
+                    self.budgets[category] = previous
+            undone += 1
+        return undone
 
     def totals_by_category(self) -> dict[str, float]:
         cents: dict[str, int] = {}
