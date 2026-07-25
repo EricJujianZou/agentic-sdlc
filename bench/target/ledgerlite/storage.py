@@ -15,7 +15,8 @@ def save(ledger: Ledger, path: str) -> None:
                 "category": e.category,
             }
             for e in ledger.entries()
-        ]
+        ],
+        "budgets": dict(ledger.budgets),
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -34,4 +35,6 @@ def load(path: str) -> Ledger:
                 category=row.get("category", "uncategorized"),
             )
         )
+    for category, limit in data.get("budgets", {}).items():
+        ledger.set_budget(category, limit)
     return ledger

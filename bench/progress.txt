@@ -1,2 +1,3 @@
 T01: entries() sorts by date; list CLI line format is tab-separated date/amount/category/note.
 T03: Entry.__post_init__ normalizes dates via ledger.normalize_date; keep it when changing Entry fields.
+T04: storage JSON top-level keys are now "entries" and "budgets"; keep both when changing the format.

@@ -33,6 +33,7 @@ class Ledger:
 
     def __init__(self) -> None:
         self._entries: list[Entry] = []
+        self.budgets: dict[str, float] = {}
 
     def add(self, entry: Entry) -> None:
         self._entries.append(entry)
@@ -47,6 +48,9 @@ class Ledger:
     def entries(self) -> list[Entry]:
         """All entries, sorted by date."""
         return sorted(self._entries, key=lambda e: e.date)
+
+    def set_budget(self, category: str, limit: float) -> None:
+        self.budgets[category] = limit
 
     def totals_by_category(self) -> dict[str, float]:
         totals: dict[str, float] = {}
