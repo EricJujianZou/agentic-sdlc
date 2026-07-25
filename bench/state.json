@@ -1,6 +1,7 @@
 {
   "current": null,
   "completed": {
-    "T01": "Entry.category (default 'uncategorized'), Ledger.totals_by_category() -> dict[str,float], storage save/load 'category' key (load defaults), CLI add --category + category in list line"
+    "T01": "Entry.category (default 'uncategorized'), Ledger.totals_by_category() -> dict[str,float], storage save/load 'category' key (load defaults), CLI add --category + category in list line",
+    "T02": "report.monthly_summary(ledger, year, month) -> dict[category, total] for that month only, omits empty categories"
   }
 }
