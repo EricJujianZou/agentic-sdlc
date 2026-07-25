@@ -1,7 +1,6 @@
 """Core ledger data model."""
 
 import calendar
-from dataclasses import dataclass, replace
 
 
 def normalize_date(date: str) -> str:
@@ -16,20 +15,59 @@ def normalize_date(date: str) -> str:
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
-@dataclass
 class Entry:
     """A single expense entry.
 
-    date is an ISO-style string like "2026-03-05".
+    date is an ISO-style string like "2026-03-05". Money is stored exactly, as
+    integer cents; ``amount`` remains a float view of it.
     """
 
-    date: str
-    amount: float
-    note: str = ""
-    category: str = "uncategorized"
+    def __init__(
+        self,
+        date: str,
+        amount: float,
+        note: str = "",
+        category: str = "uncategorized",
+    ) -> None:
+        self.date = normalize_date(date)
+        self.amount_cents = round(amount * 100)
+        self.note = note
+        self.category = category
 
-    def __post_init__(self) -> None:
-        self.date = normalize_date(self.date)
+    @classmethod
+    def from_cents(
+        cls,
+        date: str,
+        cents: int,
+        category: str = "uncategorized",
+        note: str = "",
+    ) -> "Entry":
+        """Build an entry from an exact integer *cents* amount."""
+        entry = cls(date, 0.0, note, category)
+        entry.amount_cents = int(cents)
+        return entry
+
+    @property
+    def amount(self) -> float:
+        return self.amount_cents / 100
+
+    @amount.setter
+    def amount(self, value: float) -> None:
+        self.amount_cents = round(value * 100)
+
+    def _key(self) -> tuple:
+        return (self.date, self.amount_cents, self.note, self.category)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Entry):
+            return NotImplemented
+        return self._key() == other._key()
+
+    def __repr__(self) -> str:
+        return (
+            f"Entry(date={self.date!r}, amount={self.amount!r}, "
+            f"note={self.note!r}, category={self.category!r})"
+        )
 
 
 class Ledger:
@@ -54,7 +92,14 @@ class Ledger:
             y = year + total // 12
             m = total % 12 + 1
             d = min(day, calendar.monthrange(y, m)[1])
-            self.add(replace(entry, date=f"{y:04d}-{m:02d}-{d:02d}"))
+            self.add(
+                Entry.from_cents(
+                    f"{y:04d}-{m:02d}-{d:02d}",
+                    entry.amount_cents,
+                    entry.category,
+                    entry.note,
+                )
+            )
 
     def remove(self, index: int) -> Entry:
         """Remove and return the entry at *index* (in entries() order)."""
@@ -68,14 +113,17 @@ class Ledger:
         return sorted(self._entries, key=lambda e: e.date)
 
     def total(self) -> float:
-        return sum(e.amount for e in self._entries)
+        return self.total_cents() / 100
+
+    def total_cents(self) -> int:
+        return sum(e.amount_cents for e in self._entries)
 
     def totals_by_category(self) -> dict[str, float]:
         """Sum of amounts per category."""
-        totals: dict[str, float] = {}
+        cents: dict[str, int] = {}
         for e in self._entries:
-            totals[e.category] = totals.get(e.category, 0.0) + e.amount
-        return totals
+            cents[e.category] = cents.get(e.category, 0) + e.amount_cents
+        return {category: c / 100 for category, c in cents.items()}
 
     def __len__(self) -> int:
         return len(self._entries)

@@ -9,6 +9,7 @@
     "T04: Ledger.budgets/set_budget(); report.budget_warnings(ledger,y,m)->{cat: overage}; storage persists 'budgets'.",
     "T05: storage.export_csv(ledger,path) -> header date,amount,category,note; amounts .2f; newline=''.",
     "T06: storage.save/load(path, name=None); named -> {'ledgers':{name:obj}} (siblings preserved), legacy+name='default' bridge; storage._to_dict/_from_dict are the single serialization point; cli --ledger NAME.",
-    "T07: Ledger.add_recurring(entry, months) adds months copies, monthly, day clamped via calendar.monthrange."
+    "T07: Ledger.add_recurring(entry, months) adds months copies, monthly, day clamped via calendar.monthrange.",
+    "T08: money is int cents. Entry is a plain class: amount_cents, amount float property, Entry.from_cents(date,cents,category,note); Ledger.total_cents(); report + storage cents-exact (JSON has amount and amount_cents)."
   ]
 }

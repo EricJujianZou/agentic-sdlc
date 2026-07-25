@@ -13,6 +13,7 @@ def _to_dict(ledger: Ledger) -> dict:
             {
                 "date": e.date,
                 "amount": e.amount,
+                "amount_cents": e.amount_cents,
                 "note": e.note,
                 "category": e.category,
             }
@@ -27,12 +28,16 @@ def _from_dict(data: dict) -> Ledger:
     for category, limit in data.get("budgets", {}).items():
         ledger.set_budget(category, limit)
     for row in data["entries"]:
+        if "amount_cents" in row:
+            cents = int(row["amount_cents"])
+        else:
+            cents = round(row["amount"] * 100)
         ledger.add(
-            Entry(
+            Entry.from_cents(
                 row["date"],
-                row["amount"],
+                cents,
+                row.get("category", "uncategorized"),
                 row.get("note", ""),
-                category=row.get("category", "uncategorized"),
             )
         )
     return ledger
