@@ -1,7 +1,6 @@
 """Core ledger data model."""
 
 import calendar
-from dataclasses import dataclass, replace
 
 
 def normalize_date(date: str) -> str:
@@ -13,20 +12,55 @@ def normalize_date(date: str) -> str:
     return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
 
 
-@dataclass
 class Entry:
-    """A single expense entry.
+    """A single expense entry. Money is stored as integer cents.
 
     date is an ISO-style string like "2026-03-05".
     """
 
-    date: str
-    amount: float
-    note: str = ""
-    category: str = "uncategorized"
+    def __init__(
+        self,
+        date: str,
+        amount: float,
+        note: str = "",
+        category: str = "uncategorized",
+    ) -> None:
+        self.date = normalize_date(date)
+        self.amount_cents = round(amount * 100)
+        self.note = note
+        self.category = category
 
-    def __post_init__(self) -> None:
-        self.date = normalize_date(self.date)
+    @classmethod
+    def from_cents(
+        cls,
+        date: str,
+        cents: int,
+        category: str = "uncategorized",
+        note: str = "",
+    ) -> "Entry":
+        entry = cls(date, 0.0, note, category)
+        entry.amount_cents = int(cents)
+        return entry
+
+    @property
+    def amount(self) -> float:
+        return self.amount_cents / 100
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Entry):
+            return NotImplemented
+        return (
+            self.date,
+            self.amount_cents,
+            self.note,
+            self.category,
+        ) == (other.date, other.amount_cents, other.note, other.category)
+
+    def __repr__(self) -> str:
+        return (
+            f"Entry(date={self.date!r}, amount={self.amount!r}, "
+            f"note={self.note!r}, category={self.category!r})"
+        )
 
 
 class Ledger:
@@ -47,7 +81,14 @@ class Ledger:
             y = year + total // 12
             m = total % 12 + 1
             d = min(day, calendar.monthrange(y, m)[1])
-            self.add(replace(entry, date=f"{y:04d}-{m:02d}-{d:02d}"))
+            self.add(
+                Entry.from_cents(
+                    f"{y:04d}-{m:02d}-{d:02d}",
+                    entry.amount_cents,
+                    category=entry.category,
+                    note=entry.note,
+                )
+            )
 
     def remove(self, index: int) -> Entry:
         """Remove and return the entry at *index* (in entries() order)."""
@@ -64,13 +105,16 @@ class Ledger:
         self.budgets[category] = limit
 
     def totals_by_category(self) -> dict[str, float]:
-        totals: dict[str, float] = {}
+        cents: dict[str, int] = {}
         for e in self._entries:
-            totals[e.category] = totals.get(e.category, 0.0) + e.amount
-        return totals
+            cents[e.category] = cents.get(e.category, 0) + e.amount_cents
+        return {category: c / 100 for category, c in cents.items()}
+
+    def total_cents(self) -> int:
+        return sum(e.amount_cents for e in self._entries)
 
     def total(self) -> float:
-        return sum(e.amount for e in self._entries)
+        return self.total_cents() / 100
 
     def __len__(self) -> int:
         return len(self._entries)
