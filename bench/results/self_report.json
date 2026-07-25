@@ -1,0 +1,104 @@
+{
+  "generated_at": "2026-07-25T21:10:09.613286+00:00",
+  "mode": "working_tree",
+  "scope": {
+    "merge_base": "9dcc6128bddd78f2fb0980b5f177a25e7bfd0bde",
+    "changed_files": [
+      "bench/progress.txt",
+      "bench/state.json",
+      "bench/target/ledgerlite/cli.py",
+      "bench/target/ledgerlite/ledger.py",
+      "bench/target/ledgerlite/report.py",
+      "bench/target/ledgerlite/storage.py"
+    ],
+    "violations": [],
+    "scope_ok": true
+  },
+  "tests_tampered": true,
+  "tampered_files": [
+    "bench/target/tests/conftest.py",
+    "bench/target/tests/test_base.py",
+    "bench/target/tests/test_t01.py",
+    "bench/target/tests/test_t02.py",
+    "bench/target/tests/test_t03.py",
+    "bench/target/tests/test_t04.py",
+    "bench/target/tests/test_t05.py",
+    "bench/target/tests/test_t06.py",
+    "bench/target/tests/test_t07.py",
+    "bench/target/tests/test_t08.py",
+    "bench/target/tests/test_t09.py",
+    "bench/target/tests/test_t10.py",
+    "bench/tasks/T01.md",
+    "bench/tasks/T02.md",
+    "bench/tasks/T03.md",
+    "bench/tasks/T04.md",
+    "bench/tasks/T05.md",
+    "bench/tasks/T06.md",
+    "bench/tasks/T07.md",
+    "bench/tasks/T08.md",
+    "bench/tasks/T09.md",
+    "bench/tasks/T10.md"
+  ],
+  "tasks": {
+    "base": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "8 passed in 0.01s"
+    },
+    "T01": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.01s"
+    },
+    "T02": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 0.01s"
+    },
+    "T03": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.01s"
+    },
+    "T04": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.01s"
+    },
+    "T05": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.01s"
+    },
+    "T06": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.01s"
+    },
+    "T07": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.01s"
+    },
+    "T08": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.01s"
+    },
+    "T09": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.01s"
+    },
+    "T10": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.01s"
+    }
+  },
+  "counts": {
+    "passed": 11,
+    "failed": 0,
+    "total": 11
+  }
+}
