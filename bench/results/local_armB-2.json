@@ -1,0 +1,123 @@
+{
+  "generated_at": "2026-07-26T08:22:28.732337+00:00",
+  "mode": "working_tree",
+  "scope": {
+    "merge_base": "9dcc6128bddd78f2fb0980b5f177a25e7bfd0bde",
+    "changed_files": [
+      ".claude/settings.json",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "bench/RUN.md",
+      "bench/protocol_armA.md",
+      "bench/results/self_report.json",
+      "bench/target/ledgerlite/cli.py",
+      "bench/target/ledgerlite/ledger.py",
+      "bench/target/ledgerlite/report.py",
+      "bench/target/ledgerlite/storage.py",
+      "commands/DECOMPOSE.md",
+      "commands/DOCUMENT.md",
+      "commands/IMPLEMENT.md",
+      "commands/OBSERVE.md",
+      "commands/PLAN.md",
+      "commands/PRIME.md",
+      "commands/REVIEW.md",
+      "commands/TEST.md",
+      "skills/README.md",
+      "stage_specs/decompose_feat.md",
+      "stage_specs/document_feat.md",
+      "stage_specs/implement_feat.md",
+      "stage_specs/observe.md",
+      "stage_specs/plan_feat.md",
+      "stage_specs/review_feat.md",
+      "stage_specs/test_feat.md"
+    ],
+    "violations": [
+      ".claude/settings.json",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "bench/RUN.md",
+      "bench/protocol_armA.md",
+      "commands/DECOMPOSE.md",
+      "commands/DOCUMENT.md",
+      "commands/IMPLEMENT.md",
+      "commands/OBSERVE.md",
+      "commands/PLAN.md",
+      "commands/PRIME.md",
+      "commands/REVIEW.md",
+      "commands/TEST.md",
+      "skills/README.md",
+      "stage_specs/decompose_feat.md",
+      "stage_specs/document_feat.md",
+      "stage_specs/implement_feat.md",
+      "stage_specs/observe.md",
+      "stage_specs/plan_feat.md",
+      "stage_specs/review_feat.md",
+      "stage_specs/test_feat.md"
+    ],
+    "scope_ok": false
+  },
+  "tests_tampered": false,
+  "tampered_files": [],
+  "tasks": {
+    "base": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "8 passed in 0.25s"
+    },
+    "T01": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.13s"
+    },
+    "T02": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 0.08s"
+    },
+    "T03": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.10s"
+    },
+    "T04": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.12s"
+    },
+    "T05": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.13s"
+    },
+    "T06": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.17s"
+    },
+    "T07": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.07s"
+    },
+    "T08": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.12s"
+    },
+    "T09": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.07s"
+    },
+    "T10": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.07s"
+    }
+  },
+  "counts": {
+    "passed": 11,
+    "failed": 0,
+    "total": 11
+  }
+}

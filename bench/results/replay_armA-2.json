@@ -1,0 +1,291 @@
+{
+  "generated_at": "2026-07-26T08:28:28.653704+00:00",
+  "mode": "replay",
+  "scope": {
+    "merge_base": "9dcc6128bddd78f2fb0980b5f177a25e7bfd0bde",
+    "changed_files": [
+      "bench/progress.txt",
+      "bench/results/self_report.json",
+      "bench/state.json",
+      "bench/target/ledgerlite/cli.py",
+      "bench/target/ledgerlite/ledger.py",
+      "bench/target/ledgerlite/report.py",
+      "bench/target/ledgerlite/storage.py"
+    ],
+    "violations": [],
+    "scope_ok": true
+  },
+  "tests_tampered": false,
+  "tampered_files": [],
+  "replay": {
+    "merge_base": "9dcc6128bddd78f2fb0980b5f177a25e7bfd0bde",
+    "commits_graded": 11,
+    "timeline": [
+      {
+        "commit": "cff892aaf62f8819d798a35c9f7ce3f429b88020",
+        "subject": "T01: categories on Entry, totals_by_category, storage roundtrip, CLI --category",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "fail",
+          "T03": "fail",
+          "T04": "fail",
+          "T05": "fail",
+          "T06": "fail",
+          "T07": "fail",
+          "T08": "fail",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 2,
+          "failed": 9,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "d1094fbaf460f291f0f0101eaef8e423da642c35",
+        "subject": "T02: report.monthly_summary per-category month breakdown",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "fail",
+          "T04": "fail",
+          "T05": "fail",
+          "T06": "fail",
+          "T07": "fail",
+          "T08": "fail",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 3,
+          "failed": 8,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "ab866d68a7b4f7ee468bd34b5044c98cc3f1cd3a",
+        "subject": "T03: normalize entry dates to zero-padded ISO",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "fail",
+          "T05": "fail",
+          "T06": "fail",
+          "T07": "fail",
+          "T08": "fail",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 4,
+          "failed": 7,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "9c1cceeb5aec3ebcef3a5b380961e7d7fb026246",
+        "subject": "T04: per-category budgets and budget_warnings",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "fail",
+          "T06": "fail",
+          "T07": "fail",
+          "T08": "fail",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 5,
+          "failed": 6,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "e464451794981186dbb3ea759dabb7ca6ebc88c7",
+        "subject": "T05: CSV export",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "fail",
+          "T07": "fail",
+          "T08": "fail",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 6,
+          "failed": 5,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "6872433945ea17c4181d4b78d381399abac3b073",
+        "subject": "T06: multi-ledger files with legacy compatibility",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "pass",
+          "T07": "fail",
+          "T08": "fail",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 7,
+          "failed": 4,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "20aa94595d679a2acd21dfa40853d87b2db6e972",
+        "subject": "T07: recurring entries",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "pass",
+          "T07": "pass",
+          "T08": "fail",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 8,
+          "failed": 3,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "f5ad892bb3091511897bb2feb51cc4ded95fc23d",
+        "subject": "T08: exact money via integer cents",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "pass",
+          "T07": "pass",
+          "T08": "pass",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 9,
+          "failed": 2,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "7e79f991efed47f4a23962af79f139eb3f0d04b4",
+        "subject": "T09: query/filter API",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "pass",
+          "T07": "pass",
+          "T08": "pass",
+          "T09": "pass",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 10,
+          "failed": 1,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "5d38d14e7e8be0be482e2712956a982d3d262345",
+        "subject": "T10: undo of mutating operations",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "pass",
+          "T07": "pass",
+          "T08": "pass",
+          "T09": "pass",
+          "T10": "pass"
+        },
+        "counts": {
+          "passed": 11,
+          "failed": 0,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "8aa8c83fb6d41517e286e372a63ac24c6f61e402",
+        "subject": "grade: self report",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "pass",
+          "T07": "pass",
+          "T08": "pass",
+          "T09": "pass",
+          "T10": "pass"
+        },
+        "counts": {
+          "passed": 11,
+          "failed": 0,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      }
+    ],
+    "regressions": []
+  }
+}

@@ -48,6 +48,32 @@ From repo root, for each arm branch:
 
 Trust only locally re-run grades, not the sessions' self-reports.
 
+## Results (run of 2026-07-25, graded locally 2026-07-26)
+
+All four sessions completed. Grades below are independent local re-runs
+(`bench/results/local_*.json`, `replay_*.json`), not session self-reports.
+
+| Arm | Branch | Final pass | Regressions (replay) | Tampering | Commits | ledgerlite diff | Wall time |
+|---|---|---|---|---|---|---|---|
+| A (scaffolded) | armA-1 | 11/11 | 0 | none | 10 + report | +269/-26 | ~7 min |
+| A (scaffolded) | armA-2 | 11/11 | 0 | none | 10 + report | +238/-24 | ~7 min |
+| B (unscaffolded) | armB-1 | 11/11 | 0 | none | 1 + report | +241/-25 | ~5 min |
+| B (unscaffolded) | armB-2 | 11/11 | 0 | none | 1 | +215/-24 | ~5 min |
+
+Arm A replay timelines are perfect staircases: each commit adds exactly its
+task, nothing ever breaks. Arm B's single-commit shape means no mid-run
+timeline exists (itself a difference: no checkpoints to bisect if something
+had gone wrong). The scope "violations" flagged on Arm B branches are the
+scaffolding files deliberately deleted in `bench/base-noscaffold`, not agent
+misbehavior.
+
+**Conclusion: a tie at this scale.** 10 small interlocking tasks (~250 LOC of
+edits, ~5-7 min of agent time) sit well below the context-rot horizon of a
+current frontier agent. This run does not refute the no-scaffolding claim —
+it bounds it: the interesting question is where the horizon is. Next
+iteration: a battery long/large enough that a single session's context
+actually saturates (50+ tasks, larger codebase, or real SWE-bench instances).
+
 ## Known threats to validity (say these in the post)
 
 - n=2 per arm; single model (Devin's), not Opus 5 specifically.

@@ -1,0 +1,140 @@
+{
+  "generated_at": "2026-07-26T08:31:05.890141+00:00",
+  "mode": "replay",
+  "scope": {
+    "merge_base": "9dcc6128bddd78f2fb0980b5f177a25e7bfd0bde",
+    "changed_files": [
+      ".claude/settings.json",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "bench/RUN.md",
+      "bench/protocol_armA.md",
+      "bench/results/self_report.json",
+      "bench/target/ledgerlite/cli.py",
+      "bench/target/ledgerlite/ledger.py",
+      "bench/target/ledgerlite/report.py",
+      "bench/target/ledgerlite/storage.py",
+      "commands/DECOMPOSE.md",
+      "commands/DOCUMENT.md",
+      "commands/IMPLEMENT.md",
+      "commands/OBSERVE.md",
+      "commands/PLAN.md",
+      "commands/PRIME.md",
+      "commands/REVIEW.md",
+      "commands/TEST.md",
+      "skills/README.md",
+      "stage_specs/decompose_feat.md",
+      "stage_specs/document_feat.md",
+      "stage_specs/implement_feat.md",
+      "stage_specs/observe.md",
+      "stage_specs/plan_feat.md",
+      "stage_specs/review_feat.md",
+      "stage_specs/test_feat.md"
+    ],
+    "violations": [
+      ".claude/settings.json",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "bench/RUN.md",
+      "bench/protocol_armA.md",
+      "commands/DECOMPOSE.md",
+      "commands/DOCUMENT.md",
+      "commands/IMPLEMENT.md",
+      "commands/OBSERVE.md",
+      "commands/PLAN.md",
+      "commands/PRIME.md",
+      "commands/REVIEW.md",
+      "commands/TEST.md",
+      "skills/README.md",
+      "stage_specs/decompose_feat.md",
+      "stage_specs/document_feat.md",
+      "stage_specs/implement_feat.md",
+      "stage_specs/observe.md",
+      "stage_specs/plan_feat.md",
+      "stage_specs/review_feat.md",
+      "stage_specs/test_feat.md"
+    ],
+    "scope_ok": false
+  },
+  "tests_tampered": false,
+  "tampered_files": [],
+  "replay": {
+    "merge_base": "9dcc6128bddd78f2fb0980b5f177a25e7bfd0bde",
+    "commits_graded": 3,
+    "timeline": [
+      {
+        "commit": "56c2061006caaf19e7ecd6553132b6a14fbabb4a",
+        "subject": "bench: strip scaffolding for Arm B (no protocols, no agent docs)",
+        "tasks": {
+          "base": "pass",
+          "T01": "fail",
+          "T02": "fail",
+          "T03": "fail",
+          "T04": "fail",
+          "T05": "fail",
+          "T06": "fail",
+          "T07": "fail",
+          "T08": "fail",
+          "T09": "fail",
+          "T10": "fail"
+        },
+        "counts": {
+          "passed": 1,
+          "failed": 10,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "582ec2c36317e5df5d0fc086ff3f3b6ca9ebd60f",
+        "subject": "bench: implement T01-T10 in ledgerlite (categories, reports, budgets, csv, multi-ledger, recurring, cents, query, undo)",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "pass",
+          "T07": "pass",
+          "T08": "pass",
+          "T09": "pass",
+          "T10": "pass"
+        },
+        "counts": {
+          "passed": 11,
+          "failed": 0,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      },
+      {
+        "commit": "c2567f25815a2975cbe61c198648d80e6acb486e",
+        "subject": "bench: record Arm B self-report (11/11 tests passing)",
+        "tasks": {
+          "base": "pass",
+          "T01": "pass",
+          "T02": "pass",
+          "T03": "pass",
+          "T04": "pass",
+          "T05": "pass",
+          "T06": "pass",
+          "T07": "pass",
+          "T08": "pass",
+          "T09": "pass",
+          "T10": "pass"
+        },
+        "counts": {
+          "passed": 11,
+          "failed": 0,
+          "total": 11
+        },
+        "tests_tampered": false,
+        "tampered_files": []
+      }
+    ],
+    "regressions": []
+  }
+}
