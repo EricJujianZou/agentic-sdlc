@@ -1,0 +1,24 @@
+diff --git a/src/flask/blueprints.py b/src/flask/blueprints.py
+index eb50585d..8019aa45 100644
+--- a/src/flask/blueprints.py
++++ b/src/flask/blueprints.py
+@@ -190,6 +190,9 @@ class Blueprint(Scaffold):
+             root_path=root_path,
+         )
+ 
++        if not name:
++            raise ValueError("'name' may not be empty.")
++
+         if "." in name:
+             raise ValueError("'name' may not contain a dot '.' character.")
+ 
+@@ -298,6 +301,9 @@ class Blueprint(Scaffold):
+         self_name = options.get("name", self.name)
+         name = f"{name_prefix}.{self_name}".lstrip(".")
+ 
++        if not name:
++            raise ValueError("'name' may not be empty.")
++
+         if name in app.blueprints:
+             bp_desc = "this" if app.blueprints[name] is self else "a different"
+             existing_at = f" '{name}'" if self_name != name else ""
