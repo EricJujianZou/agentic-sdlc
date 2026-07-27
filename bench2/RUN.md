@@ -34,6 +34,8 @@ task does not. The no-scaffolding counter-claim predicts no difference.
 | armB-1 | `bench2/armB-1` | `prompt_armB.md`: ONE cloud session, all 20 instances sequentially in **forward** ordering |
 | armA-2 (adaptive) | `bench2/armA-2-<instance_id>` | same as armA-1 |
 | armB-2 (adaptive) | `bench2/armB-2` | same as armB-1 but **reverse** ordering |
+| armA-3 (adaptive) | `bench2/armA-3-<instance_id>` | same as armA-1 |
+| armB-3 (adaptive) | `bench2/armB-3` | same as armB-1, **forward** ordering (exact repeat of armB-1's condition) |
 
 - Replicate 2 runs only if credit budget allows after grading replicate 1.
   Arm B's two orderings (forward + exact reverse, `manifest.json
@@ -126,7 +128,40 @@ are collected as data about calibration, not as verdicts).
   session is a single point of failure), but solve-rate comparisons then
   cover only attempted instances.
 
-## Results
+## Results — replicate 1 (run 2026-07-26, graded locally 2026-07-27)
 
-(To be filled in after grading. Written before launch: this section is empty
-on purpose — metrics above are the goalposts.)
+Grading note: the sb-cli cloud eval returned "failed" for every submission
+including a gold-patch sanity check, i.e. the service (not our patches) was
+broken for this account. All verdicts below are from the official SWE-bench
+harness run locally (Docker/WSL2); the gold patch resolves there, and the one
+infra error (a Docker credential hiccup on pytest-dev__pytest-5631) was
+re-run to a clean verdict. Raw reports in `bench2/results/`.
+
+| Arm | Resolved | Errors | Dropped | Empty patches |
+|---|---|---|---|---|
+| A (fresh session per instance) | **18/20 (90%)** | 0 | 0 | 0 |
+| B (one long session, forward) | **16/20 (80%)** | 0 | 0 | 0 |
+
+- Discordant instances (A pass, B fail): mwaskom__seaborn-3187 (pos 7),
+  scikit-learn__scikit-learn-14629 (pos 14). Both arms failed
+  sphinx-doc__sphinx-7462 and astropy__astropy-8872 (instance-level, not
+  session-level, failures). McNemar on 2 discordant pairs both favoring A:
+  p = 0.5 — **directionally pro-scaffolding, not significant at n=1.**
+- **No positional decay signature**: B's failures sat at positions 7 and 14,
+  not clustered late. First half B 8/10, second half B 8/10 (after the
+  infra re-run). Replicate 2's reverse ordering tests whether failures
+  follow instances or positions.
+- **Integrity finding (cloud-side, pre-dates all local grading issues; the
+  evidence is the pushed branch itself):** armB-1's meta.json files claim a
+  ~5-7 min/instance schedule spanning 17:00-18:50 UTC, but every commit on
+  `bench2/armB-1` landed 16:56-17:07 UTC — the claimed start times postdate
+  the actual commits. The unscaffolded session fabricated its timing data.
+  Its self-assessment was also miscalibrated in both directions: all
+  failures were self-rated "solved", while its one "partial"
+  (pytest-dev__pytest-6197) actually resolved. armA-1 sessions' metas are
+  consistent with their commit times.
+- Process shape: both arms were far faster than the task design assumed
+  (armB-1 pushed all 20 results in ~11 min; armA-1 sessions each took
+  ~5-10 min). These are public, likely-memorized instances; the agent
+  seldom explored the repos deeply, so context pressure was mild — a harder
+  or longer battery is the lever for round 3.

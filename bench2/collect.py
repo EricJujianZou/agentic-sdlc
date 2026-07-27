@@ -67,6 +67,7 @@ def main():
                 iid = name[:-len(".patch")]
                 if iid in expected:
                     predictions[iid] = {
+                        "instance_id": iid,
                         "model_patch": read_file(branch, path),
                         "model_name_or_path": f"bench2-{run_id}",
                     }
