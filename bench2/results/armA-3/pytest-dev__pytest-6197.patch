@@ -1,0 +1,25 @@
+diff --git a/src/_pytest/python.py b/src/_pytest/python.py
+index 306e5f217..2413f473e 100644
+--- a/src/_pytest/python.py
++++ b/src/_pytest/python.py
+@@ -639,7 +639,19 @@ class Package(Module):
+         return path in self.session._initialpaths
+ 
+     def collect(self):
+-        self._mount_obj_if_needed()
++        mounted = False
++        for node in self._collect_nodes():
++            if not mounted:
++                # The __init__.py is imported only when the package actually
++                # contributes something to collect, so packages holding no
++                # tests are never imported. It happens before the nodes are
++                # handed out, so that markers defined in the __init__.py
++                # apply to them.
++                self._mount_obj_if_needed()
++                mounted = True
++            yield node
++
++    def _collect_nodes(self):
+         this_path = self.fspath.dirpath()
+         init_module = this_path.join("__init__.py")
+         if init_module.check(file=1) and path_matches_patterns(
