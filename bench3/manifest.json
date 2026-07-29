@@ -1,0 +1,156 @@
+{
+  "dataset": "princeton-nlp/SWE-bench_Verified",
+  "split": "test",
+  "seed": 20260729,
+  "included_difficulty": [
+    "1-4 hours"
+  ],
+  "orderings": {
+    "forward": [
+      "sphinx-doc__sphinx-11510",
+      "pytest-dev__pytest-10356",
+      "sphinx-doc__sphinx-8548",
+      "django__django-10554",
+      "pydata__xarray-3993",
+      "pytest-dev__pytest-6197",
+      "django__django-11885",
+      "sphinx-doc__sphinx-9229",
+      "astropy__astropy-14369",
+      "astropy__astropy-13398",
+      "scikit-learn__scikit-learn-25102",
+      "sympy__sympy-12489",
+      "django__django-16560",
+      "pylint-dev__pylint-8898",
+      "pytest-dev__pytest-5787",
+      "astropy__astropy-13579",
+      "sympy__sympy-14248",
+      "pylint-dev__pylint-4551",
+      "django__django-15128",
+      "sympy__sympy-17630"
+    ],
+    "reverse": [
+      "sympy__sympy-17630",
+      "django__django-15128",
+      "pylint-dev__pylint-4551",
+      "sympy__sympy-14248",
+      "astropy__astropy-13579",
+      "pytest-dev__pytest-5787",
+      "pylint-dev__pylint-8898",
+      "django__django-16560",
+      "sympy__sympy-12489",
+      "scikit-learn__scikit-learn-25102",
+      "astropy__astropy-13398",
+      "astropy__astropy-14369",
+      "sphinx-doc__sphinx-9229",
+      "django__django-11885",
+      "pytest-dev__pytest-6197",
+      "pydata__xarray-3993",
+      "django__django-10554",
+      "sphinx-doc__sphinx-8548",
+      "pytest-dev__pytest-10356",
+      "sphinx-doc__sphinx-11510"
+    ]
+  },
+  "instances": {
+    "django__django-16560": {
+      "repo": "django/django",
+      "base_commit": "51c9bb7cd16081133af4f0ab6d06572660309730",
+      "difficulty": "1-4 hours"
+    },
+    "sympy__sympy-12489": {
+      "repo": "sympy/sympy",
+      "base_commit": "aa9780761ad8c3c0f68beeef3a0ce5caac9e100b",
+      "difficulty": "1-4 hours"
+    },
+    "sphinx-doc__sphinx-11510": {
+      "repo": "sphinx-doc/sphinx",
+      "base_commit": "6cb783c0024a873722952a67ebb9f41771c8eb6d",
+      "difficulty": "1-4 hours"
+    },
+    "astropy__astropy-13398": {
+      "repo": "astropy/astropy",
+      "base_commit": "6500928dc0e57be8f06d1162eacc3ba5e2eff692",
+      "difficulty": "1-4 hours"
+    },
+    "pytest-dev__pytest-5787": {
+      "repo": "pytest-dev/pytest",
+      "base_commit": "955e54221008aba577ecbaefa15679f6777d3bf8",
+      "difficulty": "1-4 hours"
+    },
+    "pylint-dev__pylint-4551": {
+      "repo": "pylint-dev/pylint",
+      "base_commit": "99589b08de8c5a2c6cc61e13a37420a868c80599",
+      "difficulty": "1-4 hours"
+    },
+    "pydata__xarray-3993": {
+      "repo": "pydata/xarray",
+      "base_commit": "8cc34cb412ba89ebca12fc84f76a9e452628f1bc",
+      "difficulty": "1-4 hours"
+    },
+    "scikit-learn__scikit-learn-25102": {
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "f9a1cf072da9d7375d6c2163f68a6038b13b310f",
+      "difficulty": "1-4 hours"
+    },
+    "django__django-11885": {
+      "repo": "django/django",
+      "base_commit": "04ac9b45a34440fa447feb6ae934687aacbfc5f4",
+      "difficulty": "1-4 hours"
+    },
+    "sympy__sympy-17630": {
+      "repo": "sympy/sympy",
+      "base_commit": "58e78209c8577b9890e957b624466e5beed7eb08",
+      "difficulty": "1-4 hours"
+    },
+    "sphinx-doc__sphinx-9229": {
+      "repo": "sphinx-doc/sphinx",
+      "base_commit": "876fa81e0a038cda466925b85ccf6c5452e0f685",
+      "difficulty": "1-4 hours"
+    },
+    "astropy__astropy-14369": {
+      "repo": "astropy/astropy",
+      "base_commit": "fa4e8d1cd279acf9b24560813c8652494ccd5922",
+      "difficulty": "1-4 hours"
+    },
+    "pytest-dev__pytest-10356": {
+      "repo": "pytest-dev/pytest",
+      "base_commit": "3c1534944cbd34e8a41bc9e76818018fadefc9a1",
+      "difficulty": "1-4 hours"
+    },
+    "pylint-dev__pylint-8898": {
+      "repo": "pylint-dev/pylint",
+      "base_commit": "1f8c4d9eb185c16a2c1d881c054f015e1c2eb334",
+      "difficulty": "1-4 hours"
+    },
+    "django__django-15128": {
+      "repo": "django/django",
+      "base_commit": "cb383753c0e0eb52306e1024d32a782549c27e61",
+      "difficulty": "1-4 hours"
+    },
+    "sympy__sympy-14248": {
+      "repo": "sympy/sympy",
+      "base_commit": "9986b38181cdd556a3f3411e553864f11912244e",
+      "difficulty": "1-4 hours"
+    },
+    "sphinx-doc__sphinx-8548": {
+      "repo": "sphinx-doc/sphinx",
+      "base_commit": "dd1615c59dc6fff633e27dbb3861f2d27e1fb976",
+      "difficulty": "1-4 hours"
+    },
+    "astropy__astropy-13579": {
+      "repo": "astropy/astropy",
+      "base_commit": "0df94ff7097961e92fd7812036a24b145bc13ca8",
+      "difficulty": "1-4 hours"
+    },
+    "pytest-dev__pytest-6197": {
+      "repo": "pytest-dev/pytest",
+      "base_commit": "e856638ba086fcf5bebf1bebea32d5cf78de87b4",
+      "difficulty": "1-4 hours"
+    },
+    "django__django-10554": {
+      "repo": "django/django",
+      "base_commit": "14d026cccb144c6877294ba4cd4e03ebf0842498",
+      "difficulty": "1-4 hours"
+    }
+  }
+}
