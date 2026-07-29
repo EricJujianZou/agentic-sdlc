@@ -1,0 +1,101 @@
+diff --git a/sphinx/ext/autodoc/__init__.py b/sphinx/ext/autodoc/__init__.py
+index ddfd2b365..f4c750118 100644
+--- a/sphinx/ext/autodoc/__init__.py
++++ b/sphinx/ext/autodoc/__init__.py
+@@ -584,6 +584,21 @@ class Documenter:
+         else:
+             return 'docstring of %s' % fullname
+ 
++    def get_attribute_comment(self, parent: Any) -> Optional[List[str]]:
++        """Return the comment-based documentation (``#:``) for this object.
++
++        Returns ``None`` when the object is not a comment-documented attribute.
++        Subclasses (e.g. attributes) may override this to look the comment up
++        across the class hierarchy.
++        """
++        if self.analyzer and self.objpath:
++            attr_docs = self.analyzer.find_attr_docs()
++            key = ('.'.join(self.objpath[:-1]), self.objpath[-1])
++            if key in attr_docs:
++                return list(attr_docs[key])
++
++        return None
++
+     def add_content(self, more_content: Optional[StringList], no_docstring: bool = False
+                     ) -> None:
+         """Add content from docstrings, attribute documentation and user."""
+@@ -594,18 +609,15 @@ class Documenter:
+ 
+         # set sourcename and add content from attribute documentation
+         sourcename = self.get_sourcename()
+-        if self.analyzer:
+-            attr_docs = self.analyzer.find_attr_docs()
+-            if self.objpath:
+-                key = ('.'.join(self.objpath[:-1]), self.objpath[-1])
+-                if key in attr_docs:
+-                    no_docstring = True
+-                    # make a copy of docstring for attributes to avoid cache
+-                    # the change of autodoc-process-docstring event.
+-                    docstrings = [list(attr_docs[key])]
+-
+-                    for i, line in enumerate(self.process_doc(docstrings)):
+-                        self.add_line(line, sourcename, i)
++        attr_comment = self.get_attribute_comment(self.parent)
++        if attr_comment:
++            no_docstring = True
++            # make a copy of docstring for attributes to avoid cache
++            # the change of autodoc-process-docstring event.
++            docstrings = [list(attr_comment)]
++
++            for i, line in enumerate(self.process_doc(docstrings)):
++                self.add_line(line, sourcename, i)
+ 
+         # add content from docstrings
+         if not no_docstring:
+diff --git a/sphinx/ext/autodoc/importer.py b/sphinx/ext/autodoc/importer.py
+index d6e73d36a..de0e59841 100644
+--- a/sphinx/ext/autodoc/importer.py
++++ b/sphinx/ext/autodoc/importer.py
+@@ -14,6 +14,7 @@ import warnings
+ from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Tuple
+ 
+ from sphinx.deprecation import RemovedInSphinx40Warning, deprecated_alias
++from sphinx.errors import PycodeError
+ from sphinx.pycode import ModuleAnalyzer
+ from sphinx.util import logging
+ from sphinx.util.inspect import (getannotations, getmro, getslots, isclass, isenumclass,
+@@ -307,13 +308,28 @@ def get_class_members(subject: Any, objpath: List[str], attrgetter: Callable,
+         except AttributeError:
+             pass
+ 
+-    if analyzer:
+-        # append instance attributes (cf. self.attr1) if analyzer knows
+-        namespace = '.'.join(objpath)
++    # comment-based attribute documentation (cf. #: docstring).  Walk the MRO
++    # so that inherited attributes pick up the docstring recorded under their
++    # defining class's namespace, not the target class's.
++    for cls in getmro(subject):
++        try:
++            modname = safe_getattr(cls, '__module__')
++            qualname = safe_getattr(cls, '__qualname__')
++            analyzer = ModuleAnalyzer.for_module(modname)
++            analyzer.analyze()
++        except (AttributeError, PycodeError):
++            continue
++
+         for (ns, name), docstring in analyzer.attr_docs.items():
+-            if namespace == ns and name not in members:
+-                members[name] = ClassAttribute(subject, name, INSTANCEATTR,
+-                                               '\n'.join(docstring))
++            if ns == qualname:
++                if name not in members:
++                    members[name] = ClassAttribute(cls, name, INSTANCEATTR,
++                                                   '\n'.join(docstring))
++                elif not members[name].docstring:
++                    # attach documentation to an already-collected attribute
++                    members[name].docstring = '\n'.join(docstring)
++                    if members[name].class_ is None:
++                        members[name].class_ = cls
+ 
+     return members
+ 
