@@ -1,0 +1,32 @@
+diff --git a/sphinx/directives/other.py b/sphinx/directives/other.py
+index 19f7c0a8d..ca574434b 100644
+--- a/sphinx/directives/other.py
++++ b/sphinx/directives/other.py
+@@ -376,7 +376,26 @@ class Include(BaseInclude, SphinxDirective):
+         rel_filename, filename = self.env.relfn2path(self.arguments[0])
+         self.arguments[0] = filename
+         self.env.note_included(filename)
+-        return super().run()
++
++        # Emit the "source-read" event for the included file, so that
++        # extensions can modify its source the same way they can for
++        # standalone documents.
++        def _insert_input(include_lines: list[str], source: str) -> None:
++            # docutils appends two lines marking the end of the inclusion;
++            # they are not part of the included file's source.
++            text = '\n'.join(include_lines[:-2])
++            docname = self.env.path2doc(source)
++            arg = [text]
++            self.env.events.emit('source-read', docname, arg)
++            include_lines = arg[0].splitlines() + include_lines[-2:]
++            return _old_insert_input(include_lines, source)
++
++        _old_insert_input = self.state_machine.insert_input
++        self.state_machine.insert_input = _insert_input
++        try:
++            return super().run()
++        finally:
++            self.state_machine.insert_input = _old_insert_input
+ 
+ 
+ def setup(app: Sphinx) -> dict[str, Any]:
