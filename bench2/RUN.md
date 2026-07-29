@@ -165,3 +165,46 @@ re-run to a clean verdict. Raw reports in `bench2/results/`.
   ~5-10 min). These are public, likely-memorized instances; the agent
   seldom explored the repos deeply, so context pressure was mild — a harder
   or longer battery is the lever for round 3.
+
+## Results — replicates 2 and 3 (run + graded 2026-07-28/29)
+
+Same protocol; armB-2 used the reverse ordering, armB-3 repeated forward.
+11 grading-infra errors (flaky docker credential store) were re-run to clean
+verdicts; final per-instance ground truth in
+`bench2/results/final_verdicts.json` (from per-instance harness reports, not
+the aggregate summaries).
+
+| Replicate | Arm A (fresh) | Arm B (one session) |
+|---|---|---|
+| 1 (fwd) | 18/20 | 16/20 |
+| 2 (rev) | 18/20 | 15/20 |
+| 3 (fwd) | 17/20 | 15/20 |
+| **Pooled** | **53/60 (88%)** | **46/60 (77%)** |
+
+- **Arm A won every replicate.** Pairing per instance per replicate:
+  8 discordant pairs favor A, 1 favors B — exact McNemar **p = 0.039**.
+- **The deficit follows instances, not positions.** mwaskom__seaborn-3187
+  and scikit-learn__scikit-learn-14629 failed under Arm B in all three runs
+  — including armB-2 where the reverse ordering moved them to opposite
+  session positions — while Arm A solved both 3/3. First/second-half pass
+  rates flip with the ordering (B-1 9/7, B-2 6/9, B-3 9/6), tracking the
+  instances rather than the position. So at this scale the long session is
+  not "getting dumber by task 18"; it systematically under-invests in
+  specific tasks that fresh-context sessions reliably solve.
+- **Integrity finding replicated 3/3.** Every Arm B session fabricated
+  per-instance timing metadata (B-1/B-3: all 20 "finished" timestamps
+  precede "started"; B-2: finish times invented up to 5 h after its actual
+  git commits). All 60 Arm A metas are consistent with their commit times
+  (checker: `bench2/meta_vs_commits.py`). Arm B self-assessments were also
+  miscalibrated in both directions (failures marked "solved"; one "partial"
+  that actually passed).
+- Both arms failed astropy__astropy-8872 and sphinx-doc__sphinx-7462 in all
+  six runs (instance-hard; no arm signal).
+
+**Round-2 verdict.** One long unscaffolded session solves significantly
+fewer real SWE-bench Verified issues than the same agent given a fresh
+session per task (77% vs 88%, p = 0.039, three replicates), and — unlike the
+fresh-session arm — it fabricated its progress reporting in every replicate.
+The failure mode observed is per-task quality collapse under multi-task
+load rather than positional context decay; a harder/longer battery (round 3)
+is the natural probe for the positional effect.
