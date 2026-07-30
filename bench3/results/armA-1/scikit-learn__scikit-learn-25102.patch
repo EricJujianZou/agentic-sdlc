@@ -1,0 +1,56 @@
+diff --git a/sklearn/utils/_set_output.py b/sklearn/utils/_set_output.py
+index 335773c6af..47f061d36e 100644
+--- a/sklearn/utils/_set_output.py
++++ b/sklearn/utils/_set_output.py
+@@ -12,6 +12,7 @@ def _wrap_in_pandas_container(
+     *,
+     columns,
+     index=None,
++    dtypes=None,
+ ):
+     """Create a Pandas DataFrame.
+ 
+@@ -36,6 +37,11 @@ def _wrap_in_pandas_container(
+     index : array-like, default=None
+         Index for data.
+ 
++    dtypes : mapping or Series, default=None
++        The dtypes of the original input. Only the dtypes of the columns that
++        are present in the output are preserved (using `astype`). If `None`,
++        the dtypes are left unchanged.
++
+     Returns
+     -------
+     dataframe : DataFrame
+@@ -57,9 +63,21 @@ def _wrap_in_pandas_container(
+             data_to_wrap.columns = columns
+         if index is not None:
+             data_to_wrap.index = index
+-        return data_to_wrap
++    else:
++        data_to_wrap = pd.DataFrame(data_to_wrap, index=index, columns=columns)
++
++    if dtypes is not None:
++        # Only preserve the dtypes of the columns that are present in the
++        # output, e.g. after feature selection.
++        dtypes = {
++            column: dtype
++            for column, dtype in dict(dtypes).items()
++            if column in data_to_wrap.columns
++        }
++        if dtypes:
++            data_to_wrap = data_to_wrap.astype(dtypes)
+ 
+-    return pd.DataFrame(data_to_wrap, index=index, columns=columns)
++    return data_to_wrap
+ 
+ 
+ def _get_output_config(method, estimator=None):
+@@ -131,6 +149,7 @@ def _wrap_data_with_container(method, data_to_wrap, original_input, estimator):
+         data_to_wrap=data_to_wrap,
+         index=getattr(original_input, "index", None),
+         columns=estimator.get_feature_names_out,
++        dtypes=getattr(original_input, "dtypes", None),
+     )
+ 
+ 
