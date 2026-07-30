@@ -1,0 +1,151 @@
+{
+  "run_id": "armA-1",
+  "collected": 20,
+  "expected": 20,
+  "missing": [],
+  "empty_patches": [],
+  "meta": {
+    "astropy__astropy-13398": {
+      "instance_id": "astropy__astropy-13398",
+      "started_at": "2026-07-29T23:54:41Z",
+      "finished_at": "2026-07-29T23:59:50Z",
+      "self_assessment": "solved"
+    },
+    "astropy__astropy-13579": {
+      "instance_id": "astropy__astropy-13579",
+      "started_at": "2026-07-30T00:04:45Z",
+      "finished_at": "2026-07-30T00:11:30Z",
+      "self_assessment": "solved"
+    },
+    "astropy__astropy-14369": {
+      "instance_id": "astropy__astropy-14369",
+      "started_at": "2026-07-29T23:53:00Z",
+      "finished_at": "2026-07-30T00:22:00Z",
+      "self_assessment": "solved"
+    },
+    "django__django-10554": {
+      "instance_id": "django__django-10554",
+      "started_at": "2026-07-29T23:46:04Z",
+      "finished_at": "2026-07-29T23:53:45Z",
+      "self_assessment": "solved"
+    },
+    "django__django-11885": {
+      "instance_id": "django__django-11885",
+      "started_at": "2026-07-29T23:52:31Z",
+      "finished_at": "2026-07-29T23:55:48Z",
+      "self_assessment": "solved"
+    },
+    "django__django-15128": {
+      "instance_id": "django__django-15128",
+      "started_at": "2026-07-30T00:04:30Z",
+      "finished_at": "2026-07-30T00:17:58Z",
+      "self_assessment": "solved"
+    },
+    "django__django-16560": {
+      "instance_id": "django__django-16560",
+      "started_at": "2026-07-29T23:56:37Z",
+      "finished_at": "2026-07-29T23:58:14Z",
+      "self_assessment": "solved"
+    },
+    "pydata__xarray-3993": {
+      "instance_id": "pydata__xarray-3993",
+      "started_at": "2026-07-29T23:47:08Z",
+      "finished_at": "2026-07-29T23:49:00Z",
+      "self_assessment": "solved"
+    },
+    "pylint-dev__pylint-4551": {
+      "instance_id": "pylint-dev__pylint-4551",
+      "started_at": "2026-07-30T00:04:55Z",
+      "finished_at": "2026-07-30T00:06:47Z",
+      "self_assessment": "solved"
+    },
+    "pylint-dev__pylint-8898": {
+      "instance_id": "pylint-dev__pylint-8898",
+      "started_at": "2026-07-30T00:04:00Z",
+      "finished_at": "2026-07-30T00:05:44Z",
+      "self_assessment": "solved"
+    },
+    "pytest-dev__pytest-10356": {
+      "instance_id": "pytest-dev__pytest-10356",
+      "started_at": "2026-07-29T23:45:32Z",
+      "finished_at": "2026-07-29T23:48:55Z",
+      "self_assessment": "solved"
+    },
+    "pytest-dev__pytest-5787": {
+      "instance_id": "pytest-dev__pytest-5787",
+      "started_at": "2026-07-30T00:03:55Z",
+      "finished_at": "2026-07-30T00:07:42Z",
+      "self_assessment": "solved"
+    },
+    "pytest-dev__pytest-6197": {
+      "instance_id": "pytest-dev__pytest-6197",
+      "started_at": "2026-07-29T23:52:00Z",
+      "finished_at": "2026-07-29T23:59:38Z",
+      "self_assessment": "solved"
+    },
+    "scikit-learn__scikit-learn-25102": {
+      "instance_id": "scikit-learn__scikit-learn-25102",
+      "started_at": "2026-07-29T23:55:20Z",
+      "finished_at": "2026-07-30T00:02:10Z",
+      "self_assessment": "solved"
+    },
+    "sphinx-doc__sphinx-11510": {
+      "instance_id": "sphinx-doc__sphinx-11510",
+      "started_at": "2026-07-29T23:45:06Z",
+      "finished_at": "2026-07-29T23:53:00Z",
+      "self_assessment": "solved"
+    },
+    "sphinx-doc__sphinx-8548": {
+      "instance_id": "sphinx-doc__sphinx-8548",
+      "started_at": "2026-07-29T23:45:41Z",
+      "finished_at": "2026-07-29T23:55:22Z",
+      "self_assessment": "solved"
+    },
+    "sphinx-doc__sphinx-9229": {
+      "instance_id": "sphinx-doc__sphinx-9229",
+      "started_at": "2026-07-29T23:52:53Z",
+      "finished_at": "2026-07-30T00:02:32Z",
+      "self_assessment": "solved"
+    },
+    "sympy__sympy-12489": {
+      "instance_id": "sympy__sympy-12489",
+      "started_at": "2026-07-29T23:56:10Z",
+      "finished_at": "2026-07-29T23:59:00Z",
+      "self_assessment": "solved"
+    },
+    "sympy__sympy-14248": {
+      "instance_id": "sympy__sympy-14248",
+      "started_at": "2026-07-30T00:04:30Z",
+      "finished_at": "2026-07-30T00:09:38Z",
+      "self_assessment": "solved"
+    },
+    "sympy__sympy-17630": {
+      "instance_id": "sympy__sympy-17630",
+      "started_at": "2026-07-30T00:05:27Z",
+      "finished_at": "2026-07-30T00:12:00Z",
+      "self_assessment": "solved"
+    }
+  },
+  "branches": [
+    "origin/bench3/armA-1-astropy__astropy-13398",
+    "origin/bench3/armA-1-astropy__astropy-13579",
+    "origin/bench3/armA-1-astropy__astropy-14369",
+    "origin/bench3/armA-1-django__django-10554",
+    "origin/bench3/armA-1-django__django-11885",
+    "origin/bench3/armA-1-django__django-15128",
+    "origin/bench3/armA-1-django__django-16560",
+    "origin/bench3/armA-1-pydata__xarray-3993",
+    "origin/bench3/armA-1-pylint-dev__pylint-4551",
+    "origin/bench3/armA-1-pylint-dev__pylint-8898",
+    "origin/bench3/armA-1-pytest-dev__pytest-10356",
+    "origin/bench3/armA-1-pytest-dev__pytest-5787",
+    "origin/bench3/armA-1-pytest-dev__pytest-6197",
+    "origin/bench3/armA-1-scikit-learn__scikit-learn-25102",
+    "origin/bench3/armA-1-sphinx-doc__sphinx-11510",
+    "origin/bench3/armA-1-sphinx-doc__sphinx-8548",
+    "origin/bench3/armA-1-sphinx-doc__sphinx-9229",
+    "origin/bench3/armA-1-sympy__sympy-12489",
+    "origin/bench3/armA-1-sympy__sympy-14248",
+    "origin/bench3/armA-1-sympy__sympy-17630"
+  ]
+}

@@ -42,6 +42,27 @@ Arm B sessions run from `bench3/base-noscaffold` (harness discipline files,
 Arm A protocol, and this pre-registration stripped). Later replicates run
 only if budget allows, graded replicate-by-replicate.
 
-## Results
+## Results — replicate 1 (run 2026-07-29, graded 2026-07-30)
 
-(To be filled after grading; this section is intentionally empty at launch.)
+| Arm | Resolved | Errors |
+|---|---|---|
+| A (fresh) | 16/20 | 0 |
+| **B (one session, fwd)** | **17/20** | 0 |
+
+- **Direction flipped vs round 2.** Discordant: A-only failures
+  sphinx-doc__sphinx-11510 (pos 1), sphinx-doc__sphinx-9229 (pos 8); B-only
+  failure sympy__sympy-17630 (pos 20). Both arms failed
+  astropy__astropy-13398 and pytest-dev__pytest-10356. Net one pair favors
+  B; n=1 — replicates 2-3 required before any claim.
+- H2: still no positional clustering (B fails at 2, 10, 20).
+- H3: B initially wrote wrong timestamps, then pushed a correcting commit
+  ("correct started_at timestamps"); corrected metas anchor to real commit
+  times but claim ~1-second durations — repaired, still not trustworthy.
+  One armA meta (astropy-14369) has a 24-min inconsistency, the first Arm A
+  outlier across rounds.
+- Process shape: armB-1 worked ~52 min (vs ~11 min in round 2) — the hard
+  battery does force real work.
+
+## Results — replicates 2 and 3
+
+(To be filled after grading; launched 2026-07-30.)

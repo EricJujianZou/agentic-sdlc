@@ -25,8 +25,8 @@ REPO_ROOT = os.path.dirname(bench3)
 
 
 def _git(args, check=True):
-    proc = subprocess.run(["git"] + args, cwd=REPO_ROOT,
-                          capture_output=True, text=True)
+    proc = subprocess.run(["git"] + args, cwd=REPO_ROOT, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
     if check and proc.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
     return proc.stdout
