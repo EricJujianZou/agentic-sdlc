@@ -1,0 +1,29 @@
+diff --git a/django/db/models/sql/query.py b/django/db/models/sql/query.py
+index aaf35ee37c..9edacf33ed 100644
+--- a/django/db/models/sql/query.py
++++ b/django/db/models/sql/query.py
+@@ -846,7 +846,23 @@ class Query(BaseExpression):
+         relabelling any references to them in select columns and the where
+         clause.
+         """
+-        assert set(change_map).isdisjoint(change_map.values())
++        if not change_map:
++            return
++        # An alias that is both a key and a value of change_map, e.g.
++        # {'T4': 'T5', 'T5': 'T6'}, would be relabelled twice and thus end up
++        # with the wrong alias, so first move such aliases to unused ones.
++        conflicts = set(change_map).intersection(change_map.values())
++        if conflicts:
++            used = set(change_map).union(change_map.values(), self.alias_map, self.external_aliases)
++            relabelling = {}
++            for alias in conflicts:
++                num = len(used) + 1
++                while (unused_alias := '%s%d' % (self.alias_prefix, num)) in used:
++                    num += 1
++                used.add(unused_alias)
++                relabelling[alias] = unused_alias
++            self.change_aliases(relabelling)
++            change_map = {relabelling.get(old, old): new for old, new in change_map.items()}
+ 
+         # 1. Update references in "select" (normal columns plus aliases),
+         # "group by" and "where".
