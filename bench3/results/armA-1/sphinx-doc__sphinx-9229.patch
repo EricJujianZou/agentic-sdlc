@@ -1,0 +1,43 @@
+diff --git a/CHANGES b/CHANGES
+index da8580fe6..780b7b3e0 100644
+--- a/CHANGES
++++ b/CHANGES
+@@ -44,6 +44,9 @@ Features added
+ Bugs fixed
+ ----------
+ 
++* #9229: autodoc: Documentation for a type alias, NewType or TypeVar is
++  overwritten by the ``alias of ...`` default text. Now the default text is
++  suppressed when the object has its own docstring
+ * #8872: autodoc: stacked singledispatches are wrongly rendered
+ * #8597: autodoc: a docsting having metadata only should be treated as
+   undocumented
+diff --git a/sphinx/ext/autodoc/__init__.py b/sphinx/ext/autodoc/__init__.py
+index 1f4c98284..2be45df52 100644
+--- a/sphinx/ext/autodoc/__init__.py
++++ b/sphinx/ext/autodoc/__init__.py
+@@ -2015,7 +2015,10 @@ class DataDocumenter(GenericAliasMixin, NewTypeMixin, TypeVarMixin,
+         if not more_content:
+             more_content = StringList()
+ 
+-        self.update_content(more_content)
++        # Suppress the "alias of ..." default text when the data has its own
++        # docstring so that the docstring is not shadowed by the default.
++        if not self.get_doc():
++            self.update_content(more_content)
+         super().add_content(more_content, no_docstring=no_docstring)
+ 
+ 
+@@ -2595,7 +2598,11 @@ class AttributeDocumenter(GenericAliasMixin, NewTypeMixin, SlotsMixin,  # type:
+ 
+         if more_content is None:
+             more_content = StringList()
+-        self.update_content(more_content)
++
++        # Suppress the "alias of ..." default text when the attribute has its
++        # own docstring so that the docstring is not shadowed by the default.
++        if not self.get_doc():
++            self.update_content(more_content)
+         super().add_content(more_content, no_docstring)
+ 
+ 
