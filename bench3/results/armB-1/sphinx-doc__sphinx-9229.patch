@@ -1,0 +1,35 @@
+diff --git a/sphinx/ext/autodoc/__init__.py b/sphinx/ext/autodoc/__init__.py
+index 1f4c98284..0b62f8654 100644
+--- a/sphinx/ext/autodoc/__init__.py
++++ b/sphinx/ext/autodoc/__init__.py
+@@ -1673,9 +1673,19 @@ class ClassDocumenter(DocstringSignatureMixin, ModuleLevelDocumenter):  # type:
+         else:
+             return False, [m for m in members.values() if m.class_ == self.object]
+ 
++    def get_variable_comment(self) -> Optional[List[str]]:
++        try:
++            key = ('', '.'.join(self.objpath))
++            analyzer = ModuleAnalyzer.for_module(self.get_real_modname())
++            analyzer.analyze()
++            return list(analyzer.attr_docs.get(key, []))
++        except PycodeError:
++            return None
++
+     def get_doc(self, ignore: int = None) -> Optional[List[List[str]]]:
+-        if self.doc_as_attr:
+-            # Don't show the docstring of the class when it is an alias.
++        if self.doc_as_attr and not self.get_variable_comment():
++            # Don't show the docstring of the class when it is an alias,
++            # unless the alias itself is documented by a variable comment.
+             return None
+ 
+         lines = getattr(self, '_new_docstrings', None)
+@@ -1723,7 +1733,7 @@ class ClassDocumenter(DocstringSignatureMixin, ModuleLevelDocumenter):  # type:
+ 
+     def add_content(self, more_content: Optional[StringList], no_docstring: bool = False
+                     ) -> None:
+-        if self.doc_as_attr:
++        if self.doc_as_attr and not self.get_variable_comment():
+             try:
+                 more_content = StringList([_('alias of %s') % restify(self.object)], source='')
+             except AttributeError:
