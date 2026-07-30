@@ -1,0 +1,34 @@
+{
+  "events": [
+    {
+      "ts": "2026-07-01T09:00:00",
+      "op": "add-item",
+      "args": {"sku": "WID-1"},
+      "actor": "alice"
+    },
+    {
+      "ts": "2026-07-01T09:05:00",
+      "op": "receive",
+      "args": {"sku": "WID-1", "qty": 6},
+      "actor": "alice"
+    },
+    {
+      "ts": "2026-07-03T10:00:00",
+      "op": "ship",
+      "args": {"sku": "WID-1", "qty": 2},
+      "actor": null
+    },
+    {
+      "ts": "2026-07-05T11:30:00",
+      "op": "place-order",
+      "args": {"sku": "GAD-1", "qty": 5},
+      "actor": "bob"
+    },
+    {
+      "ts": "2026-07-06T08:15:00",
+      "op": "receive-order",
+      "args": {"id": 1},
+      "actor": "bob"
+    }
+  ]
+}

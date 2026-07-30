@@ -1,0 +1,71 @@
+{
+  "version": 4,
+  "items": {
+    "WID-1": {
+      "sku": "WID-1",
+      "name": "Widget, standard",
+      "category": "widgets",
+      "qty": {"main": 3, "east": 2},
+      "unit_price_cents": 1999,
+      "supplier_id": "acme",
+      "last_actor": "dana",
+      "price_history": [
+        {"date": "2026-07-05", "old_cents": 1899, "new_cents": 1999}
+      ]
+    },
+    "GAD-1": {
+      "sku": "GAD-1",
+      "name": "Gadget, small",
+      "category": "gadgets",
+      "qty": {"main": 5},
+      "unit_price_cents": 250,
+      "supplier_id": "globex",
+      "last_actor": null,
+      "price_history": []
+    },
+    "SCR-2": {
+      "sku": "SCR-2",
+      "name": "Screwdriver",
+      "category": "uncategorized",
+      "qty": {"main": 0},
+      "unit_price_cents": 420,
+      "supplier_id": null,
+      "last_actor": null,
+      "price_history": []
+    }
+  },
+  "suppliers": {
+    "acme": {
+      "id": "acme",
+      "name": "Acme Supply Co",
+      "email": "orders@acme.example",
+      "lead_time_days": 7
+    },
+    "globex": {
+      "id": "globex",
+      "name": "Globex Industrial",
+      "email": "purchasing@globex.example",
+      "lead_time_days": 14
+    }
+  },
+  "orders": [
+    {
+      "id": 1,
+      "sku": "WID-1",
+      "qty": 10,
+      "date": "2026-06-20",
+      "status": "received",
+      "shipped_qty": 0,
+      "last_actor": "dana"
+    },
+    {
+      "id": 2,
+      "sku": "GAD-1",
+      "qty": 5,
+      "date": "2026-07-02",
+      "status": "pending",
+      "shipped_qty": 0,
+      "last_actor": null
+    }
+  ]
+}

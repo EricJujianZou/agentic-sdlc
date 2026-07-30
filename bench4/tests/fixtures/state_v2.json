@@ -1,0 +1,72 @@
+{
+  "version": 2,
+  "items": {
+    "WID-1": {
+      "sku": "WID-1",
+      "name": "Widget, standard",
+      "qty": 4,
+      "unit_price": 19.99,
+      "supplier_id": "acme",
+      "category": "widgets",
+      "last_actor": "dana"
+    },
+    "GAD-1": {
+      "sku": "GAD-1",
+      "name": "Gadget, small",
+      "qty": 12,
+      "unit_price": 2.5,
+      "supplier_id": "globex",
+      "category": "gadgets",
+      "last_actor": null
+    },
+    "SCR-1": {
+      "sku": "SCR-1",
+      "name": "Screws, box of 100",
+      "qty": 2,
+      "unit_price": 0.35,
+      "supplier_id": "acme",
+      "category": "fasteners",
+      "last_actor": "sam"
+    }
+  },
+  "suppliers": {
+    "acme": {
+      "id": "acme",
+      "name": "Acme Supply Co",
+      "email": "orders@acme.example",
+      "lead_time_days": 7
+    },
+    "globex": {
+      "id": "globex",
+      "name": "Globex Industrial",
+      "email": "purchasing@globex.example",
+      "lead_time_days": 14
+    }
+  },
+  "orders": [
+    {
+      "id": 1,
+      "sku": "WID-1",
+      "qty": 5,
+      "date": "2026-03-02",
+      "status": "received",
+      "last_actor": "dana"
+    },
+    {
+      "id": 2,
+      "sku": "SCR-1",
+      "qty": 40,
+      "date": "2026-03-15",
+      "status": "pending",
+      "last_actor": null
+    },
+    {
+      "id": 3,
+      "sku": "GAD-1",
+      "qty": 6,
+      "date": "2026-04-01",
+      "status": "cancelled",
+      "last_actor": "sam"
+    }
+  ]
+}

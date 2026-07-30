@@ -1,0 +1,103 @@
+{
+  "version": 5,
+  "items": {
+    "WID-1": {
+      "sku": "WID-1",
+      "name": "Widget, standard",
+      "category": "widgets",
+      "qty": {"main": 3, "east": 1},
+      "unit_price_cents": 1999,
+      "supplier_id": "acme",
+      "price_history": [],
+      "last_actor": "alice"
+    },
+    "GAD-1": {
+      "sku": "GAD-1",
+      "name": "Gadget, small",
+      "category": "gadgets",
+      "qty": {"main": 5},
+      "unit_price_cents": 250,
+      "supplier_id": "globex",
+      "price_history": [],
+      "last_actor": null
+    },
+    "SCR-1": {
+      "sku": "SCR-1",
+      "name": "Screws, box of 100",
+      "category": "uncategorized",
+      "qty": {"main": 40},
+      "unit_price_cents": 35,
+      "supplier_id": null,
+      "price_history": [],
+      "last_actor": null
+    }
+  },
+  "suppliers": {
+    "acme": {
+      "id": "acme",
+      "name": "Acme Supply Co",
+      "email": "orders@acme.example",
+      "lead_time_days": 5
+    },
+    "globex": {
+      "id": "globex",
+      "name": "Globex Industrial",
+      "email": "purchasing@globex.example",
+      "lead_time_days": 3
+    }
+  },
+  "orders": [
+    {
+      "id": 1,
+      "sku": "WID-1",
+      "qty": 5,
+      "date": "2026-07-01",
+      "status": "received",
+      "received_date": "2026-07-06",
+      "shipped_qty": 5,
+      "last_actor": "bob"
+    },
+    {
+      "id": 2,
+      "sku": "GAD-1",
+      "qty": 5,
+      "date": "2026-07-05",
+      "status": "pending",
+      "received_date": null,
+      "shipped_qty": 0,
+      "last_actor": "bob"
+    }
+  ],
+  "events": [
+    {
+      "ts": "2026-07-01T09:00:00",
+      "op": "add-item",
+      "args": {"sku": "WID-1"},
+      "actor": "alice"
+    },
+    {
+      "ts": "2026-07-01T09:05:00",
+      "op": "receive",
+      "args": {"sku": "WID-1", "qty": 6},
+      "actor": "alice"
+    },
+    {
+      "ts": "2026-07-03T10:00:00",
+      "op": "ship",
+      "args": {"sku": "WID-1", "qty": 2},
+      "actor": null
+    },
+    {
+      "ts": "2026-07-05T11:30:00",
+      "op": "place-order",
+      "args": {"sku": "GAD-1", "qty": 5},
+      "actor": "bob"
+    },
+    {
+      "ts": "2026-07-06T08:15:00",
+      "op": "receive-order",
+      "args": {"id": 1},
+      "actor": "bob"
+    }
+  ]
+}
