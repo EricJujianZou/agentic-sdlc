@@ -65,4 +65,21 @@ only if budget allows, graded replicate-by-replicate.
 
 ## Results — replicates 2 and 3
 
-(To be filled after grading; launched 2026-07-30.)
+**Replicate 2 aborted mid-launch (2026-07-30).** armB-2 (reverse ordering)
+was launched on Devin and died after 1/20 instances when Devin credits ran
+out. The single commit (43cdbe2, sympy__sympy-17630, pushed 12:11:01Z)
+carried a meta claiming `finished_at: 12:30:00Z` — 19 minutes *after* the
+commit that contains it, i.e. the meta was written with fabricated/predicted
+timestamps before the work window it describes. Logged as an additional H3
+data point. armA-2 fresh sessions and armB-3 were never launched.
+
+`bench3/armB-2` was reset to the noscaffold base (c4b0a36) for a clean
+relaunch: a session that died at 1/20 and resumed later is not the
+"one continuous session" treatment under test, so the partial run is
+discarded (audit trail: this note + commit 43cdbe2 in the reflog).
+
+**Model decision pending.** The original claim under test (Boris Cherny, YC
+talk) concerns Claude/Opus-class models specifically; rounds 1-3 ran on
+Devin's model. Replicates 2-3 may be re-run on Claude Code cloud agents as a
+pre-registered model arm; if so, the amendment will be committed here before
+any session launches.
