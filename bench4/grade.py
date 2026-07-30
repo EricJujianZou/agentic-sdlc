@@ -49,9 +49,11 @@ def _manifest_targets(root):
     out = []
     tests_dir = os.path.join(root, *TESTS_REL.split("/"))
     if os.path.isdir(tests_dir):
-        for dirpath, _dirnames, filenames in os.walk(tests_dir):
+        for dirpath, dirnames, filenames in os.walk(tests_dir):
+            dirnames[:] = [d for d in dirnames
+                           if d not in ("__pycache__", ".pytest_cache")]
             for name in sorted(filenames):
-                if name.startswith("."):
+                if name.startswith(".") or name.endswith(".pyc"):
                     continue
                 p = os.path.join(dirpath, name)
                 rel = os.path.relpath(p, root).replace(os.sep, "/")

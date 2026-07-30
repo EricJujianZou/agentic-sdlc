@@ -97,6 +97,15 @@ exists because Devin armB-2 died mid-run in round 3).
   2026-07-30/31); memorization is impossible, but general SWE-bench-style
   training may still shape behavior. That is true of any benchmark.
 
+## Battery validation (pre-registration)
+
+Before locking, an isolated dry-run agent implemented all 50 tasks in order
+in a scratch tree (never committed): every cumulative sweep T01..T50 was
+fully green, final sweep 266/266 tests passed, zero test edits required.
+The scratch implementation was deleted after validation. Known designed
+pressure points (T15/T27 boundary reconciliation, T44's storage split vs
+T16's still-live backup tests) were confirmed simultaneously satisfiable.
+
 ## Results — replicate 1
 
 (To be filled after grading. Launched: TBD.)
