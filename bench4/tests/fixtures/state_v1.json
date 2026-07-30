@@ -1,0 +1,102 @@
+{
+  "items": {
+    "WID-1": {
+      "sku": "WID-1",
+      "name": "Widget, standard",
+      "qty": 3,
+      "unit_price": 19.99,
+      "supplier_id": "acme"
+    },
+    "WID-2": {
+      "sku": "WID-2",
+      "name": "Widget, deluxe",
+      "qty": 10,
+      "unit_price": 0.1,
+      "supplier_id": "acme"
+    },
+    "WID-3": {
+      "sku": "WID-3",
+      "name": "Widget, economy",
+      "qty": 10,
+      "unit_price": 0.2,
+      "supplier_id": null
+    },
+    "GAD-1": {
+      "sku": "GAD-1",
+      "name": "Gadget, small",
+      "qty": 5,
+      "unit_price": 2.5,
+      "supplier_id": "globex"
+    },
+    "GAD-2": {
+      "sku": "GAD-2",
+      "name": "Gadget, large",
+      "qty": 7,
+      "unit_price": 1.15,
+      "supplier_id": "globex"
+    },
+    "SCR-1": {
+      "sku": "SCR-1",
+      "name": "Screws, box of 100",
+      "qty": 100,
+      "unit_price": 0.35,
+      "supplier_id": "acme"
+    },
+    "SCR-2": {
+      "sku": "SCR-2",
+      "name": "Screwdriver",
+      "qty": 0,
+      "unit_price": 4.2,
+      "supplier_id": null
+    }
+  },
+  "suppliers": {
+    "acme": {
+      "id": "acme",
+      "name": "Acme Supply Co",
+      "email": "orders@acme.example"
+    },
+    "globex": {
+      "id": "globex",
+      "name": "Globex Industrial",
+      "email": "purchasing@globex.example"
+    }
+  },
+  "orders": [
+    {
+      "id": 1,
+      "sku": "WID-1",
+      "qty": 2,
+      "date": "2026-1-5",
+      "status": "received"
+    },
+    {
+      "id": 2,
+      "sku": "GAD-1",
+      "qty": 5,
+      "date": "2026-01-20",
+      "status": "pending"
+    },
+    {
+      "id": 3,
+      "sku": "SCR-1",
+      "qty": 50,
+      "date": "2026-2-3",
+      "status": "pending"
+    },
+    {
+      "id": 4,
+      "sku": "WID-2",
+      "qty": 4,
+      "date": "2026-02-11",
+      "status": "cancelled"
+    },
+    {
+      "id": 5,
+      "sku": "GAD-2",
+      "qty": 3,
+      "date": "2025-12-30",
+      "status": "received"
+    }
+  ]
+}

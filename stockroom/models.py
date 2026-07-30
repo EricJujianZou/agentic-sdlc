@@ -1,0 +1,134 @@
+"""Data model for the stockroom package.
+
+Three record types cover everything the app tracks:
+
+* ``Item`` - a thing on the shelf, identified by its SKU.
+* ``Supplier`` - somewhere we buy items from.
+* ``Order`` - a purchase order for more of an item.
+
+Each type is a small dataclass with ``to_dict`` / ``from_dict`` helpers so
+the store can serialise state to JSON without any extra machinery.  The
+dict shape is exactly what ends up on disk, so keep the keys stable.
+"""
+
+from dataclasses import dataclass
+
+# Order lifecycle: an order starts out pending, then is either received
+# (goods arrived and were added to stock) or cancelled.
+STATUS_PENDING = "pending"
+STATUS_RECEIVED = "received"
+STATUS_CANCELLED = "cancelled"
+
+
+@dataclass
+class Item:
+    """A single stocked item.
+
+    Attributes:
+        sku: the stock keeping unit, our unique identifier for the item.
+        name: human readable description.
+        qty: number of units currently on hand.
+        unit_price: what we pay per unit, in dollars.
+        supplier_id: id of the Supplier we buy this from, or None for
+            items we do not reorder.
+    """
+
+    sku: str
+    name: str
+    qty: int = 0
+    unit_price: float = 0.0
+    supplier_id: str | None = None
+
+    def to_dict(self) -> dict:
+        """Return a JSON-ready dict for this item."""
+        return {
+            "sku": self.sku,
+            "name": self.name,
+            "qty": self.qty,
+            "unit_price": self.unit_price,
+            "supplier_id": self.supplier_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Item":
+        """Build an Item from a dict previously produced by to_dict."""
+        return cls(
+            sku=data["sku"],
+            name=data["name"],
+            qty=data.get("qty", 0),
+            unit_price=data.get("unit_price", 0.0),
+            supplier_id=data.get("supplier_id"),
+        )
+
+
+@dataclass
+class Supplier:
+    """A supplier we can order items from.
+
+    Attributes:
+        id: short handle used to reference the supplier from items.
+        name: the supplier's business name.
+        email: where purchase orders get sent.
+    """
+
+    id: str
+    name: str
+    email: str
+
+    def to_dict(self) -> dict:
+        """Return a JSON-ready dict for this supplier."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Supplier":
+        """Build a Supplier from a dict previously produced by to_dict."""
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            email=data.get("email", ""),
+        )
+
+
+@dataclass
+class Order:
+    """A purchase order for one item.
+
+    Attributes:
+        id: small integer id, unique within the store.
+        sku: the item being ordered.
+        qty: how many units were ordered.
+        date: the date the order was placed, as a string (whatever the
+            user typed, normally YYYY-MM-DD).
+        status: one of "pending", "received" or "cancelled".
+    """
+
+    id: int
+    sku: str
+    qty: int
+    date: str
+    status: str = STATUS_PENDING
+
+    def to_dict(self) -> dict:
+        """Return a JSON-ready dict for this order."""
+        return {
+            "id": self.id,
+            "sku": self.sku,
+            "qty": self.qty,
+            "date": self.date,
+            "status": self.status,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Order":
+        """Build an Order from a dict previously produced by to_dict."""
+        return cls(
+            id=data["id"],
+            sku=data["sku"],
+            qty=data["qty"],
+            date=data["date"],
+            status=data.get("status", STATUS_PENDING),
+        )
