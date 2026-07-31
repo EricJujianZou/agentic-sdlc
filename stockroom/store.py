@@ -22,6 +22,7 @@ import json
 import os
 
 from .models import (
+    DEFAULT_CATEGORY,
     Item,
     Order,
     STATUS_CANCELLED,
@@ -92,6 +93,7 @@ class Store:
         qty: int = 0,
         unit_price: float = 0.0,
         supplier_id: str | None = None,
+        category: str | None = None,
     ) -> Item:
         """Create a new item.
 
@@ -103,7 +105,8 @@ class Store:
         if supplier_id is not None and supplier_id not in self.suppliers:
             raise ValueError(f"unknown supplier {supplier_id}")
         item = Item(sku=sku, name=name, qty=qty, unit_price=unit_price,
-                    supplier_id=supplier_id)
+                    supplier_id=supplier_id,
+                    category=category or DEFAULT_CATEGORY)
         self.items[sku] = item
         return item
 
@@ -124,8 +127,15 @@ class Store:
         return item
 
     def ship(self, sku: str, qty: int) -> Item:
-        """Remove ``qty`` units of an item from stock (goods sent out)."""
+        """Remove ``qty`` units of an item from stock (goods sent out).
+
+        The shelf cannot go negative: shipping more than we hold is
+        refused and leaves the item untouched.
+        """
         item = self.get_item(sku)
+        if qty > item.qty:
+            raise ValueError(
+                f"cannot ship {qty} x {sku}: only {item.qty} on hand")
         item.qty -= qty
         return item
 
@@ -133,11 +143,13 @@ class Store:
     # suppliers
     # ------------------------------------------------------------------
 
-    def add_supplier(self, supplier_id: str, name: str, email: str) -> Supplier:
+    def add_supplier(self, supplier_id: str, name: str, email: str,
+                     lead_time_days: int = 0) -> Supplier:
         """Create a new supplier.  The id must not already exist."""
         if supplier_id in self.suppliers:
             raise ValueError(f"supplier {supplier_id} already exists")
-        supplier = Supplier(id=supplier_id, name=name, email=email)
+        supplier = Supplier(id=supplier_id, name=name, email=email,
+                            lead_time_days=lead_time_days)
         self.suppliers[supplier_id] = supplier
         return supplier
 

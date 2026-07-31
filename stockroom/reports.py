@@ -5,6 +5,7 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
+from .dates import parse_date, sort_key
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -12,27 +13,46 @@ from .store import Store
 DEFAULT_THRESHOLD = 5
 
 
-def stock_report(store: Store) -> dict:
+def _in_month(date: str, month: str) -> bool:
+    """True when *date* falls in *month* ("2026-01"), however it is typed."""
+    parsed = parse_date(date)
+    if parsed is None:
+        return str(date).startswith(month)
+    return f"{parsed.year:04d}-{parsed.month:02d}" == month
+
+
+def stock_report(store: Store, by_category: bool = False) -> dict:
     """Full stock listing plus total inventory value.
 
+    Args:
+        by_category: group the rows by shelf area instead of returning
+            one flat list.
+
     Returns:
-        A dict with two keys: ``rows`` is a list with one entry per item
-        (sorted by SKU), each carrying sku/name/qty/unit_price and the
-        line ``value`` (qty times unit price); ``total_value`` is the
-        value of the whole stockroom.
+        A dict with ``total_value`` (the value of the whole stockroom)
+        plus either ``rows`` -- one entry per item, sorted by SKU, each
+        carrying sku/name/qty/unit_price and the line ``value`` (qty
+        times unit price) -- or, with ``by_category``, ``categories``
+        mapping each category name to its own list of those rows.
     """
     rows = []
+    categories: dict[str, list[dict]] = {}
     total_value = 0.0
     for item in store.list_items():
         value = item.qty * item.unit_price
         total_value += value
-        rows.append({
+        row = {
             "sku": item.sku,
             "name": item.name,
             "qty": item.qty,
             "unit_price": item.unit_price,
             "value": value,
-        })
+            "category": item.category,
+        }
+        rows.append(row)
+        categories.setdefault(item.category, []).append(row)
+    if by_category:
+        return {"categories": categories, "total_value": total_value}
     return {"rows": rows, "total_value": total_value}
 
 
@@ -58,23 +78,25 @@ def monthly_orders(store: Store, month: str) -> list[dict]:
     """All orders placed in the given month.
 
     Args:
-        month: a prefix like "2026-01"; any order dated within that
-            month is included, regardless of status.
+        month: a month like "2026-01"; any order dated within that month
+            is included, regardless of status and regardless of how the
+            date was typed ("2026-1-5" is January too).
 
     Returns:
         A list of dicts (id, sku, qty, date, status), oldest first.
     """
     rows = []
     for order in store.orders:
-        if order.date.startswith(month):
-            rows.append({
-                "id": order.id,
-                "sku": order.sku,
-                "qty": order.qty,
-                "date": order.date,
-                "status": order.status,
-            })
-    rows.sort(key=lambda row: row["date"])
+        if not _in_month(order.date, month):
+            continue
+        rows.append({
+            "id": order.id,
+            "sku": order.sku,
+            "qty": order.qty,
+            "date": order.date,
+            "status": order.status,
+        })
+    rows.sort(key=lambda row: sort_key(row["date"]))
     return rows
 
 
@@ -107,16 +129,19 @@ def reorder_suggestions(store: Store,
     nobody to order the rest from.
 
     Returns:
-        A list of dicts (sku, supplier_id, qty, suggested_qty), sorted
-        by SKU.
+        A list of dicts (sku, supplier_id, qty, suggested_qty,
+        lead_time_days), sorted by SKU.  The lead time is the supplier's,
+        so slow suppliers stand out when deciding what to order first.
     """
     rows = []
     for item in store.list_items():
         if item.qty < threshold and item.supplier_id is not None:
+            supplier = store.suppliers.get(item.supplier_id)
             rows.append({
                 "sku": item.sku,
                 "supplier_id": item.supplier_id,
                 "qty": item.qty,
                 "suggested_qty": threshold - item.qty,
+                "lead_time_days": supplier.lead_time_days if supplier else 0,
             })
     return rows

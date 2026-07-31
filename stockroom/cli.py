@@ -32,6 +32,7 @@ def cmd_add_item(store: Store, args) -> int:
         qty=args.qty,
         unit_price=args.price,
         supplier_id=args.supplier,
+        category=args.category,
     )
     store.save()
     print(f"added item {item.sku} ({item.name})")
@@ -40,7 +41,8 @@ def cmd_add_item(store: Store, args) -> int:
 
 def cmd_add_supplier(store: Store, args) -> int:
     """Handle ``add-supplier``: register a new supplier."""
-    supplier = store.add_supplier(args.id, args.name, args.email)
+    supplier = store.add_supplier(args.id, args.name, args.email,
+                                  lead_time_days=args.lead_time)
     store.save()
     print(f"added supplier {supplier.id} ({supplier.name})")
     return 0
@@ -89,13 +91,27 @@ def cmd_cancel_order(store: Store, args) -> int:
     return 0
 
 
-def cmd_report_stock(store: Store, args) -> int:
-    """Handle ``report stock``: print the full stock listing."""
-    report = reports.stock_report(store)
-    print(f"{'SKU':<12} {'NAME':<24} {'QTY':>6} {'PRICE':>10} {'VALUE':>10}")
-    for row in report["rows"]:
+def _print_stock_rows(rows) -> None:
+    """Print the body of a stock listing (no header, no total)."""
+    for row in rows:
         print(f"{row['sku']:<12} {row['name']:<24} {row['qty']:>6} "
               f"{row['unit_price']:>10.2f} {row['value']:>10.2f}")
+
+
+def cmd_report_stock(store: Store, args) -> int:
+    """Handle ``report stock``: print the full stock listing."""
+    header = f"{'SKU':<12} {'NAME':<24} {'QTY':>6} {'PRICE':>10} {'VALUE':>10}"
+    if args.by_category:
+        report = reports.stock_report(store, by_category=True)
+        for category in sorted(report["categories"]):
+            print(category)
+            print(header)
+            _print_stock_rows(report["categories"][category])
+            print()
+    else:
+        report = reports.stock_report(store)
+        print(header)
+        _print_stock_rows(report["rows"])
     print(f"Total value: {report['total_value']:.2f}")
     return 0
 
@@ -198,12 +214,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--qty", type=int, default=0)
     p.add_argument("--price", type=float, default=0.0)
     p.add_argument("--supplier", default=None)
+    p.add_argument("--category", default=None,
+                   help="shelf area (default: uncategorized)")
     p.set_defaults(func=cmd_add_item)
 
     p = sub.add_parser("add-supplier", help="create a new supplier")
     p.add_argument("id")
     p.add_argument("name")
     p.add_argument("email")
+    p.add_argument("--lead-time", type=int, default=0,
+                   help="typical delivery time in whole days")
     p.set_defaults(func=cmd_add_supplier)
 
     p = sub.add_parser("receive", help="add units of an item to stock")
@@ -236,6 +256,8 @@ def build_parser() -> argparse.ArgumentParser:
     report_sub = report.add_subparsers(dest="report_kind", required=True)
 
     p = report_sub.add_parser("stock", help="full stock listing with values")
+    p.add_argument("--by-category", action="store_true",
+                   help="group the listing by shelf area")
     p.set_defaults(func=cmd_report_stock)
 
     p = report_sub.add_parser("low", help="items running low")

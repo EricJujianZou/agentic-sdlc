@@ -19,6 +19,9 @@ STATUS_PENDING = "pending"
 STATUS_RECEIVED = "received"
 STATUS_CANCELLED = "cancelled"
 
+# Items that were never filed under a shelf area land here.
+DEFAULT_CATEGORY = "uncategorized"
+
 
 @dataclass
 class Item:
@@ -31,6 +34,7 @@ class Item:
         unit_price: what we pay per unit, in dollars.
         supplier_id: id of the Supplier we buy this from, or None for
             items we do not reorder.
+        category: shelf area the item lives in.
     """
 
     sku: str
@@ -38,6 +42,7 @@ class Item:
     qty: int = 0
     unit_price: float = 0.0
     supplier_id: str | None = None
+    category: str = DEFAULT_CATEGORY
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this item."""
@@ -47,6 +52,7 @@ class Item:
             "qty": self.qty,
             "unit_price": self.unit_price,
             "supplier_id": self.supplier_id,
+            "category": self.category,
         }
 
     @classmethod
@@ -58,6 +64,7 @@ class Item:
             qty=data.get("qty", 0),
             unit_price=data.get("unit_price", 0.0),
             supplier_id=data.get("supplier_id"),
+            category=data.get("category") or DEFAULT_CATEGORY,
         )
 
 
@@ -69,11 +76,13 @@ class Supplier:
         id: short handle used to reference the supplier from items.
         name: the supplier's business name.
         email: where purchase orders get sent.
+        lead_time_days: how many days they typically take to deliver.
     """
 
     id: str
     name: str
     email: str
+    lead_time_days: int = 0
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this supplier."""
@@ -81,6 +90,7 @@ class Supplier:
             "id": self.id,
             "name": self.name,
             "email": self.email,
+            "lead_time_days": self.lead_time_days,
         }
 
     @classmethod
@@ -90,6 +100,7 @@ class Supplier:
             id=data["id"],
             name=data["name"],
             email=data.get("email", ""),
+            lead_time_days=data.get("lead_time_days", 0),
         )
 
 

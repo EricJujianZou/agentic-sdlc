@@ -15,10 +15,10 @@ side has to accept files we did not write ourselves.
 
 import csv
 
-from .models import Item
+from .models import DEFAULT_CATEGORY, Item
 from .store import Store
 
-FIELDNAMES = ["sku", "name", "qty", "unit_price", "supplier_id"]
+FIELDNAMES = ["sku", "name", "qty", "unit_price", "supplier_id", "category"]
 
 
 def export_items(store: Store, path: str) -> int:
@@ -41,6 +41,7 @@ def export_items(store: Store, path: str) -> int:
                 "qty": item.qty,
                 "unit_price": item.unit_price,
                 "supplier_id": item.supplier_id or "",
+                "category": item.category,
             })
             count += 1
     return count
@@ -64,6 +65,8 @@ def import_items(store: Store, path: str) -> int:
             qty = int(row["qty"])
             unit_price = float(row["unit_price"])
             supplier_id = row.get("supplier_id") or None
+            # Older files (and supplier exports) have no category column.
+            category = row.get("category") or None
             if sku in store.items:
                 # Known SKU: refresh the row in place.
                 item = store.items[sku]
@@ -71,6 +74,8 @@ def import_items(store: Store, path: str) -> int:
                 item.qty = qty
                 item.unit_price = unit_price
                 item.supplier_id = supplier_id
+                if category:
+                    item.category = category
             else:
                 # New SKU: add it to the catalogue.
                 store.items[sku] = Item(
@@ -79,6 +84,7 @@ def import_items(store: Store, path: str) -> int:
                     qty=qty,
                     unit_price=unit_price,
                     supplier_id=supplier_id,
+                    category=category or DEFAULT_CATEGORY,
                 )
             count += 1
     return count
