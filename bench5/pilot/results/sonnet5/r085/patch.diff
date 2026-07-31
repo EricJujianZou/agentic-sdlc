@@ -1,0 +1,313 @@
+diff --git a/config/os.go b/config/os.go
+index 3908a16..471e564 100644
+--- a/config/os.go
++++ b/config/os.go
+@@ -99,13 +99,19 @@ func GetEOL(family, release string) (eol EOL, found bool) {
+ 			"5": {Ended: true},
+ 			"6": {
+ 				StandardSupportUntil: time.Date(2021, 3, 1, 23, 59, 59, 0, time.UTC),
+-				ExtendedSupportUntil: time.Date(2024, 3, 1, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2024, 6, 1, 23, 59, 59, 0, time.UTC),
+ 			},
+ 			"7": {
+ 				StandardSupportUntil: time.Date(2024, 7, 1, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2029, 7, 1, 23, 59, 59, 0, time.UTC),
+ 			},
+ 			"8": {
+ 				StandardSupportUntil: time.Date(2029, 7, 1, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2032, 7, 1, 23, 59, 59, 0, time.UTC),
++			},
++			"9": {
++				StandardSupportUntil: time.Date(2027, 6, 1, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2032, 6, 1, 23, 59, 59, 0, time.UTC),
+ 			},
+ 		}[major(release)]
+ 	case constant.Debian:
+diff --git a/config/os_test.go b/config/os_test.go
+index 5f4bfa1..270635e 100644
+--- a/config/os_test.go
++++ b/config/os_test.go
+@@ -219,12 +219,12 @@ func TestEOL_IsStandardSupportEnded(t *testing.T) {
+ 			found:    true,
+ 		},
+ 		{
+-			name:     "Oracle Linux 9 not found",
++			name:     "Oracle Linux 9 supported",
+ 			fields:   fields{family: Oracle, release: "9"},
+ 			now:      time.Date(2021, 1, 6, 23, 59, 59, 0, time.UTC),
+ 			stdEnded: false,
+ 			extEnded: false,
+-			found:    false,
++			found:    true,
+ 		},
+ 		//Ubuntu
+ 		{
+diff --git a/go.mod b/go.mod
+index 565b32b..3d6f433 100644
+--- a/go.mod
++++ b/go.mod
+@@ -41,7 +41,7 @@ require (
+ 	github.com/vulsio/go-kev v0.1.1-0.20220118062020-5f69b364106f
+ 	github.com/vulsio/go-msfdb v0.2.1-0.20211028071756-4a9759bd9f14
+ 	github.com/vulsio/gost v0.4.2-0.20220630181607-2ed593791ec3
+-	github.com/vulsio/goval-dictionary v0.7.3
++	github.com/vulsio/goval-dictionary v0.8.0
+ 	go.etcd.io/bbolt v1.3.6
+ 	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
+ 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
+@@ -77,6 +77,7 @@ require (
+ 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+ 	github.com/cheggaaa/pb/v3 v3.0.8 // indirect
+ 	github.com/davecgh/go-spew v1.1.1 // indirect
++	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
+ 	github.com/dgryski/go-minhash v0.0.0-20170608043002-7fe510aff544 // indirect
+ 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+ 	github.com/docker/cli v20.10.17+incompatible // indirect
+@@ -110,6 +111,7 @@ require (
+ 	github.com/hashicorp/go-safetemp v1.0.0 // indirect
+ 	github.com/hashicorp/hcl v1.0.0 // indirect
+ 	github.com/hhatto/gorst v0.0.0-20181029133204-ca9f730cac5b // indirect
++	github.com/htcat/htcat v1.0.2 // indirect
+ 	github.com/imdario/mergo v0.3.13 // indirect
+ 	github.com/inconshreveable/log15 v0.0.0-20201112154412-8562bdadbbac // indirect
+ 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+@@ -128,6 +130,8 @@ require (
+ 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+ 	github.com/kevinburke/ssh_config v1.1.0 // indirect
+ 	github.com/klauspost/compress v1.15.6 // indirect
++	github.com/labstack/echo/v4 v4.1.17 // indirect
++	github.com/labstack/gommon v0.3.1 // indirect
+ 	github.com/lib/pq v1.10.5 // indirect
+ 	github.com/magiconair/properties v1.8.6 // indirect
+ 	github.com/masahiro331/go-mvn-version v0.0.0-20210429150710-d3157d602a08 // indirect
+@@ -160,6 +164,8 @@ require (
+ 	github.com/stretchr/testify v1.8.0 // indirect
+ 	github.com/subosito/gotenv v1.4.0 // indirect
+ 	github.com/ulikunitz/xz v0.5.10 // indirect
++	github.com/valyala/bytebufferpool v1.0.0 // indirect
++	github.com/valyala/fasttemplate v1.2.1 // indirect
+ 	github.com/xanzy/ssh-agent v0.3.0 // indirect
+ 	go.opencensus.io v0.23.0 // indirect
+ 	go.uber.org/atomic v1.7.0 // indirect
+diff --git a/go.sum b/go.sum
+index 178340a..71642eb 100644
+--- a/go.sum
++++ b/go.sum
+@@ -408,6 +408,7 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
+ github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+ github.com/denverdino/aliyungo v0.0.0-20190125010748-a747050bb1ba/go.mod h1:dV8lFg6daOBZbT6/BDGIz6Y3WFGn8juu6G+CQ6LHtl0=
+ github.com/dgrijalva/jwt-go v0.0.0-20170104182250-a601269ab70c/go.mod h1:E3ru+11k8xSBh+hMPgOLZmtrrCbhqsmaPHjLKYnJCaQ=
++github.com/dgrijalva/jwt-go v3.2.0+incompatible h1:7qlOGliEKZXTDg6OTjfoBKDXWrumCAMpl/TFQ4/5kLM=
+ github.com/dgrijalva/jwt-go v3.2.0+incompatible/go.mod h1:E3ru+11k8xSBh+hMPgOLZmtrrCbhqsmaPHjLKYnJCaQ=
+ github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc h1:8WFBn63wegobsYAX0YjD+8suexZDga5CctH4CCTx2+8=
+ github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc/go.mod h1:c9O8+fpSOX1DM8cPNSkX/qsBWdkD4yd2dpciOWQjpBw=
+@@ -774,6 +775,8 @@ github.com/hashicorp/serf v0.9.6/go.mod h1:TXZNMjZQijwlDvp+r0b63xZ45H7JmCmgg4gpT
+ github.com/hhatto/gorst v0.0.0-20181029133204-ca9f730cac5b h1:Jdu2tbAxkRouSILp2EbposIb8h4gO+2QuZEn3d9sKAc=
+ github.com/hhatto/gorst v0.0.0-20181029133204-ca9f730cac5b/go.mod h1:HmaZGXHdSwQh1jnUlBGN2BeEYOHACLVGzYOXCbsLvxY=
+ github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
++github.com/htcat/htcat v1.0.2 h1:zro95dGwkKDeZOgq9ei+9szd5qurGxBGfHY8hRehA7k=
++github.com/htcat/htcat v1.0.2/go.mod h1:i8ViQbjSi2+lJzM6Lx20FIxHENCz6mzJglK3HH06W3s=
+ github.com/huandu/xstrings v1.3.2 h1:L18LIDzqlW6xN2rEkpdV8+oL/IXWJ1APd+vsdYy4Wdw=
+ github.com/hudl/fargo v1.3.0/go.mod h1:y3CKSmjA+wD2gak7sUSXTAoopbhU08POFhmITJgmKTg=
+ github.com/iancoleman/strcase v0.2.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
+@@ -942,8 +945,13 @@ github.com/kr/pty v1.1.8/go.mod h1:O1sed60cT9XZ5uDucP5qwvh+TE3NnUj51EiZO/lmSfw=
+ github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
+ github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
+ github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
++github.com/labstack/echo v3.3.10+incompatible h1:pGRcYk231ExFAyoAjAfD85kQzRJCRI8bbnE7CX5OEgg=
+ github.com/labstack/echo v3.3.10+incompatible/go.mod h1:0INS7j/VjnFxD4E2wkz67b8cVwCLbBmJyDaka6Cmk1s=
++github.com/labstack/echo/v4 v4.1.17 h1:PQIBaRplyRy3OjwILGkPg89JRtH2x5bssi59G2EL3fo=
++github.com/labstack/echo/v4 v4.1.17/go.mod h1:Tn2yRQL/UclUalpb5rPdXDevbkJ+lp/2svdyFBg6CHQ=
+ github.com/labstack/gommon v0.3.0/go.mod h1:MULnywXg0yavhxWKc+lOruYdAhDwPK9wf0OL7NoOu+k=
++github.com/labstack/gommon v0.3.1 h1:OomWaJXm7xR6L1HmEtGyQf26TEn7V6X88mktX9kee9o=
++github.com/labstack/gommon v0.3.1/go.mod h1:uW6kP17uPlLJsD3ijUYn3/M5bAxtlZhMI6m3MFxTMTM=
+ github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 h1:SOEGU9fKiNWd/HOJuq6+3iTQz8KNCLtVX6idSoTLdUw=
+ github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 h1:P6pPBnrTSX3DEVR4fDembhRWSsG5rVo6hYhAB/ADZrk=
+ github.com/liamg/iamgo v0.0.9 h1:tADGm3xVotyRJmuKKaH4+zsBn7LOcvgdpuF3WsSKW3c=
+@@ -979,8 +987,10 @@ github.com/mattn/go-colorable v0.1.1/go.mod h1:FuOcm+DKB9mbwrcAfNl7/TZVBZ6rcncea
+ github.com/mattn/go-colorable v0.1.2/go.mod h1:U0ppj6V5qS13XJ6of8GYAs25YV2eR4EVcfRqFIhoBtE=
+ github.com/mattn/go-colorable v0.1.4/go.mod h1:U0ppj6V5qS13XJ6of8GYAs25YV2eR4EVcfRqFIhoBtE=
+ github.com/mattn/go-colorable v0.1.6/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=
++github.com/mattn/go-colorable v0.1.7/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=
+ github.com/mattn/go-colorable v0.1.8/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=
+ github.com/mattn/go-colorable v0.1.9/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=
++github.com/mattn/go-colorable v0.1.11/go.mod h1:u5H1YNBxpqRaxsYJYSkiCWKzEfiAb1Gb520KVy5xxl4=
+ github.com/mattn/go-colorable v0.1.12 h1:jF+Du6AlPIjs2BiUiQlKOX0rt3SujHxPnksPKZbaA40=
+ github.com/mattn/go-colorable v0.1.12/go.mod h1:u5H1YNBxpqRaxsYJYSkiCWKzEfiAb1Gb520KVy5xxl4=
+ github.com/mattn/go-isatty v0.0.3/go.mod h1:M+lRXTBqGeGNdLjl/ufCoiOlB5xdOkqRJdNxMWT7Zi4=
+@@ -1356,8 +1366,10 @@ github.com/urfave/cli v1.22.1/go.mod h1:Gos4lmkARVdJ6EkW0WaNv/tZAAMe9V7XWyB60NtX
+ github.com/urfave/cli v1.22.2/go.mod h1:Gos4lmkARVdJ6EkW0WaNv/tZAAMe9V7XWyB60NtXRu0=
+ github.com/urfave/cli v1.22.4/go.mod h1:Gos4lmkARVdJ6EkW0WaNv/tZAAMe9V7XWyB60NtXRu0=
+ github.com/urfave/cli/v2 v2.3.0/go.mod h1:LJmUH05zAU44vOAcrfzZQKsZbVcdbOG8rtL3/XcUArI=
++github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
+ github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
+ github.com/valyala/fasttemplate v1.0.1/go.mod h1:UQGH1tvbgY+Nz5t2n7tXsz52dQxojPUpymEIMZ47gx8=
++github.com/valyala/fasttemplate v1.2.1 h1:TVEnxayobAdVkhQfrfes2IzOB6o+z4roRkPF52WA1u4=
+ github.com/valyala/fasttemplate v1.2.1/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=
+ github.com/vbatts/tar-split v0.11.2 h1:Via6XqJr0hceW4wff3QRzD5gAk/tatMw/4ZA7cTlIME=
+ github.com/vbatts/tar-split v0.11.2/go.mod h1:vV3ZuO2yWSVsz+pfFzDG/upWH1JhjOiEaWq6kXyQ3VI=
+@@ -1382,6 +1394,8 @@ github.com/vulsio/gost v0.4.2-0.20220630181607-2ed593791ec3 h1:a9Efv2KuTXfxZRbAD
+ github.com/vulsio/gost v0.4.2-0.20220630181607-2ed593791ec3/go.mod h1:6xRvzXkpm8nJ/jMmL/TJZvabfVZyy2aB1nr4wtmJ1KI=
+ github.com/vulsio/goval-dictionary v0.7.3 h1:p9Ul3QSFCbzEpEsyV6Ijenf6Z1ifdeRc7CPT8QwsWxU=
+ github.com/vulsio/goval-dictionary v0.7.3/go.mod h1:i9dj1Z+AsaknmmijKgqKH+F4K4X6VKEIZnKaZ3i0FOU=
++github.com/vulsio/goval-dictionary v0.8.0 h1:hwxIwSEo7C3yPGOcrzr5jyKhBnxEidtUVNPIlbrBg+8=
++github.com/vulsio/goval-dictionary v0.8.0/go.mod h1:6gfsQfQN0jkO3ZNJlHP5r+2iyx375CBiMBdCcL8MmwM=
+ github.com/willf/bitset v1.1.11-0.20200630133818-d5bec3311243/go.mod h1:RjeCKbqT1RxIR/KWY6phxZiaY1IyutSBfGjNPySAYV4=
+ github.com/willf/bitset v1.1.11/go.mod h1:83CECat5yLh5zVOf4P1ErAgKA5UDvKtgyUABdr3+MjI=
+ github.com/xanzy/ssh-agent v0.2.1/go.mod h1:mLlQY/MoOhWBj+gOGMQkOeiEvkx+8pJSI+0Bx9h2kr4=
+@@ -1478,6 +1492,7 @@ golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073/go.mod h1:LzIPMQfyMNhhGPh
+ golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
+ golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
+ golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
++golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
+ golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
+ golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c/go.mod h1:jdWPYTVW3xRLrWPugEBEK3UY2ZEsg3UU495nc5E+M+I=
+ golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=
+@@ -1707,6 +1722,7 @@ golang.org/x/sys v0.0.0-20200622214017-ed371f2e16b4/go.mod h1:h1NjWce9XRLGQEsW7w
+ golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20200803210538-64077c9b5642/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20200817155316-9781c653f443/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
++golang.org/x/sys v0.0.0-20200826173525-f9321e4c35a6/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20200831180312-196b9ba8737a/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20200905004654-be1d3432aa8f/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+ golang.org/x/sys v0.0.0-20200909081042-eff7692f9009/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+@@ -1748,6 +1764,7 @@ golang.org/x/sys v0.0.0-20210908233432-aa78b53d3365/go.mod h1:oPkhp1MJrh7nUepCBc
+ golang.org/x/sys v0.0.0-20210927094055-39ccf1dd6fa6/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.0.0-20211019181941-9d821ace8654/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.0.0-20211103235746-7861aae1554b/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.0.0-20211124211545-fe61309f8881/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.0.0-20211205182925-97ca703d548d/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.0.0-20211210111614-af8b64212486/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+diff --git a/oval/util.go b/oval/util.go
+index d383a11..42251b4 100644
+--- a/oval/util.go
++++ b/oval/util.go
+@@ -90,6 +90,7 @@ type request struct {
+ 	versionRelease    string
+ 	newVersionRelease string
+ 	arch              string
++	repository        string // Amazon Linux 2 or later only
+ 	binaryPackNames   []string
+ 	isSrcPack         bool
+ 	modularityLabel   string // RHEL 8 or later only
+@@ -118,6 +119,7 @@ func getDefsByPackNameViaHTTP(r *models.ScanResult, url string) (relatedDefs ova
+ 				newVersionRelease: pack.FormatVer(),
+ 				isSrcPack:         false,
+ 				arch:              pack.Arch,
++				repository:        pack.Repository,
+ 			}
+ 		}
+ 		for _, pack := range r.SrcPackages {
+@@ -256,6 +258,7 @@ func getDefsByPackNameFromOvalDB(r *models.ScanResult, driver ovaldb.DB) (relate
+ 			newVersionRelease: pack.FormatNewVer(),
+ 			arch:              pack.Arch,
+ 			isSrcPack:         false,
++			repository:        pack.Repository,
+ 		})
+ 	}
+ 	for _, pack := range r.SrcPackages {
+@@ -332,6 +335,12 @@ func isOvalDefAffected(def ovalmodels.Definition, req request, family string, ru
+ 			continue
+ 		}
+ 
++		// Amazon Linux 2 Extra Repository: only match defs affecting the same repository
++		// as the package was installed from (e.g. "amzn2-core", "amzn2extra-docker").
++		if family == constant.Amazon && def.Advisory.AffectedRepository != "" && req.repository != "" && def.Advisory.AffectedRepository != req.repository {
++			continue
++		}
++
+ 		// https://github.com/aquasecurity/trivy/pull/745
+ 		if strings.Contains(req.versionRelease, ".ksplice1.") != strings.Contains(ovalPack.Version, ".ksplice1.") {
+ 			continue
+diff --git a/scanner/redhatbase.go b/scanner/redhatbase.go
+index e0a3c9f..4d406d7 100644
+--- a/scanner/redhatbase.go
++++ b/scanner/redhatbase.go
+@@ -448,7 +448,14 @@ func (o *redhatBase) scanInstalledPackages() (models.Packages, error) {
+ 		Version: version,
+ 	}
+ 
+-	r := o.exec(o.rpmQa(), noSudo)
++	cmd := o.rpmQa()
++	if o.isAmazonLinux2() {
++		// Use repoquery instead of `rpm -qa` so that packages installed from
++		// the Amazon Linux 2 Extra Repository (e.g. amzn2extra-docker) carry
++		// their origin repository, needed to match the correct OVAL advisories.
++		cmd = `repoquery --installed --qf='%{NAME} %{EPOCH} %{VERSION} %{RELEASE} %{ARCH} %{UI_FROM_REPO}' --enablerepo='amzn2extra-*'`
++	}
++	r := o.exec(cmd, noSudo)
+ 	if !r.isSuccess() {
+ 		return nil, xerrors.Errorf("Scan packages failed: %s", r)
+ 	}
+@@ -459,6 +466,14 @@ func (o *redhatBase) scanInstalledPackages() (models.Packages, error) {
+ 	return installed, nil
+ }
+ 
++func (o *redhatBase) isAmazonLinux2() bool {
++	if o.Distro.Family != constant.Amazon {
++		return false
++	}
++	fields := strings.Fields(o.Distro.Release)
++	return len(fields) > 0 && fields[0] == "2"
++}
++
+ func (o *redhatBase) parseInstalledPackages(stdout string) (models.Packages, models.SrcPackages, error) {
+ 	installed := models.Packages{}
+ 	latestKernelRelease := ver.NewVersion("")
+@@ -469,7 +484,16 @@ func (o *redhatBase) parseInstalledPackages(stdout string) (models.Packages, mod
+ 		if trimmed := strings.TrimSpace(line); trimmed == "" {
+ 			continue
+ 		}
+-		pack, err := o.parseInstalledPackagesLine(line)
++
++		var pack *models.Package
++		var err error
++		if o.isAmazonLinux2() {
++			var p models.Package
++			p, err = o.parseInstalledPackagesLineFromRepoquery(line)
++			pack = &p
++		} else {
++			pack, err = o.parseInstalledPackagesLine(line)
++		}
+ 		if err != nil {
+ 			return nil, nil, err
+ 		}
+@@ -522,6 +546,37 @@ func (o *redhatBase) parseInstalledPackagesLine(line string) (*models.Package, e
+ 	}, nil
+ }
+ 
++// parseInstalledPackagesLineFromRepoquery parses a line of `repoquery --installed` output,
++// which additionally carries the repository the package was installed from.
++// e.g. "yum-utils 0 1.1.31 46.amzn2.0.1 noarch @amzn2-core"
++func (o *redhatBase) parseInstalledPackagesLineFromRepoquery(line string) (models.Package, error) {
++	fields := strings.Fields(line)
++	if len(fields) != 6 {
++		return models.Package{}, xerrors.Errorf("Failed to parse package line: %s", line)
++	}
++
++	ver := ""
++	epoch := fields[1]
++	if epoch == "0" || epoch == "(none)" {
++		ver = fields[2]
++	} else {
++		ver = fmt.Sprintf("%s:%s", epoch, fields[2])
++	}
++
++	repo := strings.TrimPrefix(fields[5], "@")
++	if repo == "installed" {
++		repo = "amzn2-core"
++	}
++
++	return models.Package{
++		Name:       fields[0],
++		Version:    ver,
++		Release:    fields[3],
++		Arch:       fields[4],
++		Repository: repo,
++	}, nil
++}
++
+ func (o *redhatBase) parseRpmQfLine(line string) (pkg *models.Package, ignored bool, err error) {
+ 	for _, suffix := range []string{
+ 		"Permission denied",
