@@ -1,0 +1,865 @@
+diff --git a/applications/account/src/app/containers/calendar/CalendarSettingsRouter.tsx b/applications/account/src/app/containers/calendar/CalendarSettingsRouter.tsx
+index c7e8530..87d0ac6 100644
+--- a/applications/account/src/app/containers/calendar/CalendarSettingsRouter.tsx
++++ b/applications/account/src/app/containers/calendar/CalendarSettingsRouter.tsx
+@@ -30,6 +30,7 @@ import {
+ } from '@proton/shared/lib/calendar/calendar';
+ import { locales } from '@proton/shared/lib/i18n/locales';
+ import { UserModel } from '@proton/shared/lib/interfaces';
++import { HolidaysDirectoryCalendar } from '@proton/shared/lib/interfaces/calendar';
+ 
+ import { getCalendarAppRoutes } from './routes';
+ 
+@@ -38,9 +39,10 @@ interface Props {
+     loadingFeatures: boolean;
+     calendarAppRoutes: ReturnType<typeof getCalendarAppRoutes>;
+     redirect: ReactNode;
++    holidaysDirectory?: HolidaysDirectoryCalendar[];
+ }
+ 
+-const CalendarSettingsRouter = ({ user, loadingFeatures, calendarAppRoutes, redirect }: Props) => {
++const CalendarSettingsRouter = ({ user, loadingFeatures, calendarAppRoutes, redirect, holidaysDirectory }: Props) => {
+     const { path } = useRouteMatch();
+ 
+     const [addresses, loadingAddresses] = useAddresses();
+@@ -128,6 +130,7 @@ const CalendarSettingsRouter = ({ user, loadingFeatures, calendarAppRoutes, redi
+                     addresses={addresses}
+                     subscribedCalendars={subscribedCalendars}
+                     holidaysCalendars={holidaysCalendars}
++                    holidaysDirectory={holidaysDirectory}
+                     defaultCalendar={defaultCalendar}
+                     user={user}
+                 />
+diff --git a/applications/account/src/app/content/MainContainer.tsx b/applications/account/src/app/content/MainContainer.tsx
+index 9eeeeab..c10e818 100644
+--- a/applications/account/src/app/content/MainContainer.tsx
++++ b/applications/account/src/app/content/MainContainer.tsx
+@@ -26,6 +26,7 @@ import {
+     useUser,
+     useUserSettings,
+ } from '@proton/components';
++import { useHolidaysDirectory } from '@proton/components/containers/calendar/hooks';
+ import ContactEmailsProvider from '@proton/components/containers/contacts/ContactEmailsProvider';
+ import { getIsSectionAvailable, getSectionPath } from '@proton/components/containers/layout/helper';
+ import useTelemetryScreenSize from '@proton/components/hooks/useTelemetryScreenSize';
+@@ -97,6 +98,7 @@ const MainContainer = () => {
+         FeatureCode.PassSettings,
+         FeatureCode.PassPlusPlan,
+         FeatureCode.DriveRevisions,
++        FeatureCode.HolidaysCalendars,
+     ]);
+ 
+     const referralProgramFeature = getFeature(FeatureCode.ReferralProgram);
+@@ -107,9 +109,16 @@ const MainContainer = () => {
+     const isPassSettingsEnabled = getFeature(FeatureCode.PassSettings).feature?.Value === true;
+     const isPassPlusEnabled = getFeature(FeatureCode.PassPlusPlan).feature?.Value === true;
+     const isRevisionsEnabled = getFeature(FeatureCode.DriveRevisions).feature?.Value === true;
++    const isHolidaysCalendarsEnabled = getFeature(FeatureCode.HolidaysCalendars).feature?.Value === true;
++
++    // The holidays directory is needed by all the calendar settings surfaces, so we fetch it upfront
++    const [holidaysDirectory, loadingHolidaysDirectory] = useHolidaysDirectory();
+ 
+     const [isDataRecoveryAvailable, loadingDataRecovery] = useIsDataRecoveryAvailable();
+-    const loadingFeatures = featuresFlags.some(({ loading }) => loading) || loadingDataRecovery;
++    const loadingFeatures =
++        featuresFlags.some(({ loading }) => loading) ||
++        loadingDataRecovery ||
++        (isHolidaysCalendarsEnabled && loadingHolidaysDirectory);
+     const recoveryNotification = useRecoveryNotification(false);
+ 
+     const routes = getRoutes({
+@@ -246,6 +255,7 @@ const MainContainer = () => {
+                                 loadingFeatures={loadingFeatures}
+                                 calendarAppRoutes={routes.calendar}
+                                 redirect={redirect}
++                                holidaysDirectory={isHolidaysCalendarsEnabled ? holidaysDirectory : undefined}
+                             />
+                         </ContactEmailsProvider>
+                     </Suspense>
+diff --git a/applications/calendar/src/app/containers/calendar/CalendarContainer.tsx b/applications/calendar/src/app/containers/calendar/CalendarContainer.tsx
+index e53035d..9b5500b 100644
+--- a/applications/calendar/src/app/containers/calendar/CalendarContainer.tsx
++++ b/applications/calendar/src/app/containers/calendar/CalendarContainer.tsx
+@@ -40,6 +40,7 @@ import {
+     AttendeeModel,
+     CalendarMemberInvitation,
+     CalendarUserSettings,
++    HolidaysDirectoryCalendar,
+     MEMBER_INVITATION_STATUS,
+     VisualCalendar,
+ } from '@proton/shared/lib/interfaces/calendar';
+@@ -112,6 +113,7 @@ interface Props {
+     shareCalendarInvitationRef: MutableRefObject<{ calendarID: string; invitationID: string } | undefined>;
+     startupModalState: { hasModal?: boolean; isOpen: boolean };
+     getOpenedMailEvents: () => OpenedMailEvent[];
++    holidaysDirectory?: HolidaysDirectoryCalendar[];
+ }
+ 
+ const CalendarContainer = ({
+@@ -133,6 +135,7 @@ const CalendarContainer = ({
+     shareCalendarInvitationRef,
+     startupModalState,
+     getOpenedMailEvents,
++    holidaysDirectory,
+ }: Props) => {
+     const history = useHistory();
+     const location = useLocation();
+@@ -421,6 +424,7 @@ const CalendarContainer = ({
+     return (
+         <CalendarContainerView
+             calendarUserSettings={calendarUserSettings}
++            holidaysDirectory={holidaysDirectory}
+             calendars={calendars}
+             onCreateCalendarFromSidebar={(id: string) => setInitializeCacheOnlyCalendarsIDs([id])}
+             isLoading={isLoading}
+diff --git a/applications/calendar/src/app/containers/calendar/CalendarContainerView.tsx b/applications/calendar/src/app/containers/calendar/CalendarContainerView.tsx
+index 5ae2391..e6a2c65 100644
+--- a/applications/calendar/src/app/containers/calendar/CalendarContainerView.tsx
++++ b/applications/calendar/src/app/containers/calendar/CalendarContainerView.tsx
+@@ -23,7 +23,7 @@ import { isAppInView } from '@proton/shared/lib/drawer/helpers';
+ import { canonicalizeInternalEmail, validateEmailAddress } from '@proton/shared/lib/helpers/email';
+ import { dateLocale } from '@proton/shared/lib/i18n';
+ import { Address, UserModel } from '@proton/shared/lib/interfaces';
+-import { AttendeeModel, CalendarUserSettings, VisualCalendar } from '@proton/shared/lib/interfaces/calendar';
++import { AttendeeModel, CalendarUserSettings, HolidaysDirectoryCalendar, VisualCalendar } from '@proton/shared/lib/interfaces/calendar';
+ import { hasPaidMail } from '@proton/shared/lib/user/helpers';
+ import isTruthy from '@proton/utils/isTruthy';
+ import uniqueBy from '@proton/utils/uniqueBy';
+@@ -73,6 +73,7 @@ interface Props {
+     addresses: Address[];
+     user: UserModel;
+     calendarUserSettings: CalendarUserSettings;
++    holidaysDirectory?: HolidaysDirectoryCalendar[];
+ }
+ 
+ const CalendarContainerView = ({
+@@ -106,6 +107,7 @@ const CalendarContainerView = ({
+     user,
+ 
+     calendarUserSettings,
++    holidaysDirectory,
+ }: Props) => {
+     const [showIframeMiniCalendar, setShowIframeMiniCalendar] = useState<boolean>(false);
+     const { state: expanded, toggle: onToggleExpand, set: setExpand } = useToggle();
+@@ -479,6 +481,7 @@ const CalendarContainerView = ({
+             onCreateEvent={onCreateEvent ? () => onCreateEvent?.() : undefined}
+             onCreateCalendar={onCreateCalendarFromSidebar}
+             calendarUserSettings={calendarUserSettings}
++            holidaysDirectory={holidaysDirectory}
+             miniCalendar={
+                 <LocalizedMiniCalendar
+                     min={MINIMUM_DATE}
+diff --git a/applications/calendar/src/app/containers/calendar/CalendarSidebar.tsx b/applications/calendar/src/app/containers/calendar/CalendarSidebar.tsx
+index dfb7cfe..02cacaf 100644
+--- a/applications/calendar/src/app/containers/calendar/CalendarSidebar.tsx
++++ b/applications/calendar/src/app/containers/calendar/CalendarSidebar.tsx
+@@ -16,17 +16,21 @@ import {
+     SidebarPrimaryButton,
+     SimpleDropdown,
+     SimpleSidebarListItemHeader,
++    Spotlight,
+     Tooltip,
++    useActiveBreakpoint,
+     useApi,
+     useEventManager,
+     useLoading,
+     useModalState,
++    useSpotlightOnFeature,
++    useSpotlightShow,
+     useUser,
++    useWelcomeFlags,
+ } from '@proton/components';
+ import CalendarLimitReachedModal from '@proton/components/containers/calendar/CalendarLimitReachedModal';
+ import { CalendarModal } from '@proton/components/containers/calendar/calendarModal/CalendarModal';
+ import HolidaysCalendarModal from '@proton/components/containers/calendar/holidaysCalendarModal/HolidaysCalendarModal';
+-import { useHolidaysDirectory } from '@proton/components/containers/calendar/hooks';
+ import SubscribedCalendarModal from '@proton/components/containers/calendar/subscribedCalendarModal/SubscribedCalendarModal';
+ import useFeature from '@proton/components/hooks/useFeature';
+ import useSubscribedCalendars from '@proton/components/hooks/useSubscribedCalendars';
+@@ -37,7 +41,11 @@ import { getMemberAndAddress } from '@proton/shared/lib/calendar/members';
+ import { getCalendarsSettingsPath } from '@proton/shared/lib/calendar/settingsRoutes';
+ import { APPS } from '@proton/shared/lib/constants';
+ import { Address } from '@proton/shared/lib/interfaces';
+-import { CalendarUserSettings, VisualCalendar } from '@proton/shared/lib/interfaces/calendar';
++import {
++    CalendarUserSettings,
++    HolidaysDirectoryCalendar,
++    VisualCalendar,
++} from '@proton/shared/lib/interfaces/calendar';
+ 
+ import CalendarSidebarListItems from './CalendarSidebarListItems';
+ import CalendarSidebarVersion from './CalendarSidebarVersion';
+@@ -46,6 +54,7 @@ export interface CalendarSidebarProps {
+     addresses: Address[];
+     calendars: VisualCalendar[];
+     calendarUserSettings: CalendarUserSettings;
++    holidaysDirectory?: HolidaysDirectoryCalendar[];
+     expanded?: boolean;
+     logo?: ReactNode;
+     miniCalendar: ReactNode;
+@@ -58,6 +67,7 @@ const CalendarSidebar = ({
+     addresses,
+     calendars,
+     calendarUserSettings,
++    holidaysDirectory,
+     logo,
+     expanded = false,
+     onToggleExpand,
+@@ -68,6 +78,8 @@ const CalendarSidebar = ({
+     const { call } = useEventManager();
+     const api = useApi();
+     const [user] = useUser();
++    const { isNarrow } = useActiveBreakpoint();
++    const [{ isWelcomeFlow }] = useWelcomeFlags();
+     const holidaysCalendarsEnabled = !!useFeature(FeatureCode.HolidaysCalendars)?.feature?.Value;
+ 
+     const [loadingVisibility, withLoadingVisibility] = useLoading();
+@@ -77,7 +89,6 @@ const CalendarSidebar = ({
+     const [subscribedCalendarModal, setIsSubscribedCalendarModalOpen, renderSubscribedCalendarModal] = useModalState();
+     const [limitReachedModal, setIsLimitReachedModalOpen, renderLimitReachedModal] = useModalState();
+ 
+-    const [holidaysDirectory] = useHolidaysDirectory();
+     const canShowAddHolidaysCalendar = holidaysCalendarsEnabled && !!holidaysDirectory?.length;
+ 
+     const headerRef = useRef(null);
+@@ -107,6 +118,12 @@ const CalendarSidebar = ({
+         !user.hasPaidMail
+     );
+ 
++    const { show: showHolidaysSpotlight, onDisplayed: onHolidaysSpotlightDisplayed } = useSpotlightOnFeature(
++        FeatureCode.HolidaysCalendarsSpotlight,
++        !isWelcomeFlow && !isNarrow && canShowAddHolidaysCalendar && !holidaysCalendars.length
++    );
++    const shouldShowHolidaysSpotlight = useSpotlightShow(showHolidaysSpotlight);
++
+     const addCalendarText = c('Dropdown action icon tooltip').t`Add calendar`;
+ 
+     const handleChangeVisibility = async (calendarID: string, checked: boolean) => {
+@@ -189,12 +206,28 @@ const CalendarSidebar = ({
+                                             {c('Action').t`Create calendar`}
+                                         </DropdownMenuButton>
+                                         {canShowAddHolidaysCalendar && (
+-                                            <DropdownMenuButton
+-                                                className="text-left"
+-                                                onClick={handleAddHolidaysCalendar}
++                                            <Spotlight
++                                                originalPlacement="right"
++                                                show={shouldShowHolidaysSpotlight}
++                                                onDisplayed={onHolidaysSpotlightDisplayed}
++                                                type="new"
++                                                content={
++                                                    <>
++                                                        <div className="text-bold text-lg m-auto">
++                                                            {c('Spotlight').t`Public holidays are here!`}
++                                                        </div>
++                                                        {c('Spotlight')
++                                                            .t`Get a country's official public holidays calendar.`}
++                                                    </>
++                                                }
+                                             >
+-                                                {c('Action').t`Add public holidays`}
+-                                            </DropdownMenuButton>
++                                                <DropdownMenuButton
++                                                    className="text-left"
++                                                    onClick={handleAddHolidaysCalendar}
++                                                >
++                                                    {c('Action').t`Add public holidays`}
++                                                </DropdownMenuButton>
++                                            </Spotlight>
+                                         )}
+                                         <DropdownMenuButton
+                                             className="text-left"
+diff --git a/applications/calendar/src/app/containers/calendar/MainContainer.tsx b/applications/calendar/src/app/containers/calendar/MainContainer.tsx
+index e8f3fea..c4c12ea 100644
+--- a/applications/calendar/src/app/containers/calendar/MainContainer.tsx
++++ b/applications/calendar/src/app/containers/calendar/MainContainer.tsx
+@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
+ import {
+     ErrorBoundary,
+     FeatureCode,
++    LoaderPage,
+     StandardErrorPage,
+     useAddresses,
+     useCalendars,
+@@ -11,6 +12,7 @@ import {
+     useUser,
+     useWelcomeFlags,
+ } from '@proton/components';
++import { useHolidaysDirectory } from '@proton/components/containers/calendar/hooks';
+ import useTelemetryScreenSize from '@proton/components/hooks/useTelemetryScreenSize';
+ import { useInstance } from '@proton/hooks/index';
+ import { getOwnedPersonalCalendars, getVisualCalendars, sortCalendars } from '@proton/shared/lib/calendar/calendar';
+@@ -43,7 +45,11 @@ const MainContainer = () => {
+         return view;
+     });
+ 
+-    useFeatures([FeatureCode.CalendarSharingEnabled]);
++    const { getFeature } = useFeatures([FeatureCode.CalendarSharingEnabled, FeatureCode.HolidaysCalendars]);
++    const holidaysCalendarsEnabled = getFeature(FeatureCode.HolidaysCalendars).feature?.Value === true;
++
++    // The holidays directory is needed both by the sidebar and by the calendar setup, so we fetch it upfront
++    const [holidaysDirectory, loadingHolidaysDirectory] = useHolidaysDirectory();
+ 
+     const memoedCalendars = useMemo(() => sortCalendars(getVisualCalendars(calendars || [])), [calendars]);
+     const ownedPersonalCalendars = useMemo(() => getOwnedPersonalCalendars(memoedCalendars), [memoedCalendars]);
+@@ -67,6 +73,10 @@ const MainContainer = () => {
+         });
+     });
+ 
++    if (holidaysCalendarsEnabled && loadingHolidaysDirectory) {
++        return <LoaderPage />;
++    }
++
+     if (hasCalendarToGenerate) {
+         return <CalendarSetupContainer onDone={() => setHasCalendarToGenerate(false)} />;
+     }
+@@ -97,6 +107,7 @@ const MainContainer = () => {
+             addresses={memoedAddresses}
+             calendars={memoedCalendars}
+             drawerView={drawerView}
++            holidaysDirectory={holidaysCalendarsEnabled ? holidaysDirectory : undefined}
+         />
+     );
+ };
+diff --git a/applications/calendar/src/app/containers/calendar/MainContainerSetup.tsx b/applications/calendar/src/app/containers/calendar/MainContainerSetup.tsx
+index b7f8a5a..1dd7bef 100644
+--- a/applications/calendar/src/app/containers/calendar/MainContainerSetup.tsx
++++ b/applications/calendar/src/app/containers/calendar/MainContainerSetup.tsx
+@@ -14,7 +14,7 @@ import { getDefaultTzid } from '@proton/shared/lib/calendar/getSettings';
+ import { getTimezone } from '@proton/shared/lib/date/timezone';
+ import { getActiveAddresses } from '@proton/shared/lib/helpers/address';
+ import { Address, UserModel } from '@proton/shared/lib/interfaces';
+-import { VisualCalendar } from '@proton/shared/lib/interfaces/calendar';
++import { HolidaysDirectoryCalendar, VisualCalendar } from '@proton/shared/lib/interfaces/calendar';
+ 
+ import { useGetOpenedMailEvents } from '../../hooks/useGetOpenedMailEvents';
+ import AlarmContainer from '../alarms/AlarmContainer';
+@@ -35,9 +35,10 @@ interface Props {
+     addresses: Address[];
+     user: UserModel;
+     drawerView?: VIEWS;
++    holidaysDirectory?: HolidaysDirectoryCalendar[];
+ }
+ 
+-const MainContainerSetup = ({ user, addresses, calendars, drawerView }: Props) => {
++const MainContainerSetup = ({ user, addresses, calendars, drawerView, holidaysDirectory }: Props) => {
+     const { isNarrow } = useActiveBreakpoint();
+     const [userSettings] = useUserSettings();
+     const [calendarUserSettings = DEFAULT_CALENDAR_USER_SETTINGS] = useCalendarUserSettings();
+@@ -118,6 +119,7 @@ const MainContainerSetup = ({ user, addresses, calendars, drawerView }: Props) =
+                         userSettings={userSettings}
+                         eventTargetActionRef={eventTargetActionRef}
+                         shareCalendarInvitationRef={shareCalendarInvitationRef}
++                        holidaysDirectory={holidaysDirectory}
+                         startupModalState={startupModalState}
+                         getOpenedMailEvents={getOpenedMailEvents}
+                     />
+diff --git a/applications/calendar/src/app/containers/setup/CalendarSetupContainer.tsx b/applications/calendar/src/app/containers/setup/CalendarSetupContainer.tsx
+index eeb79a8..ca7fc6c 100644
+--- a/applications/calendar/src/app/containers/setup/CalendarSetupContainer.tsx
++++ b/applications/calendar/src/app/containers/setup/CalendarSetupContainer.tsx
+@@ -1,17 +1,29 @@
+ import { useEffect, useState } from 'react';
+ 
+ import {
++    FeatureCode,
+     LoaderPage,
+     StandardLoadErrorPage,
+     useApi,
+     useCache,
+     useEventManager,
++    useFeature,
+     useGetAddressKeys,
+     useGetAddresses,
++    useGetCalendars,
+ } from '@proton/components';
++import { useGetHolidaysDirectory } from '@proton/components/containers/calendar/hooks';
++import { DEFAULT_FULL_DAY_NOTIFICATIONS } from '@proton/shared/lib/calendar/alarms/notificationDefaults';
++import { getVisualCalendars } from '@proton/shared/lib/calendar/calendar';
+ import setupCalendarHelper from '@proton/shared/lib/calendar/crypto/keys/setupCalendarHelper';
+ import { setupCalendarKeys } from '@proton/shared/lib/calendar/crypto/keys/setupCalendarKeys';
++import setupHolidaysCalendarHelper from '@proton/shared/lib/calendar/crypto/keys/setupHolidaysCalendarHelper';
++import { getSuggestedHolidaysCalendar } from '@proton/shared/lib/calendar/holidaysCalendar/holidaysCalendar';
++import { getRandomAccentColor } from '@proton/shared/lib/colors';
++import { getTimezone } from '@proton/shared/lib/date/timezone';
+ import { traceError } from '@proton/shared/lib/helpers/sentry';
++import { getBrowserLanguageTags } from '@proton/shared/lib/i18n/helper';
++import { Address, Api } from '@proton/shared/lib/interfaces';
+ import { VisualCalendar } from '@proton/shared/lib/interfaces/calendar';
+ import { CalendarUserSettingsModel, CalendarsModel } from '@proton/shared/lib/models';
+ import { loadModels } from '@proton/shared/lib/models/helper';
+@@ -25,12 +37,48 @@ const CalendarSetupContainer = ({ onDone, calendars }: Props) => {
+     const cache = useCache();
+     const getAddresses = useGetAddresses();
+     const getAddressKeys = useGetAddressKeys();
++    const getCalendars = useGetCalendars();
++    const getHolidaysDirectory = useGetHolidaysDirectory();
++    const holidaysCalendarsEnabled = !!useFeature(FeatureCode.HolidaysCalendars).feature?.Value;
+ 
+     const normalApi = useApi();
+     const silentApi = <T,>(config: any) => normalApi<T>({ ...config, silence: true });
+ 
+     const [error, setError] = useState();
+ 
++    /**
++     * Suggest to the new user the public holidays calendar matching his time zone and browser languages.
++     * We don't suggest anything if the user already joined the corresponding holidays calendar.
++     */
++    const setupHolidaysCalendar = async (addresses: Address[]) => {
++        const directory = await getHolidaysDirectory();
++        const suggestedCalendar = getSuggestedHolidaysCalendar(
++            directory || [],
++            getTimezone(),
++            getBrowserLanguageTags()
++        );
++
++        if (!suggestedCalendar) {
++            return;
++        }
++
++        const userCalendars = getVisualCalendars((await getCalendars()) || []);
++        const hasAlreadyJoinedCalendar = userCalendars.some(({ ID }) => ID === suggestedCalendar.CalendarID);
++
++        if (hasAlreadyJoinedCalendar) {
++            return;
++        }
++
++        await setupHolidaysCalendarHelper({
++            holidaysCalendar: suggestedCalendar,
++            color: getRandomAccentColor(),
++            notifications: DEFAULT_FULL_DAY_NOTIFICATIONS,
++            addresses,
++            getAddressKeys,
++            api: silentApi as Api,
++        });
++    };
++
+     useEffect(() => {
+         const run = async () => {
+             const addresses = await getAddresses();
+@@ -47,6 +95,11 @@ const CalendarSetupContainer = ({ onDone, calendars }: Props) => {
+                     addresses,
+                     getAddressKeys,
+                 });
++
++                if (holidaysCalendarsEnabled) {
++                    // Failing to set up the suggested holidays calendar should not block the calendar setup
++                    await setupHolidaysCalendar(addresses).catch(traceError);
++                }
+             }
+ 
+             await call();
+diff --git a/packages/components/containers/calendar/holidaysCalendarModal/HolidaysCalendarModal.tsx b/packages/components/containers/calendar/holidaysCalendarModal/HolidaysCalendarModal.tsx
+index 6373c15..ff6852c 100644
+--- a/packages/components/containers/calendar/holidaysCalendarModal/HolidaysCalendarModal.tsx
++++ b/packages/components/containers/calendar/holidaysCalendarModal/HolidaysCalendarModal.tsx
+@@ -3,17 +3,17 @@ import { useEffect, useMemo, useState } from 'react';
+ import { c } from 'ttag';
+ 
+ import { Button } from '@proton/atoms/Button';
+-import { joinHolidaysCalendar, removeMember } from '@proton/shared/lib/api/calendars';
++import { removeMember } from '@proton/shared/lib/api/calendars';
+ import { dedupeNotifications } from '@proton/shared/lib/calendar/alarms';
+ import { modelToNotifications } from '@proton/shared/lib/calendar/alarms/modelToNotifications';
+ import { notificationsToModel } from '@proton/shared/lib/calendar/alarms/notificationsToModel';
+ import { updateCalendar } from '@proton/shared/lib/calendar/calendar';
+ import { MAX_DEFAULT_NOTIFICATIONS } from '@proton/shared/lib/calendar/constants';
++import setupHolidaysCalendarHelper from '@proton/shared/lib/calendar/crypto/keys/setupHolidaysCalendarHelper';
+ import {
+     findHolidaysCalendarByCountryCodeAndLanguageCode,
+     getDefaultHolidaysCalendar,
+     getHolidaysCalendarsFromCountryCode,
+-    getJoinHolidaysCalendarData,
+ } from '@proton/shared/lib/calendar/holidaysCalendar/holidaysCalendar';
+ import { getRandomAccentColor } from '@proton/shared/lib/colors';
+ import { languageCode } from '@proton/shared/lib/i18n';
+@@ -177,6 +177,8 @@ const HolidaysCalendarModal = ({
+             }
+ 
+             if (selectedCalendar) {
++                const dedupedNotifications = modelToNotifications(dedupeNotifications(notifications));
++
+                 /**
+                  * Based on the inputHolidaysCalendar, we have several cases to cover:
+                  * 1 - The user is updating colors or notifications of his holiday calendar
+@@ -202,7 +204,7 @@ const HolidaysCalendarModal = ({
+                             >
+                         > = {
+                             DefaultEventDuration: 30, // TODO check
+-                            DefaultFullDayNotifications: modelToNotifications(dedupeNotifications(notifications)),
++                            DefaultFullDayNotifications: dedupedNotifications,
+                             DefaultPartDayNotifications: [],
+                         };
+                         await updateCalendar(
+@@ -217,25 +219,25 @@ const HolidaysCalendarModal = ({
+                         // 2 - Leave old holiday calendar and join a new one
+                         await api(removeMember(inputHolidaysCalendar.ID, inputHolidaysCalendar.Members[0].ID));
+ 
+-                        const { calendarID, addressID, payload } = await getJoinHolidaysCalendarData({
++                        await setupHolidaysCalendarHelper({
+                             holidaysCalendar: selectedCalendar,
+                             addresses,
+                             getAddressKeys,
+                             color,
+-                            notifications,
++                            notifications: dedupedNotifications,
++                            api,
+                         });
+-                        await api(joinHolidaysCalendar(calendarID, addressID, payload));
+                     }
+                 } else {
+                     // 3 - Joining a holiday calendar
+-                    const { calendarID, addressID, payload } = await getJoinHolidaysCalendarData({
++                    await setupHolidaysCalendarHelper({
+                         holidaysCalendar: selectedCalendar,
+                         addresses,
+                         getAddressKeys,
+                         color,
+-                        notifications,
++                        notifications: dedupedNotifications,
++                        api,
+                     });
+-                    await api(joinHolidaysCalendar(calendarID, addressID, payload));
+ 
+                     createNotification({
+                         type: 'success',
+diff --git a/packages/components/containers/calendar/hooks/index.ts b/packages/components/containers/calendar/hooks/index.ts
+index 59a5098..15397ff 100644
+--- a/packages/components/containers/calendar/hooks/index.ts
++++ b/packages/components/containers/calendar/hooks/index.ts
+@@ -1,3 +1,3 @@
+ export { default as useAddEvents } from './useAddEvents';
+ export { default as useAddAttendees } from './useAddAttendees';
+-export { default as useHolidaysDirectory } from './useHolidaysDirectory';
++export { default as useHolidaysDirectory, useGetHolidaysDirectory } from './useHolidaysDirectory';
+diff --git a/packages/components/containers/calendar/hooks/useHolidaysDirectory.ts b/packages/components/containers/calendar/hooks/useHolidaysDirectory.ts
+index ac005eb..4d9a718 100644
+--- a/packages/components/containers/calendar/hooks/useHolidaysDirectory.ts
++++ b/packages/components/containers/calendar/hooks/useHolidaysDirectory.ts
+@@ -5,7 +5,7 @@ import { getPromiseValue } from '@proton/components/hooks/useCachedModelResult';
+ import { HolidaysDirectoryCalendar } from '@proton/shared/lib/interfaces/calendar';
+ import { HolidaysCalendarsModel } from '@proton/shared/lib/models';
+ 
+-const useGetHolidaysDirectory = () => {
++export const useGetHolidaysDirectory = () => {
+     const api = useApi();
+     const cache = useCache();
+     return useCallback(() => {
+diff --git a/packages/components/containers/calendar/settings/CalendarSubpage.tsx b/packages/components/containers/calendar/settings/CalendarSubpage.tsx
+index 66784de..2d5d8e0 100644
+--- a/packages/components/containers/calendar/settings/CalendarSubpage.tsx
++++ b/packages/components/containers/calendar/settings/CalendarSubpage.tsx
+@@ -22,6 +22,7 @@ import {
+     CalendarMemberInvitation,
+     GetAllMembersApiResponse,
+     GetCalendarInvitationsResponse,
++    HolidaysDirectoryCalendar,
+     MEMBER_INVITATION_STATUS,
+     SubscribedCalendar,
+     VisualCalendar,
+@@ -37,6 +38,7 @@ interface Props {
+     calendars: VisualCalendar[];
+     subscribedCalendars: SubscribedCalendar[];
+     holidaysCalendars: VisualCalendar[];
++    holidaysDirectory?: HolidaysDirectoryCalendar[];
+     defaultCalendar?: VisualCalendar;
+     addresses: Address[];
+     user: UserModel;
+@@ -46,6 +48,7 @@ const CalendarSubpage = ({
+     calendars,
+     subscribedCalendars,
+     holidaysCalendars,
++    holidaysDirectory,
+     defaultCalendar,
+     addresses,
+     user,
+@@ -164,6 +167,7 @@ const CalendarSubpage = ({
+                 <CalendarSubpageHeaderSection
+                     calendar={calendar}
+                     holidaysCalendars={holidaysCalendars}
++                    holidaysDirectory={holidaysDirectory}
+                     defaultCalendar={defaultCalendar}
+                     onEdit={reRender}
+                     canEdit={user.hasNonDelinquentScope}
+diff --git a/packages/components/containers/calendar/settings/CalendarSubpageHeaderSection.tsx b/packages/components/containers/calendar/settings/CalendarSubpageHeaderSection.tsx
+index f0e0f1e..261ad48 100644
+--- a/packages/components/containers/calendar/settings/CalendarSubpageHeaderSection.tsx
++++ b/packages/components/containers/calendar/settings/CalendarSubpageHeaderSection.tsx
+@@ -13,23 +13,30 @@ import {
+ } from '@proton/shared/lib/calendar/sharing/shareProton/shareProton';
+ import { getCalendarHasSubscriptionParameters } from '@proton/shared/lib/calendar/subscribe/helpers';
+ import { getKnowledgeBaseUrl } from '@proton/shared/lib/helpers/url';
+-import { SubscribedCalendar, VisualCalendar } from '@proton/shared/lib/interfaces/calendar';
++import { HolidaysDirectoryCalendar, SubscribedCalendar, VisualCalendar } from '@proton/shared/lib/interfaces/calendar';
+ import clsx from '@proton/utils/clsx';
+ 
+ import { CALENDAR_MODAL_TYPE, CalendarModal } from '../calendarModal/CalendarModal';
+ import HolidaysCalendarModal from '../holidaysCalendarModal/HolidaysCalendarModal';
+-import useHolidaysDirectory from '../hooks/useHolidaysDirectory';
+ import CalendarBadge from './CalendarBadge';
+ 
+ interface Props {
+     calendar: VisualCalendar | SubscribedCalendar;
+     defaultCalendar?: VisualCalendar;
+     holidaysCalendars: VisualCalendar[];
++    holidaysDirectory?: HolidaysDirectoryCalendar[];
+     onEdit?: () => void;
+     canEdit: boolean;
+ }
+ 
+-const CalendarSubpageHeaderSection = ({ calendar, defaultCalendar, holidaysCalendars, onEdit, canEdit }: Props) => {
++const CalendarSubpageHeaderSection = ({
++    calendar,
++    defaultCalendar,
++    holidaysCalendars,
++    holidaysDirectory,
++    onEdit,
++    canEdit,
++}: Props) => {
+     const { contactEmailsMap } = useContactEmailsCache();
+ 
+     const { Name, Description, Color, Email: memberEmail, Permissions: memberPermissions } = calendar;
+@@ -41,7 +48,6 @@ const CalendarSubpageHeaderSection = ({ calendar, defaultCalendar, holidaysCalen
+ 
+     const [calendarModal, setIsCalendarModalOpen, renderCalendarModal] = useModalState();
+     const [holidaysCalendarModal, setHolidaysCalendarModalOpen, renderHolidaysCalendarModal] = useModalState();
+-    const [holidaysDirectory] = useHolidaysDirectory();
+ 
+     const handleEdit = () => {
+         if (getIsHolidaysCalendar(calendar)) {
+diff --git a/packages/components/containers/calendar/settings/OtherCalendarsSection.tsx b/packages/components/containers/calendar/settings/OtherCalendarsSection.tsx
+index 5187ed8..8c23f8c 100644
+--- a/packages/components/containers/calendar/settings/OtherCalendarsSection.tsx
++++ b/packages/components/containers/calendar/settings/OtherCalendarsSection.tsx
+@@ -219,12 +219,15 @@ const OtherCalendarsSection = ({
+                 </SettingsParagraph>
+                 {isCalendarsLimitReached ? isCalendarsLimitReachedNode : addCalendarButtons}
+             </CalendarsSection>
+-            <CalendarsSection
+-                nameHeader={c('Header').t`Holidays`}
+-                calendars={holidaysCalendars}
+-                addresses={addresses}
+-                user={user}
+-            />
++            {!!holidaysCalendars.length && (
++                <CalendarsSection
++                    nameHeader={c('Header').t`Holidays`}
++                    calendars={holidaysCalendars}
++                    addresses={addresses}
++                    user={user}
++                    data-testid="holiday-calendars-section"
++                />
++            )}
+             <SharedCalendarsSection
+                 user={user}
+                 addresses={addresses}
+diff --git a/packages/components/containers/features/FeaturesContext.ts b/packages/components/containers/features/FeaturesContext.ts
+index ec44fad..cb87dbc 100644
+--- a/packages/components/containers/features/FeaturesContext.ts
++++ b/packages/components/containers/features/FeaturesContext.ts
+@@ -43,6 +43,7 @@ export enum FeatureCode {
+     CalendarSharingEnabled = 'CalendarSharingEnabled',
+     CalendarSharingSpotlight = 'CalendarSharingSpotlight',
+     HolidaysCalendars = 'HolidaysCalendars',
++    HolidaysCalendarsSpotlight = 'HolidaysCalendarsSpotlight',
+     SpyTrackerProtection = 'SpyTrackerProtection',
+     SpyTrackerProtectionIncorporator = 'SpyTrackerProtectionIncorporator',
+     SpotlightGetStartedChecklist = 'SpotlightGetStartedChecklist',
+diff --git a/packages/shared/lib/calendar/crypto/keys/setupHolidaysCalendarHelper.ts b/packages/shared/lib/calendar/crypto/keys/setupHolidaysCalendarHelper.ts
+new file mode 100644
+index 0000000..04bce94
+--- /dev/null
++++ b/packages/shared/lib/calendar/crypto/keys/setupHolidaysCalendarHelper.ts
+@@ -0,0 +1,35 @@
++import { joinHolidaysCalendar } from '../../../api/calendars';
++import { Address, Api } from '../../../interfaces';
++import { CalendarNotificationSettings, HolidaysDirectoryCalendar } from '../../../interfaces/calendar';
++import { GetAddressKeys } from '../../../interfaces/hooks/GetAddressKeys';
++import { getJoinHolidaysCalendarData } from '../../holidaysCalendar/holidaysCalendar';
++
++interface Props {
++    holidaysCalendar: HolidaysDirectoryCalendar;
++    color: string;
++    notifications: CalendarNotificationSettings[];
++    addresses: Address[];
++    getAddressKeys: GetAddressKeys;
++    api: Api;
++}
++
++const setupHolidaysCalendarHelper = async ({
++    holidaysCalendar,
++    color,
++    notifications,
++    addresses,
++    getAddressKeys,
++    api,
++}: Props) => {
++    const { calendarID, addressID, payload } = await getJoinHolidaysCalendarData({
++        holidaysCalendar,
++        addresses,
++        getAddressKeys,
++        color,
++        notifications,
++    });
++
++    return api(joinHolidaysCalendar(calendarID, addressID, payload));
++};
++
++export default setupHolidaysCalendarHelper;
+diff --git a/packages/shared/lib/calendar/holidaysCalendar/holidaysCalendar.ts b/packages/shared/lib/calendar/holidaysCalendar/holidaysCalendar.ts
+index c653b60..1f3ee37 100644
+--- a/packages/shared/lib/calendar/holidaysCalendar/holidaysCalendar.ts
++++ b/packages/shared/lib/calendar/holidaysCalendar/holidaysCalendar.ts
+@@ -1,11 +1,11 @@
+ import { SessionKey } from '@proton/crypto';
+-import { modelToNotifications } from '@proton/shared/lib/calendar/alarms/modelToNotifications';
+ import { encryptPassphraseSessionKey, signPassphrase } from '@proton/shared/lib/calendar/crypto/keys/calendarKeys';
+ import { Address } from '@proton/shared/lib/interfaces';
+-import { HolidaysDirectoryCalendar, NotificationModel } from '@proton/shared/lib/interfaces/calendar';
++import { CalendarNotificationSettings, HolidaysDirectoryCalendar } from '@proton/shared/lib/interfaces/calendar';
+ 
+ import { getPrimaryAddress } from '../../helpers/address';
+ import { base64StringToUint8Array } from '../../helpers/encoding';
++import { getLanguageCode } from '../../i18n/helper';
+ import { GetAddressKeys } from '../../interfaces/hooks/GetAddressKeys';
+ 
+ /**
+@@ -93,6 +93,48 @@ export const getDefaultHolidaysCalendar = (
+     return undefined;
+ };
+ 
++/**
++ * Get the holidays calendar we want to suggest to the user during the calendar setup.
++ * Result can be undefined if nothing is found
++ * The suggestion is based on the user time zone, and then on the languages set in his browser
++ */
++export const getSuggestedHolidaysCalendar = (
++    calendars: HolidaysDirectoryCalendar[],
++    tzid: string,
++    languageTags: string[]
++) => {
++    // Get all calendars in the same time zone as the user
++    const calendarsFromTimeZone = getHolidaysCalendarsFromTimeZone(calendars, tzid);
++
++    // If no option is found based on the time zone, we have nothing to suggest
++    if (!calendarsFromTimeZone.length) {
++        return undefined;
++    }
++
++    const calendarsFromCountry = getHolidaysCalendarsFromCountryCode(calendars, calendarsFromTimeZone[0].CountryCode);
++
++    if (calendarsFromCountry.length === 1) {
++        // If there is only one calendar for this country, suggest this one
++        return calendarsFromCountry[0];
++    }
++
++    // Else, several calendars are available for the same country, with different languages.
++    // Suggest the first one matching a language of the browser, by order of preference
++    for (const languageTag of languageTags) {
++        const calendarFromLanguage = findHolidaysCalendarByLanguageCode(
++            calendarsFromCountry,
++            getLanguageCode(languageTag)
++        );
++
++        if (calendarFromLanguage) {
++            return calendarFromLanguage;
++        }
++    }
++
++    // If no language matches, suggest the first calendar of the country
++    return calendarsFromCountry[0];
++};
++
+ export const getJoinHolidaysCalendarData = async ({
+     holidaysCalendar,
+     addresses,
+@@ -104,7 +146,7 @@ export const getJoinHolidaysCalendarData = async ({
+     addresses: Address[];
+     getAddressKeys: GetAddressKeys;
+     color: string;
+-    notifications: NotificationModel[];
++    notifications: CalendarNotificationSettings[];
+ }) => {
+     const {
+         CalendarID,
+@@ -136,7 +178,7 @@ export const getJoinHolidaysCalendarData = async ({
+             PassphraseKeyPacket: encryptedSessionKey,
+             Signature: signature,
+             Color: color,
+-            DefaultFullDayNotifications: modelToNotifications(notifications),
++            DefaultFullDayNotifications: notifications,
+         },
+     };
+ };
+diff --git a/packages/shared/lib/i18n/helper.ts b/packages/shared/lib/i18n/helper.ts
+index 7d0aba3..398caba 100644
+--- a/packages/shared/lib/i18n/helper.ts
++++ b/packages/shared/lib/i18n/helper.ts
+@@ -27,6 +27,11 @@ export const getBrowserLocale = () => {
+     return first;
+ };
+ 
++/**
++ * Gets all the language tags set in the browser, by order of preference.
++ */
++export const getBrowserLanguageTags = (): string[] => [...(window.navigator?.languages || [])];
++
+ /**
+  * Give a higher score to locales with higher chances to be a proper fallback languages
+  * when there is no exact match.
+diff --git a/packages/shared/test/calendar/holidaysCalendar/holidaysCalendar.spec.ts b/packages/shared/test/calendar/holidaysCalendar/holidaysCalendar.spec.ts
+index e505f8c..31eab89 100644
+--- a/packages/shared/test/calendar/holidaysCalendar/holidaysCalendar.spec.ts
++++ b/packages/shared/test/calendar/holidaysCalendar/holidaysCalendar.spec.ts
+@@ -4,6 +4,7 @@ import {
+     getDefaultHolidaysCalendar,
+     getHolidaysCalendarsFromCountryCode,
+     getHolidaysCalendarsFromTimeZone,
++    getSuggestedHolidaysCalendar,
+ } from '@proton/shared/lib/calendar/holidaysCalendar/holidaysCalendar';
+ import { HolidaysDirectoryCalendar } from '@proton/shared/lib/interfaces/calendar';
+ 
+@@ -34,7 +35,7 @@ const holidaysCalendars = [
+     } as HolidaysDirectoryCalendar,
+ ];
+ 
+-fdescribe('Holidays calendars helpers', () => {
++describe('Holidays calendars helpers', () => {
+     describe('getHolidaysCalendarsFromTimezone', () => {
+         it('should return all holidays calendars from the same time zone', () => {
+             const tzid = 'Europe/Zurich';
+@@ -118,4 +119,34 @@ fdescribe('Holidays calendars helpers', () => {
+             expect(getDefaultHolidaysCalendar(holidaysCalendars, tzid, languageCode)).toEqual(expected);
+         });
+     });
++
++    describe('getSuggestedHolidaysCalendar', () => {
++        it('should not return a calendar when no time zone matches', () => {
++            expect(getSuggestedHolidaysCalendar(holidaysCalendars, 'does not exist', ['en_US'])).toBeUndefined();
++        });
++
++        it('should return the only holidays calendar found for the time zone', () => {
++            const expected = holidaysCalendars[0];
++            expect(getSuggestedHolidaysCalendar(holidaysCalendars, 'Europe/Paris', ['en_US'])).toEqual(expected);
++        });
++
++        it('should return the holidays calendar matching the most preferred browser language', () => {
++            const expected = holidaysCalendars[1];
++            expect(getSuggestedHolidaysCalendar(holidaysCalendars, 'Europe/Zurich', ['en-US', 'de-DE'])).toEqual(
++                expected
++            );
++        });
++
++        it('should fall back to the next browser language when the first one has no calendar', () => {
++            const expected = holidaysCalendars[2];
++            expect(getSuggestedHolidaysCalendar(holidaysCalendars, 'Europe/Zurich', ['fr-FR', 'de-DE'])).toEqual(
++                expected
++            );
++        });
++
++        it('should return the first calendar of the country when no browser language matches', () => {
++            const expected = holidaysCalendars[2];
++            expect(getSuggestedHolidaysCalendar(holidaysCalendars, 'Europe/Zurich', ['es-ES'])).toEqual(expected);
++        });
++    });
+ });
