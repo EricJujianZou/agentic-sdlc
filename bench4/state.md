@@ -40,20 +40,20 @@
   pending orders only, age = whole days from order date to as-of -> `<=7`/`<=30`/rest; every bucket key always
   present, rows (id/sku/qty/date) oldest first. CLI `report aging [--as-of YYYY-MM-DD]` (default today) prints
   all three headings, "(none)" under an empty one; bad date -> exit 1.
-- T34 — audit trail: `store.events` (`"events"`, missing -> []) is a list of dicts
-  `{"op", "args", "actor", "timestamp"}`, oldest first, appended by `store.log_event(op, args, actor)`.
-  Every `Store` mutator calls it once, last (so a refused op logs nothing and library calls log too), with
-  `op` spelled as the CLI command ("add-item", "place-order", ...); `csv_io.import_items` logs one
-  "import-csv" per file. `add_supplier`/`set_discount`/`remove_discount`/`set_tax_rate`/`add_supplier_sku`
-  gained `actor=` (audit only) + `--actor` on their CLI commands. Reports/exports/backup/restore log nothing.
-- T35 — `Store.undo()` reverses the newest change and pops it off `store.events` (the trail
-  *is* the undo history, so undo repeats step by step and reaches earlier sessions):
-  `Store._UNDO` maps op -> inverse handler working from the logged args + current state —
-  add-item/add-supplier delete, receive/ship/transfer adjust back (ship drops its shipment
-  too), place-order removes the order, cancel-order -> pending, set-price pops the last
-  `price_history` entry and restores `old`. Undo logs nothing itself, leaves `last_actor`
-  alone, and raises before mutating: "nothing to undo" (empty trail) or "cannot undo OP"
-  (op not in `_UNDO`: set-discount/set-tax-rate/receive-order/import-csv/catalog-add ...).
-  CLI `undo` (no args), saving only on success.
+- T34 — audit trail: `store.events` (`"events"`, missing -> []) = dicts `{"op", "args", "actor",
+  "timestamp"}` oldest first, appended by `store.log_event(op, args, actor)`. Every `Store` mutator
+  calls it once, last (refused op logs nothing; library calls log too), `op` spelled as the CLI command;
+  `csv_io.import_items` logs one "import-csv" per file. `add_supplier`/`set_discount`/`remove_discount`/
+  `set_tax_rate`/`add_supplier_sku` gained `actor=` + `--actor`. Reports/exports/backup/restore log nothing.
+- T35 — `Store.undo()` reverses the newest change and pops it off `store.events` (the trail *is* the undo
+  history, so undo repeats step by step). `Store._UNDO` maps op -> inverse from the logged args + current
+  state: add-item/add-supplier delete, receive/ship/transfer adjust back (ship drops its shipment),
+  place-order removes the order, cancel-order -> pending, set-price pops the last `price_history` entry.
+  Logs nothing, leaves `last_actor` alone, raises before mutating ("nothing to undo" / "cannot undo OP"
+  for ops outside `_UNDO`: set-discount/set-tax-rate/receive-order/import-csv/catalog-add). CLI `undo`.
+- T36 — CLI `scheduled-reorders --as-of YYYY-MM-DD [--threshold N] [--actor A]` (`cli.cmd_scheduled_reorders`,
+  no new store/report API): each `reports.reorder_suggestions(threshold)` row with `suggested_qty > 0` becomes
+  one `place_order(sku, suggested_qty, as_of, supplier_id=row's)`, skipping any SKU already ordered on as-of
+  (later days net out via T15); prints each order or "nothing to reorder on DATE", exit 0, saves only if placed.
 
-## current — none (T35 done)
+## current — none (T36 done)

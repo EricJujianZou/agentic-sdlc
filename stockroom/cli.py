@@ -192,6 +192,36 @@ def cmd_place_order(store: Store, args) -> int:
     return 0
 
 
+def cmd_scheduled_reorders(store: Store, args) -> int:
+    """Handle ``scheduled-reorders``: place the day's reorder suggestions.
+
+    The same suggestions ``report low`` prints, typed in for you: one
+    pending order per suggested SKU, for the suggested quantity, dated
+    the as-of day.  A SKU that already has an order dated that day is
+    left alone - once it has been ordered for a given day, that day is
+    done for it - so running the job twice for the same date changes
+    nothing.  Later days look after themselves: the orders placed here
+    are pending, so they net out of the next round of suggestions.
+    """
+    as_of = dates.normalize_date(args.as_of)
+    ordered_today = {order.sku for order in store.orders if order.date == as_of}
+    placed = []
+    for row in reports.reorder_suggestions(store, threshold=args.threshold):
+        if row["suggested_qty"] <= 0 or row["sku"] in ordered_today:
+            continue
+        placed.append(store.place_order(row["sku"], row["suggested_qty"], as_of,
+                                        supplier_id=row["supplier_id"],
+                                        actor=args.actor))
+    if not placed:
+        print(f"nothing to reorder on {as_of}")
+        return 0
+    store.save()
+    for order in placed:
+        print(f"placed order {order.id}: {order.qty} x {order.sku} "
+              f"from {order.supplier_id} on {order.date}")
+    return 0
+
+
 def cmd_catalog_add(store: Store, args) -> int:
     """Handle ``catalog-add``: note that a supplier can supply a SKU."""
     supplier = store.add_supplier_sku(args.supplier, args.sku,
@@ -481,6 +511,7 @@ examples:
   stockroom --data ./data set-tax-rate 5
   stockroom --data ./data invoice 1
   stockroom --data ./data invoice 1 --output invoice-1.txt
+  stockroom --data ./data scheduled-reorders --as-of 2026-08-01
   stockroom --data ./data catalog-add acme WID-1
   stockroom --data ./data catalog-list acme
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01 --supplier acme
@@ -617,6 +648,14 @@ def build_parser() -> argparse.ArgumentParser:
                         "lists the SKU, else the item's own supplier)")
     _add_actor(p)
     p.set_defaults(func=cmd_place_order)
+
+    p = sub.add_parser("scheduled-reorders",
+                       help="place an order for every reorder suggestion")
+    p.add_argument("--as-of", required=True,
+                   help="day to order for, YYYY-MM-DD")
+    p.add_argument("--threshold", type=int, default=reports.DEFAULT_THRESHOLD)
+    _add_actor(p)
+    p.set_defaults(func=cmd_scheduled_reorders)
 
     p = sub.add_parser("catalog-add",
                        help="record that a supplier can supply a SKU")
