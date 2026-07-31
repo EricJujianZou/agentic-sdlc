@@ -39,6 +39,23 @@ FIELDNAMES = [
 
 EVENT_FIELDNAMES = ["ts", "op", "actor", "args"]
 
+BATCH_FIELDNAMES = ["op", "sku", "qty", "warehouse", "to_warehouse"]
+
+
+def read_batch(path: str) -> list[dict]:
+    """Read a batch file's rows from ``path``, in the order they appear.
+
+    The header is ``op,sku,qty,warehouse,to_warehouse``; the cells are
+    handed back exactly as typed, since it is
+    :meth:`Store.apply_batch` that knows what a row means and which row
+    number to blame when one of them does not add up.
+
+    Returns:
+        One dict per data row (the header is not a row).
+    """
+    with open(path, newline="", encoding="utf-8") as f:
+        return [dict(row) for row in csv.DictReader(f)]
+
 
 def export_items(store: Store, path: str) -> int:
     """Write all items to ``path`` as CSV.

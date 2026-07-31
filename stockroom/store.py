@@ -38,6 +38,7 @@ Errors are reported by raising ``ValueError`` with a human readable
 message; the CLI turns those into exit code 1.
 """
 
+import copy
 import datetime
 import json
 import os
@@ -73,6 +74,10 @@ EVENTS_SUFFIX = ".events.json"
 #: state file's own name with this suffix appended.
 LOCK_SUFFIX = ".lock"
 
+#: The stock movements a batch file may ask for, spelled as its ``op``
+#: cell spells them.
+BATCH_OPS = ("receive", "ship", "transfer")
+
 
 def _backup_stamp() -> str:
     """Timestamp for a backup name: sortable, and legal in a filename.
@@ -82,6 +87,23 @@ def _backup_stamp() -> str:
     microseconds are there to keep two backups a moment apart distinct.
     """
     return datetime.datetime.now().strftime("%Y%m%dT%H%M%S%f")
+
+
+def _batch_qty(raw: str | None) -> int:
+    """A batch row's quantity: a whole number of units, at least one.
+
+    Anything else - blank, fractional, a word, zero or negative - is a
+    typo on the paper sheet rather than a movement, and raises
+    ``ValueError``.
+    """
+    text = (raw or "").strip()
+    try:
+        qty = int(text)
+    except ValueError:
+        raise ValueError(f"bad quantity {text!r}") from None
+    if qty < 1:
+        raise ValueError(f"bad quantity {qty}")
+    return qty
 
 
 class Store:
@@ -460,6 +482,62 @@ class Store:
                        {"sku": item.sku, "qty": qty, "src": src, "dst": dst},
                        actor)
         return item
+
+    def apply_batch(self, rows: list[dict], actor: str | None = None) -> int:
+        """Apply a list of stock movements, all of them or none.
+
+        A row is a mapping with the batch file's columns - ``op``
+        (:data:`BATCH_OPS`), ``sku``, ``qty``, ``warehouse`` (empty
+        meaning the default one) and, for a transfer, ``to_warehouse``,
+        which may name a room that has never held anything.  The rows
+        are applied in the order given.
+
+        The first row that will not go through - an op we do not know, a
+        SKU we do not stock, a quantity that is not a whole number of
+        units, more units than the shelf holds - aborts the whole batch:
+        the rows already applied are rolled back, so a caller who
+        ``save()``s only on success writes exactly what was there
+        before, and the raised ``ValueError`` names the row (counting
+        the data rows from 1, the header not among them) along with the
+        reason it gave.  The movements that do land are logged one by
+        one, as though they had been keyed in by hand, which is what
+        lets ``undo`` walk back through them afterwards.
+
+        Returns:
+            The number of rows applied.
+        """
+        # The items are mutated in place, so they need copying in full;
+        # the two logs are only ever appended to, so their own order is
+        # the whole of what has to be put back.
+        saved = (copy.deepcopy(self.items), list(self.shipments),
+                 list(self.events))
+        for number, row in enumerate(rows, 1):
+            try:
+                self._apply_batch_row(row, actor)
+            except ValueError as exc:
+                self.items, self.shipments, self.events = saved
+                raise ValueError(
+                    f"batch failed at row {number}: {exc}"
+                ) from exc
+        return len(rows)
+
+    def _apply_batch_row(self, row: dict, actor: str | None) -> None:
+        """Carry out one batch row, or raise ValueError saying why not."""
+        op = (row.get("op") or "").strip()
+        if op not in BATCH_OPS:
+            raise ValueError(f"unknown op {op!r}")
+        sku = (row.get("sku") or "").strip()
+        qty = _batch_qty(row.get("qty"))
+        warehouse = (row.get("warehouse") or "").strip() or DEFAULT_WAREHOUSE
+        if op == "receive":
+            self.receive(sku, qty, warehouse=warehouse, actor=actor)
+        elif op == "ship":
+            self.ship(sku, qty, warehouse=warehouse, actor=actor)
+        else:
+            destination = (row.get("to_warehouse") or "").strip()
+            if not destination:
+                raise ValueError("transfer needs a to_warehouse")
+            self.transfer(sku, qty, warehouse, destination, actor=actor)
 
     # ------------------------------------------------------------------
     # discounts

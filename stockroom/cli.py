@@ -489,6 +489,21 @@ def cmd_import_csv(store: Store, args) -> int:
     return 0
 
 
+def cmd_batch(store: Store, args) -> int:
+    """Handle ``batch``: apply a file of stock movements all or none.
+
+    Nothing is saved until every row has gone through, so a file that
+    fails halfway leaves the data exactly as the command found it and
+    says which row to fix.
+    """
+    if not os.path.exists(args.path):
+        raise ValueError(f"no such file: {args.path}")
+    count = store.apply_batch(csv_io.read_batch(args.path), actor=args.actor)
+    store.save()
+    print(f"applied {count} operations")
+    return 0
+
+
 def cmd_backup(store: Store, args) -> int:
     """Handle ``backup``: snapshot the state beside the state file."""
     name = store.backup()
@@ -568,6 +583,7 @@ examples:
   stockroom --data ./data search widget
   stockroom --data ./data export-csv items.csv
   stockroom --data ./data export-events events.csv --since 2026-07-01
+  stockroom --data ./data batch monday-movements.csv
   stockroom --data ./data backup
   stockroom --data ./data restore state.json.bak-20260101T090000000000
   stockroom --data ./data --read-only report stock
@@ -814,6 +830,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("path")
     _add_actor(p)
     p.set_defaults(func=cmd_import_csv)
+
+    p = sub.add_parser("batch",
+                       help="apply a CSV of stock movements, all or none")
+    p.add_argument("path")
+    _add_actor(p)
+    p.set_defaults(func=cmd_batch)
 
     p = sub.add_parser("backup", help="snapshot the current state")
     p.set_defaults(func=cmd_backup)

@@ -43,16 +43,11 @@
 - T36 — CLI `scheduled-reorders --as-of YYYY-MM-DD [--threshold N] [--actor A]` (`cli.cmd_scheduled_reorders`, no new store/report API):
   each `reorder_suggestions(threshold)` row with `suggested_qty > 0` -> one `place_order(sku, suggested_qty, as_of, supplier_id=row's)`, a
   SKU already ordered on as-of skipped; prints each order or "nothing to reorder on DATE", exit 0, saves only if placed.
-- T37 — `reports.weekly_shipments(store)` -> `{"YYYY-Www": units}` over `store.shipments`, keyed by `date.isocalendar()` (week zero-padded),
-  oldest week first, empty weeks and unparseable dates left out. CLI `report weekly`, "nothing shipped yet" when none.
-- T38 — `reports.order_history` sorts on `_normalize_date(row["date"])`, not the raw string, so a legacy "2026-1-15" is chronological;
-  the sort is stable, so same-day orders keep placement order. Shape/CLI unchanged.
-- T39 — `csv_io.export_events(store, path, op=None, since=None)` writes the trail as `ts,op,actor,args` (args JSON in one cell, no actor
-  -> empty cell, oldest first), `op` exact and `since` (ISO day, inclusive) on the timestamp's date part, combining, empty match still
-  writes the header; `_event_timestamp` reads either spelling (`timestamp`/older `ts`). CLI `export-events PATH [--op N] [--since DAY]`.
-- T40 — events live in a sidecar (v6): `store.EVENTS_SUFFIX` + `Store.events_path()` (`state.json` -> `state.events.json`, holding
-  `{"events": [...]}`); `_write` no longer embeds them (so backups are state alone), `save()` also writes the sidecar every time, and
-  `_load_events` reads the sidecar when present, else the main file's embedded trail (v5 and earlier) - missing both = empty trail.
+- T37 — `reports.weekly_shipments(store)` -> `{"YYYY-Www": units}` over `store.shipments`, keyed by `date.isocalendar()` (week zero-padded), oldest week first, empty weeks and unparseable dates left out. CLI `report weekly`, "nothing shipped yet" when none.
+- T38 — `reports.order_history` sorts on `_normalize_date(row["date"])`, not the raw string, so a legacy "2026-1-15" is chronological; the sort is stable, so same-day orders keep placement order. Shape/CLI unchanged.
+- T39 — `csv_io.export_events(store, path, op=None, since=None)` writes the trail as `ts,op,actor,args` (args JSON in one cell, no actor -> empty cell, oldest first), `op` exact and `since` (ISO day, inclusive) on the timestamp's date part, combining, empty match still writes the header; `_event_timestamp` reads either spelling (`timestamp`/older `ts`). CLI `export-events PATH [--op N] [--since DAY]`.
+- T40 — events live in a sidecar (v6): `store.EVENTS_SUFFIX` + `Store.events_path()` (`state.json` -> `state.events.json`, holding `{"events": [...]}`); `_write` no longer embeds them (so backups are state alone), `save()` also writes the sidecar every time, and `_load_events` reads the sidecar when present, else the main file's embedded trail (v5 and earlier) - missing both = empty trail.
 - T41 — read-only mode: `store.LOCK_SUFFIX` + `Store.lock_path()`/`is_locked()`/`lock()`/`unlock()` - a `state.json.lock` marker beside the state file (existence = locked, kept out of state.json so a restore cannot unlock it); CLI global `--read-only` flag and `lock`/`unlock` commands, gated in `main()` *before* dispatch so a refusal touches no file: a command is refused (exit 1, stderr "...in read-only mode...") unless its parser set `read_only_ok=True` (reports/search/invoice/exports/list-*/catalog-list), so a new command is guarded by default; `unlock` beats the lock but not the flag, and `backup`/`restore`/`lock` count as mutating.
+- T42 — all-or-nothing batch: `csv_io.read_batch(path)` -> the rows of an `op,sku,qty,warehouse,to_warehouse` file as dicts (cells as typed), `store.BATCH_OPS` = receive/ship/transfer and `Store.apply_batch(rows, actor=None)` applies them in order through the ordinary mutators (so each row logs its own event and `undo` still walks them back), empty warehouse -> main, `_batch_qty` demands a whole number >= 1; the first bad row restores the snapshot taken first (deep-copied items, list-copied shipments/events) and raises `batch failed at row N: <reason>` (data rows from 1). CLI `batch PATH [--actor A]`, mutating, saves only once every row landed, prints `applied N operations`.
 
-## current — none (T41 done)
+## current — none (T42 done)
