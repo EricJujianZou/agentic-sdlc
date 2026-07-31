@@ -469,6 +469,14 @@ def cmd_export_csv(store: Store, args) -> int:
     return 0
 
 
+def cmd_export_events(store: Store, args) -> int:
+    """Handle ``export-events``: write the audit trail to a file."""
+    since = dates.normalize_date(args.since) if args.since else None
+    count = csv_io.export_events(store, args.path, op=args.op, since=since)
+    print(f"exported {count} events to {args.path}")
+    return 0
+
+
 def cmd_import_csv(store: Store, args) -> int:
     """Handle ``import-csv``: merge items from a CSV file."""
     if not os.path.exists(args.path):
@@ -539,6 +547,7 @@ examples:
   stockroom --data ./data report price-changes
   stockroom --data ./data search widget
   stockroom --data ./data export-csv items.csv
+  stockroom --data ./data export-events events.csv --since 2026-07-01
   stockroom --data ./data backup
   stockroom --data ./data restore state.json.bak-20260101T090000000000
 """
@@ -763,6 +772,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("export-csv", help="write items to a CSV file")
     p.add_argument("path")
     p.set_defaults(func=cmd_export_csv)
+
+    p = sub.add_parser("export-events",
+                       help="write the audit trail to a CSV file")
+    p.add_argument("path")
+    p.add_argument("--op", default=None,
+                   help="keep only the events with exactly this op")
+    p.add_argument("--since", default=None, metavar="YYYY-MM-DD",
+                   help="keep only the events stamped this day or later")
+    p.set_defaults(func=cmd_export_events)
 
     p = sub.add_parser("import-csv", help="read items from a CSV file")
     p.add_argument("path")

@@ -1,4 +1,4 @@
-"""CSV import and export for items.
+"""CSV import and export for items, and export of the audit trail.
 
 The CSV format is one row per item and warehouse, with a header::
 
@@ -21,6 +21,7 @@ decimals, so a file we wrote reads back as the amounts it left with.
 """
 
 import csv
+import json
 
 from .money import format_amount, parse_money
 from .models import (
@@ -35,6 +36,8 @@ from .store import Store
 FIELDNAMES = [
     "sku", "name", "qty", "unit_price", "supplier_id", "category", "warehouse",
 ]
+
+EVENT_FIELDNAMES = ["ts", "op", "actor", "args"]
 
 
 def export_items(store: Store, path: str) -> int:
@@ -66,6 +69,58 @@ def export_items(store: Store, path: str) -> int:
                     "warehouse": warehouse,
                 })
                 count += 1
+    return count
+
+
+def _event_timestamp(event: dict) -> str:
+    """When an event happened, whichever key the trail spells it with.
+
+    Entries written by :meth:`Store.log_event` carry ``timestamp``;
+    older trails wrote the same reading as ``ts``.  An entry with
+    neither is handed back an empty string rather than a guess.
+    """
+    return event.get("timestamp") or event.get("ts") or ""
+
+
+def export_events(store: Store, path: str, op: str | None = None,
+                  since: str | None = None) -> int:
+    """Write the audit trail to ``path`` as CSV.
+
+    The rows are the events in the order they happened, oldest first,
+    with the argument mapping JSON-encoded into a single cell so a
+    spreadsheet holds one row per change; an event nobody was named for
+    gets an empty ``actor`` cell.
+
+    Args:
+        op: keep only the events with exactly this op, so "receive"
+            leaves out the "receive-order" ones.
+        since: an ISO ``YYYY-MM-DD`` day; keep only the events stamped
+            that day or later.  An event with no timestamp at all
+            cannot be shown to fall after it, so it is left out.
+
+    Filters given together both apply.  One that matches nothing still
+    writes the header, so the file is a readable (empty) sheet.
+
+    Returns:
+        The number of events written (excluding the header).
+    """
+    count = 0
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=EVENT_FIELDNAMES)
+        writer.writeheader()
+        for event in store.events:
+            timestamp = _event_timestamp(event)
+            if op is not None and event.get("op") != op:
+                continue
+            if since is not None and timestamp[:10] < since:
+                continue
+            writer.writerow({
+                "ts": timestamp,
+                "op": event.get("op", ""),
+                "actor": event.get("actor") or "",
+                "args": json.dumps(event.get("args") or {}),
+            })
+            count += 1
     return count
 
 
