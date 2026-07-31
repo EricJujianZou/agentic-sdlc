@@ -127,8 +127,17 @@ class Store:
         return item
 
     def ship(self, sku: str, qty: int) -> Item:
-        """Remove ``qty`` units of an item from stock (goods sent out)."""
+        """Remove ``qty`` units of an item from stock (goods sent out).
+
+        The shelf cannot go negative: shipping more than we have on hand
+        raises ``ValueError`` and leaves the item untouched.  Shipping
+        exactly the on-hand quantity is fine.
+        """
         item = self.get_item(sku)
+        if qty > item.qty:
+            raise ValueError(
+                f"cannot ship {qty} x {sku}: only {item.qty} on hand"
+            )
         item.qty -= qty
         return item
 

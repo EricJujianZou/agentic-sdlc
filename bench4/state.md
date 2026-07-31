@@ -17,6 +17,11 @@
   the month and sorts on it, so unpadded dates count and stay in day order.
   Dates are still stored as typed; `order_history` still sorts raw.
 
+- T04 — no negative stock: `Store.ship` raises ValueError ("cannot ship N x
+  SKU: only M on hand") before mutating when qty > item.qty; shipping down to
+  exactly zero still allowed. CLI unchanged — `main()` already maps ValueError
+  to stderr "error: ..." + exit 1, and `cmd_ship` saves only after success.
+
 ## current
 
-(none — T03 done)
+(none — T04 done)
