@@ -7,7 +7,8 @@ schema version it was written by::
         "version":   3,
         "items":     {sku: {...}, ...},
         "suppliers": {supplier_id: {...}, ...},
-        "orders":    [{...}, ...]
+        "orders":    [{...}, ...],
+        "shipments": [{...}, ...]
     }
 
 Version 3 broke each item's ``qty`` down per warehouse; version 2 and
@@ -38,6 +39,7 @@ from .models import (
     STATUS_CANCELLED,
     STATUS_PENDING,
     STATUS_RECEIVED,
+    Shipment,
     Supplier,
     normalize_sku,
     record_actor,
@@ -69,6 +71,7 @@ class Store:
         items: mapping of SKU -> Item.
         suppliers: mapping of supplier id -> Supplier.
         orders: list of Order, in the order they were placed.
+        shipments: list of Shipment, in the order they went out.
     """
 
     def __init__(self, path: str):
@@ -76,6 +79,7 @@ class Store:
         self.items: dict[str, Item] = {}
         self.suppliers: dict[str, Supplier] = {}
         self.orders: list[Order] = []
+        self.shipments: list[Shipment] = []
 
     # ------------------------------------------------------------------
     # persistence
@@ -88,7 +92,9 @@ class Store:
         not valid JSON raises ``json.JSONDecodeError`` for the caller to
         deal with.  Older layouts (version 2, and version 1 - which
         carries no ``"version"`` key) are read the same way; the item
-        records themselves know how to read an older quantity.
+        records themselves know how to read an older quantity.  A file
+        written before shipments were logged has none, which is simply
+        an empty log.
         """
         if not os.path.exists(self.path):
             return
@@ -102,6 +108,9 @@ class Store:
             for sid, data in raw.get("suppliers", {}).items()
         }
         self.orders = [Order.from_dict(data) for data in raw.get("orders", [])]
+        self.shipments = [
+            Shipment.from_dict(data) for data in raw.get("shipments", [])
+        ]
 
     def save(self) -> None:
         """Write the current state back to the JSON file.
@@ -117,6 +126,7 @@ class Store:
             "items": {sku: item.to_dict() for sku, item in self.items.items()},
             "suppliers": {sid: s.to_dict() for sid, s in self.suppliers.items()},
             "orders": [order.to_dict() for order in self.orders],
+            "shipments": [s.to_dict() for s in self.shipments],
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(raw, f, indent=2)
@@ -225,13 +235,17 @@ class Store:
         return item
 
     def ship(self, sku: str, qty: int, warehouse: str = DEFAULT_WAREHOUSE,
-             actor: str | None = None) -> Item:
+             actor: str | None = None, date: str | None = None) -> Item:
         """Remove ``qty`` units from one warehouse (goods sent out).
 
         The shelf cannot go negative: shipping more than that warehouse
         holds raises ``ValueError`` and leaves the item untouched - what
         sits in the other room is no help loading this van.  Shipping
         exactly the on-hand quantity is fine.
+
+        Every shipment that does go out is written to the shipment log,
+        dated ``date`` or today when no date is given, so reports can
+        tell movement from mere stock levels later on.
         """
         item = self.get_item(sku)
         on_hand = item.qty_in(warehouse)
@@ -241,6 +255,11 @@ class Store:
             )
         item.adjust(-qty, warehouse)
         record_actor(item, actor)
+        if date is None:
+            date = datetime.date.today().isoformat()
+        self.shipments.append(
+            Shipment(sku=item.sku, qty=qty, warehouse=warehouse, date=date)
+        )
         return item
 
     def transfer(self, sku: str, qty: int, src: str, dst: str,

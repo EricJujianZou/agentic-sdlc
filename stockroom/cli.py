@@ -64,9 +64,13 @@ def cmd_receive(store: Store, args) -> int:
 
 
 def cmd_ship(store: Store, args) -> int:
-    """Handle ``ship``: send units out of the stockroom."""
+    """Handle ``ship``: send units out of the stockroom.
+
+    ``--date`` says when the goods went out; the store dates the
+    shipment today when it is left off.
+    """
     item = store.ship(args.sku, args.qty, warehouse=args.warehouse,
-                      actor=args.actor)
+                      actor=args.actor, date=args.date)
     store.save()
     print(f"shipped {args.qty} x {item.sku}, now {item.qty} on hand")
     return 0
@@ -214,6 +218,19 @@ def cmd_report_monthly(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_turnover(store: Store, args) -> int:
+    """Handle ``report turnover``: print units shipped per category per
+    month."""
+    totals = reports.turnover(store)
+    if not totals:
+        print("nothing shipped yet")
+        return 0
+    for category in sorted(totals):
+        for month in sorted(totals[category]):
+            print(f"{category:<16} {month:<8} {totals[category][month]:>6}")
+    return 0
+
+
 def cmd_report_history(store: Store, args) -> int:
     """Handle ``report history``: print all orders for a SKU."""
     store.get_item(args.sku)  # complain early about unknown SKUs
@@ -298,6 +315,7 @@ examples:
   stockroom --data ./data receive-order 1
   stockroom --data ./data report stock
   stockroom --data ./data report monthly 2026-07
+  stockroom --data ./data report turnover
   stockroom --data ./data search widget
   stockroom --data ./data export-csv items.csv
   stockroom --data ./data backup
@@ -362,6 +380,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("ship", help="remove units of an item from stock")
     p.add_argument("sku")
     p.add_argument("qty", type=int)
+    p.add_argument("--date", default=None,
+                   help="date the goods went out (default: today)")
     _add_warehouse(p)
     _add_actor(p)
     p.set_defaults(func=cmd_ship)
@@ -434,6 +454,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = report_sub.add_parser("monthly", help="orders placed in a month")
     p.add_argument("month", help="month prefix, e.g. 2026-01")
     p.set_defaults(func=cmd_report_monthly)
+
+    p = report_sub.add_parser("turnover",
+                              help="units shipped per category per month")
+    p.set_defaults(func=cmd_report_turnover)
 
     p = report_sub.add_parser("history", help="order history for one SKU")
     p.add_argument("sku")

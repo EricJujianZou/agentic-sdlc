@@ -161,6 +161,29 @@ def monthly_orders(store: Store, month: str) -> list[dict]:
     return rows
 
 
+def turnover(store: Store) -> dict[str, dict[str, int]]:
+    """Units shipped out per shelf area, month by month.
+
+    This reads the shipment log, so it counts goods that actually left
+    the building: walking stock between warehouses moves nothing out,
+    and receiving stock or taking an order in moves it the other way -
+    none of those show up here.
+
+    Returns:
+        A dict mapping category name to a dict of month ("YYYY-MM") to
+        the units of that category shipped that month.  A category or
+        month that shipped nothing is left out entirely, so an empty
+        dict means nothing has gone out at all.
+    """
+    totals: dict[str, dict[str, int]] = {}
+    for shipment in store.shipments:
+        category = store.get_item(shipment.sku).category
+        month = _normalize_date(shipment.date)[:7]
+        months = totals.setdefault(category, {})
+        months[month] = months.get(month, 0) + shipment.qty
+    return totals
+
+
 def order_history(store: Store, sku: str) -> list[dict]:
     """Every order ever placed for one SKU.
 

@@ -1,10 +1,11 @@
 """Data model for the stockroom package.
 
-Three record types cover everything the app tracks:
+Four record types cover everything the app tracks:
 
 * ``Item`` - a thing on the shelf, identified by its SKU.
 * ``Supplier`` - somewhere we buy items from.
 * ``Order`` - a purchase order for more of an item.
+* ``Shipment`` - units of an item sent out of the stockroom.
 
 Each type is a small dataclass with ``to_dict`` / ``from_dict`` helpers so
 the store can serialise state to JSON without any extra machinery.  The
@@ -200,6 +201,48 @@ class Supplier:
             email=data.get("email", ""),
             lead_time_days=data.get("lead_time_days", 0),
             skus=list(data.get("skus", [])),
+        )
+
+
+@dataclass
+class Shipment:
+    """Units of one item sent out of the stockroom.
+
+    Stock levels say what is sitting still; the shipment log says what
+    actually moved out, so reports can look at turnover over time.  Only
+    goods leaving the building are recorded here - walking stock between
+    warehouses is an internal move, and receiving is the opposite
+    direction entirely.
+
+    Attributes:
+        sku: the item that went out.
+        qty: how many units went.
+        warehouse: the room they were picked from.
+        date: the day they went out, as a string (normally YYYY-MM-DD).
+    """
+
+    sku: str
+    qty: int
+    warehouse: str = DEFAULT_WAREHOUSE
+    date: str = ""
+
+    def to_dict(self) -> dict:
+        """Return a JSON-ready dict for this shipment."""
+        return {
+            "sku": self.sku,
+            "qty": self.qty,
+            "warehouse": self.warehouse,
+            "date": self.date,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Shipment":
+        """Build a Shipment from a dict previously produced by to_dict."""
+        return cls(
+            sku=data["sku"],
+            qty=data["qty"],
+            warehouse=data.get("warehouse", DEFAULT_WAREHOUSE),
+            date=data.get("date", ""),
         )
 
 
