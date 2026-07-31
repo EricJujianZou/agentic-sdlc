@@ -181,6 +181,17 @@ def cmd_report_history(store: Store, args) -> int:
     return 0
 
 
+def cmd_search(store: Store, args) -> int:
+    """Handle ``search``: print the items matching a query."""
+    rows = reports.search_items(store, args.query)
+    if not rows:
+        print(f"no items match {args.query}")
+        return 0
+    for row in rows:
+        print(f"{row['sku']:<12} {row['name']:<24} {row['qty']:>6}")
+    return 0
+
+
 def cmd_export_csv(store: Store, args) -> int:
     """Handle ``export-csv``: write the item list to a file."""
     count = csv_io.export_items(store, args.path)
@@ -211,6 +222,7 @@ examples:
   stockroom --data ./data receive-order 1
   stockroom --data ./data report stock
   stockroom --data ./data report monthly 2026-07
+  stockroom --data ./data search widget
   stockroom --data ./data export-csv items.csv
 """
 
@@ -293,6 +305,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = report_sub.add_parser("history", help="order history for one SKU")
     p.add_argument("sku")
     p.set_defaults(func=cmd_report_history)
+
+    p = sub.add_parser("search", help="find items by name or SKU")
+    p.add_argument("query", help="text to look for in the name or SKU")
+    p.set_defaults(func=cmd_search)
 
     p = sub.add_parser("export-csv", help="write items to a CSV file")
     p.add_argument("path")

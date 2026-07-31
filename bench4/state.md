@@ -41,7 +41,11 @@
   now updates `WID-1` instead of adding a second row, and mixed cases within
   one file collapse onto one item. Export/CLI/report code unchanged; state
   loaded from disk is not rewritten (keys written before T08 stay as they are).
+- T09 — search: new `reports.search_items(store, query)` -> sku/name/qty rows
+  (SKU-sorted, empty list when nothing matches) for items whose name OR sku
+  contains `query` case-insensitively; CLI `search QUERY` prints one row per
+  match (or "no items match QUERY") and always exits 0.
 
 ## current
 
-(none — T08 done)
+(none — T09 done)

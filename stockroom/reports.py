@@ -87,6 +87,28 @@ def low_stock_by_category(store: Store,
     return grouped
 
 
+def search_items(store: Store, query: str) -> list[dict]:
+    """Items whose name or SKU contains ``query``.
+
+    The match is a case-insensitive substring on either field, so
+    "widget" finds "Steel Widget" and "gad" finds GAD-1.
+
+    Returns:
+        A list of dicts (sku, name, qty), sorted by SKU.  Empty when
+        nothing matches.
+    """
+    needle = query.lower()
+    rows = []
+    for item in store.list_items():
+        if needle in item.name.lower() or needle in item.sku.lower():
+            rows.append({
+                "sku": item.sku,
+                "name": item.name,
+                "qty": item.qty,
+            })
+    return rows
+
+
 def _normalize_date(date: str) -> str:
     """Zero-pad a YYYY-M-D date so it matches and sorts as YYYY-MM-DD.
 
