@@ -2,9 +2,9 @@
 
 ## completed
 
-- T01 — `Item.category` (`models.DEFAULT_CATEGORY`="uncategorized"),
-  `add_item(category=)`, `stock_report(by_category=True)` -> `{"categories":
-  {name: rows}, "total_value"}`; CLI `--category`/`--by-category`.
+- T01 — `Item.category` (`models.DEFAULT_CATEGORY`="uncategorized"), `add_item(
+  category=)`, `stock_report(by_category=True)` -> `{"categories": {name: rows},
+  "total_value"}`; CLI `--category`/`--by-category`.
 - T02 — `Supplier.lead_time_days: int = 0` (missing -> 0), on `add_supplier`/
   `reorder_suggestions` rows; CLI `add-supplier --lead-time`.
 - T03 — `reports._normalize_date` pads "2026-1-5" -> "2026-01-05";
@@ -17,8 +17,7 @@
   order N: it is already STATUS"; receive/cancel/ship_order, pre-mutation.
 - T08 — SKUs case-insensitive: `models.normalize_sku` (upper) in `add_item`,
   `get_item` (so receive/ship/orders too), `place_order`, `csv_io.import_items`.
-- T09 — `reports.search_items(store, query)` -> sku/name/qty rows matching name
-  OR sku (case-insensitive substring); CLI `search QUERY`.
+- T09 — `reports.search_items(store, query)` -> sku/name/qty rows matching name OR sku (case-insensitive substring); CLI `search QUERY`.
 - T10 — `Item.last_actor`/`Order.last_actor` + `models.record_actor(rec, actor)`
   (writes only when not None); `actor=None` on mutators; CLI `--actor`.
 - T11 — `store.SCHEMA_VERSION` -> top-level `"version"` key (first) by `save()`.
@@ -40,20 +39,21 @@
 - T20 — `models.Shipment` (sku/qty/warehouse/date) in `"shipments"`; `ship(...,
   date=None)` appends one; `turnover(store)` -> `{category: {"YYYY-MM": units}}`.
 - T21/T22/T23 — whole cents (v4): `models.to_cents`/`to_dollars`,
-  `Item.unit_price_cents` the truth + `unit_price` property, exact
-  `stock_report` values; `Item.price_history` `{"date","old","new"}` dollars in
-  memory / `old_cents`/`new_cents` saved; `set_price(sku, price, date=None,
-  actor=None)`, `reports.price_changes`, CLI `set-price`.
+  `Item.unit_price_cents` the truth + `unit_price` property, exact `stock_report`;
+  `Item.price_history` `{"date","old","new"}` dollars in memory, `old_cents`/
+  `new_cents` saved; `set_price(sku, price, date=None, actor=None)`, `reports.price_changes`, CLI `set-price`.
 - T24 — `stockroom.money.format_money(amount)` -> `"$X.XX"` (`int` = cents,
   `float` = dollars, negatives `-$X.XX`); every CLI money figure goes through it.
 - T25 — `Store.discounts` category -> percent (`"discounts"`, missing -> `{}`):
   `set_discount` (ValueError outside 0..100), `get_discount` -> percent or 0.0, `list_discounts`, `remove_discount` (ValueError when no rule); CLI for each.
 - T26 — `Store.tax_rate` (`"tax_rate"`, missing -> 0.0) + `set_tax_rate`
-  (ValueError when negative); `models.percent_of(cents, percent)` -> cents, half
-  up; `reports.order_total(store, order_id)` -> dollars `subtotal`/`discount`/
-  `tax`/`total` (qty x price, discount off, tax on rest); CLI `set-tax-rate PCT`/`invoice ID`.
-- T27 — `reorder_suggestions` flags on `qty <= threshold` (same test as
-  `low_stock`) and keeps `suggested_qty == 0` rows; only an item whose pending
-  orders cover the top-up is still omitted (T15). CLI/report shape unchanged.
+  (ValueError when negative); `models.percent_of(cents, percent)` -> cents, half up;
+  `reports.order_total(store, order_id)` -> dollars `subtotal`/`discount`/`tax`/`total` (qty x price, discount off, tax on rest); CLI `set-tax-rate PCT`/`invoice ID`.
+- T27 — `reorder_suggestions` flags on `qty <= threshold` (same test as `low_stock`)
+  and keeps `suggested_qty == 0` rows; only an item whose pending orders cover the top-up is still omitted (T15). CLI/report shape unchanged.
+- T28 — `invoice ID --output PATH` also writes the invoice as text via
+  `cli._invoice_text(store, order_id, breakdown)`: order id/sku/qty/date then the
+  four breakdown lines, `\n`, no timestamps -> byte-identical re-runs; composed
+  after pricing, so an unknown id exits 1 writing nothing. Screen output unchanged.
 
-## current — none (T27 done)
+## current — none (T28 done)

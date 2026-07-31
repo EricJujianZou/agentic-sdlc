@@ -136,12 +136,44 @@ def cmd_set_tax_rate(store: Store, args) -> int:
     return 0
 
 
+def _invoice_text(store: Store, order_id: int, breakdown: dict) -> str:
+    """The invoice for one order as a plain-text document.
+
+    The same breakdown the screen shows, with the order's own details
+    above it so the file stands on its own once it has been mailed out.
+    Nothing here depends on when it was generated, so invoicing the same
+    order twice gives the same bytes.
+    """
+    order = store.get_order(order_id)
+    lines = [
+        f"invoice for order {order.id}",
+        f"  item       {order.sku}",
+        f"  quantity   {order.qty}",
+        f"  date       {order.date}",
+        "",
+    ]
+    lines += [f"  {label:<10} {format_money(breakdown[label]):>10}"
+              for label in ("subtotal", "discount", "tax", "total")]
+    return "\n".join(lines) + "\n"
+
+
 def cmd_invoice(store: Store, args) -> int:
-    """Handle ``invoice``: print what one order comes to, line by line."""
+    """Handle ``invoice``: print what one order comes to, line by line.
+
+    With ``--output`` the same invoice is also written to that path as a
+    text file; an order id we cannot price fails before the file is
+    opened, so nothing is left behind.
+    """
     breakdown = reports.order_total(store, args.id)
+    if args.output is not None:
+        text = _invoice_text(store, args.id, breakdown)
+        with open(args.output, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
     print(f"invoice for order {args.id}")
     for label in ("subtotal", "discount", "tax", "total"):
         print(f"  {label:<10} {format_money(breakdown[label]):>10}")
+    if args.output is not None:
+        print(f"wrote invoice to {args.output}")
     return 0
 
 
@@ -387,6 +419,7 @@ examples:
   stockroom --data ./data remove-discount widgets
   stockroom --data ./data set-tax-rate 5
   stockroom --data ./data invoice 1
+  stockroom --data ./data invoice 1 --output invoice-1.txt
   stockroom --data ./data catalog-add acme WID-1
   stockroom --data ./data catalog-list acme
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01 --supplier acme
@@ -502,6 +535,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("invoice", help="print an order's cost breakdown")
     p.add_argument("id", type=int)
+    p.add_argument("--output", default=None,
+                   help="also write the invoice to this file")
     p.set_defaults(func=cmd_invoice)
 
     p = sub.add_parser("place-order", help="record a purchase order")
