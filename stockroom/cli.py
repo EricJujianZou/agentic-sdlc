@@ -215,9 +215,13 @@ def cmd_ship_order(store: Store, args) -> int:
 
 
 def cmd_receive_order(store: Store, args) -> int:
-    """Handle ``receive-order``: the rest of an order arrived; stock it."""
+    """Handle ``receive-order``: the rest of an order arrived; stock it.
+
+    ``--date`` says when the goods turned up; the store dates the
+    arrival today when it is left off.
+    """
     remainder = store.get_order(args.id).outstanding
-    order = store.receive_order(args.id, actor=args.actor)
+    order = store.receive_order(args.id, actor=args.actor, date=args.date)
     store.save()
     print(f"order {order.id} received, {remainder} x {order.sku} added to stock")
     return 0
@@ -318,6 +322,18 @@ def cmd_report_revenue(store: Store, args) -> int:
         print(f"order {row['id']:>4}  {row['sku']:<12} "
               f"{format_money(row['total']):>10}")
     print(f"Total revenue: {format_money(revenue['total'])}")
+    return 0
+
+
+def cmd_report_on_time(store: Store, args) -> int:
+    """Handle ``report on-time``: print each supplier's delivery record."""
+    rows = reports.supplier_on_time(store)
+    if not rows:
+        print("no deliveries with an arrival date recorded")
+        return 0
+    for row in rows:
+        print(f"{row['supplier_id']:<16} {row['on_time']:>4}/{row['total']:<4} "
+              f"{row['pct']:>6.1f}%")
     return 0
 
 
@@ -435,10 +451,11 @@ examples:
   stockroom --data ./data catalog-list acme
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01 --supplier acme
   stockroom --data ./data ship-order 1 --qty 5
-  stockroom --data ./data receive-order 1
+  stockroom --data ./data receive-order 1 --date 2026-07-06
   stockroom --data ./data report stock
   stockroom --data ./data report monthly 2026-07
   stockroom --data ./data report revenue 2026-07
+  stockroom --data ./data report on-time
   stockroom --data ./data report turnover
   stockroom --data ./data report price-changes
   stockroom --data ./data search widget
@@ -583,6 +600,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("receive-order",
                        help="stock the rest of an order and mark it received")
     p.add_argument("id", type=int)
+    p.add_argument("--date", default=None,
+                   help="date the goods arrived (default: today)")
     _add_actor(p)
     p.set_defaults(func=cmd_receive_order)
 
@@ -615,6 +634,11 @@ def build_parser() -> argparse.ArgumentParser:
                               help="what a month's received orders were worth")
     p.add_argument("month", help="month prefix, e.g. 2026-01")
     p.set_defaults(func=cmd_report_revenue)
+
+    p = report_sub.add_parser("on-time",
+                              help="how well each supplier keeps to its "
+                                   "lead time")
+    p.set_defaults(func=cmd_report_on_time)
 
     p = report_sub.add_parser("turnover",
                               help="units shipped per category per month")

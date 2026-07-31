@@ -5,6 +5,8 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
+import datetime
+
 from .models import (STATUS_PENDING, STATUS_RECEIVED, percent_of, to_dollars)
 from .store import Store
 
@@ -304,6 +306,55 @@ def monthly_revenue(store: Store, month: str) -> dict:
             "total": to_dollars(order_cents),
         })
     return {"rows": rows, "total": to_dollars(total_cents)}
+
+
+def supplier_on_time(store: Store) -> list[dict]:
+    """How well each supplier keeps to the lead time they quoted us.
+
+    A delivery is on time when it turned up no later than the lead time
+    the supplier quoted, counted in whole days from the day the order
+    was placed - one landing on the last day of that window still
+    counts.  Only orders that were received *and* have an arrival day
+    recorded can be judged: a pending order has not arrived, a cancelled
+    one never will, and one received before we started noting the day
+    tells us nothing.  The supplier judged is the one the ordered item
+    is bought from.
+
+    Returns:
+        A list of dicts (supplier_id, total, on_time, pct), sorted by
+        supplier id, where ``pct`` is the on-time share out of 100.  A
+        supplier with nothing to judge is left out entirely, so an empty
+        list means no delivery has been booked in with a date yet.
+    """
+    counted: dict[str, list[int]] = {}
+    for order in store.orders:
+        if order.status != STATUS_RECEIVED or not order.received_date:
+            continue
+        supplier_id = store.get_item(order.sku).supplier_id
+        if supplier_id is None:
+            continue
+        placed = _as_date(order.date)
+        arrived = _as_date(order.received_date)
+        due = placed + datetime.timedelta(
+            days=store.get_supplier(supplier_id).lead_time_days)
+        tally = counted.setdefault(supplier_id, [0, 0])
+        tally[0] += 1
+        if arrived <= due:
+            tally[1] += 1
+    return [
+        {
+            "supplier_id": supplier_id,
+            "total": counted[supplier_id][0],
+            "on_time": counted[supplier_id][1],
+            "pct": 100 * counted[supplier_id][1] / counted[supplier_id][0],
+        }
+        for supplier_id in sorted(counted)
+    ]
+
+
+def _as_date(date: str) -> datetime.date:
+    """Read a stored date as a real date, so days can be counted off it."""
+    return datetime.date.fromisoformat(_normalize_date(date))
 
 
 def reorder_suggestions(store: Store,

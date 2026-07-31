@@ -502,12 +502,18 @@ class Store:
         self._book_delivery(order, qty, actor)
         return order
 
-    def receive_order(self, order_id: int, actor: str | None = None) -> Order:
+    def receive_order(self, order_id: int, actor: str | None = None,
+                      date: str | None = None) -> Order:
         """Mark a pending order received: the rest of it just arrived.
 
         Only what is still outstanding goes into stock, so receiving an
         order that has already had part of it delivered tops the item up
         rather than counting the delivered units twice.
+
+        ``date`` is the day the goods turned up, today when no date is
+        given; it is what the on-time report measures the supplier
+        against, so it is worth passing when booking in a late delivery
+        after the fact.
 
         Only a pending order can be received; receiving an already
         received or cancelled one raises ``ValueError`` and adds nothing
@@ -515,21 +521,25 @@ class Store:
         """
         order = self.get_order(order_id)
         self._require_pending(order, "receive")
-        self._book_delivery(order, order.outstanding, actor)
+        self._book_delivery(order, order.outstanding, actor, date)
         return order
 
-    def _book_delivery(self, order: Order, qty: int,
-                       actor: str | None) -> None:
+    def _book_delivery(self, order: Order, qty: int, actor: str | None,
+                       date: str | None = None) -> None:
         """Put ``qty`` of an order's goods on the shelf and note it down.
 
         Deliveries are booked into the default warehouse, and the order
-        is received once every unit ordered has turned up.  Both the
-        order and the restocked item record the actor, since both
+        is received once every unit ordered has turned up - which is the
+        moment the arrival day is settled, so that is where it is
+        stamped on, dated ``date`` or today when no date is given.  Both
+        the order and the restocked item record the actor, since both
         change.
         """
         order.shipped_qty += qty
         if order.outstanding <= 0:
             order.status = STATUS_RECEIVED
+            order.received_date = (date if date is not None
+                                   else datetime.date.today().isoformat())
         record_actor(order, actor)
         item = self.get_item(order.sku)
         item.adjust(qty)

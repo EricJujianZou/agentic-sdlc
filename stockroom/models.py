@@ -364,6 +364,9 @@ class Order:
             deliver in parts, so this climbs from 0 to ``qty`` over one
             or more deliveries; the order is received once it gets
             there.
+        received_date: the day the goods actually turned up, as a string
+            (normally YYYY-MM-DD), or None for an order that has not
+            arrived - or one received before we started noting the day.
     """
 
     id: int
@@ -374,6 +377,7 @@ class Order:
     supplier_id: str | None = None
     last_actor: str | None = None
     shipped_qty: int = 0
+    received_date: str | None = None
 
     @property
     def outstanding(self) -> int:
@@ -391,6 +395,7 @@ class Order:
             "supplier_id": self.supplier_id,
             "last_actor": self.last_actor,
             "shipped_qty": self.shipped_qty,
+            "received_date": self.received_date,
         }
 
     @classmethod
@@ -399,7 +404,9 @@ class Order:
 
         Orders written before deliveries could be split carry no
         ``shipped_qty``; a pending one of those has had nothing
-        delivered, and a received one arrived whole.
+        delivered, and a received one arrived whole.  Ones written
+        before arrival days were noted carry no ``received_date``, so we
+        do not know when they turned up.
         """
         status = data.get("status", STATUS_PENDING)
         default_shipped = data["qty"] if status == STATUS_RECEIVED else 0
@@ -412,4 +419,5 @@ class Order:
             supplier_id=data.get("supplier_id"),
             last_actor=data.get("last_actor"),
             shipped_qty=data.get("shipped_qty", default_shipped),
+            received_date=data.get("received_date"),
         )
