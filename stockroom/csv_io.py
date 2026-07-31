@@ -16,7 +16,7 @@ side has to accept files we did not write ourselves.
 
 import csv
 
-from .models import DEFAULT_CATEGORY, Item
+from .models import DEFAULT_CATEGORY, Item, normalize_sku
 from .store import Store
 
 FIELDNAMES = ["sku", "name", "qty", "unit_price", "supplier_id", "category"]
@@ -52,8 +52,10 @@ def import_items(store: Store, path: str) -> int:
     """Read items from a CSV file into the store.
 
     Rows whose SKU already exists update that item; other rows create
-    new items.  The caller is responsible for saving the store
-    afterwards.
+    new items.  SKUs are matched without regard to case, so a supplier
+    file that lower cases (or mixes) the spelling updates the item we
+    already have rather than adding a near-duplicate.  The caller is
+    responsible for saving the store afterwards.
 
     Returns:
         The number of rows processed.
@@ -62,7 +64,7 @@ def import_items(store: Store, path: str) -> int:
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            sku = row["sku"]
+            sku = normalize_sku(row["sku"])
             qty = int(row["qty"])
             unit_price = float(row["unit_price"])
             supplier_id = row.get("supplier_id") or None

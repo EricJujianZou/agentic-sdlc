@@ -23,6 +23,17 @@ STATUS_CANCELLED = "cancelled"
 DEFAULT_CATEGORY = "uncategorized"
 
 
+def normalize_sku(sku: str) -> str:
+    """Return the canonical spelling of a SKU.
+
+    SKUs are not case sensitive - ``wid-1`` is the same item as ``WID-1``
+    - and we write ours in upper case, so that is the spelling we store
+    and show.  Suppliers whose exports lower case (or mix) the spelling
+    land on the same item instead of a near-duplicate.
+    """
+    return sku.upper()
+
+
 @dataclass
 class Item:
     """A single stocked item.

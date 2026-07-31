@@ -29,6 +29,7 @@ from .models import (
     STATUS_PENDING,
     STATUS_RECEIVED,
     Supplier,
+    normalize_sku,
 )
 
 
@@ -99,8 +100,10 @@ class Store:
         """Create a new item.
 
         The SKU must not already exist, and if a supplier is given it
-        must be one we know about.
+        must be one we know about.  SKUs are stored in their canonical
+        (upper case) spelling.
         """
+        sku = normalize_sku(sku)
         if sku in self.items:
             raise ValueError(f"item {sku} already exists")
         if supplier_id is not None and supplier_id not in self.suppliers:
@@ -112,7 +115,8 @@ class Store:
         return item
 
     def get_item(self, sku: str) -> Item:
-        """Look up an item by SKU or raise ValueError."""
+        """Look up an item by SKU (any case) or raise ValueError."""
+        sku = normalize_sku(sku)
         if sku not in self.items:
             raise ValueError(f"unknown item {sku}")
         return self.items[sku]
@@ -182,8 +186,8 @@ class Store:
         ``date`` is stored as given; the CLI defaults it to today when
         the user does not pass one.
         """
-        self.get_item(sku)  # validates the SKU
-        order = Order(id=self.next_order_id(), sku=sku, qty=qty, date=date)
+        item = self.get_item(sku)  # validates the SKU
+        order = Order(id=self.next_order_id(), sku=item.sku, qty=qty, date=date)
         self.orders.append(order)
         return order
 
