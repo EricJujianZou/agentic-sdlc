@@ -20,6 +20,8 @@ room, and one without a ``category`` column leaves items uncategorized.
 """
 
 import csv
+import json
+
 
 from .models import DEFAULT_CATEGORY, MAIN_WAREHOUSE, Item, canonical_sku
 from .money import format_cents, parse_money
@@ -110,4 +112,40 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
     store.log_event("import-csv", {"path": path, "rows": count}, actor,
                     [{"kind": "snapshot", "before": before,
                       "after": store._snapshot()}])
+    return count
+
+
+EVENT_FIELDNAMES = ["ts", "op", "actor", "args"]
+
+
+def export_events(store: Store, path: str, op: str | None = None,
+                  since: str | None = None) -> int:
+    """Write the activity history to ``path`` as CSV, oldest first.
+
+    Args:
+        op: keep only events with exactly this op ("receive" does not
+            match "receive-order").
+        since: keep only events whose timestamp falls on or after this
+            date, inclusive.
+
+    Returns:
+        The number of event rows written (the header is written even
+        when nothing matches).
+    """
+    count = 0
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=EVENT_FIELDNAMES)
+        writer.writeheader()
+        for event in store.events:
+            if op is not None and event.get("op") != op:
+                continue
+            if since is not None and str(event.get("ts", ""))[:10] < since:
+                continue
+            writer.writerow({
+                "ts": event.get("ts", ""),
+                "op": event.get("op", ""),
+                "actor": event.get("actor") or "",
+                "args": json.dumps(event.get("args") or {}, sort_keys=True),
+            })
+            count += 1
     return count

@@ -192,6 +192,29 @@ def cmd_invoice(store: Store, args) -> int:
     return 0
 
 
+def cmd_scheduled_reorders(store: Store, args) -> int:
+    """Handle ``scheduled-reorders``: place today's suggested orders."""
+    placed = store.scheduled_reorders(as_of=args.as_of,
+                                      threshold=args.threshold,
+                                      actor=args.actor)
+    store.save()
+    if not placed:
+        print("nothing to reorder")
+        return 0
+    for order in placed:
+        print(f"ordered {order.qty} x {order.sku} on {order.date} "
+              f"(order {order.id})")
+    return 0
+
+
+def cmd_export_events(store: Store, args) -> int:
+    """Handle ``export-events``: write the activity history to CSV."""
+    count = csv_io.export_events(store, args.path, op=args.op,
+                                 since=args.since)
+    print(f"exported {count} events to {args.path}")
+    return 0
+
+
 def cmd_undo(store: Store, args) -> int:
     """Handle ``undo``: reverse the most recent change."""
     undone = store.undo()
@@ -314,6 +337,13 @@ def cmd_report_revenue(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_weekly(store: Store, args) -> int:
+    """Handle ``report weekly``: units shipped per ISO week."""
+    for label, units in reports.weekly_shipments(store).items():
+        print(f"{label}  {units:>6}")
+    return 0
+
+
 def cmd_report_turnover(store: Store, args) -> int:
     """Handle ``report turnover``: units shipped per category per month."""
     report = reports.turnover(store)
@@ -395,6 +425,7 @@ MUTATING_COMMANDS = [
     "add-item", "add-supplier", "receive", "ship", "place-order",
     "receive-order", "cancel-order", "import-csv", "transfer", "ship-order",
     "catalog-add", "restore", "set-price", "set-discount", "undo",
+    "scheduled-reorders",
     "remove-discount", "set-tax-rate",
 ]
 
@@ -516,6 +547,20 @@ def build_parser() -> argparse.ArgumentParser:
                    help="also write the invoice to this file")
     p.set_defaults(func=cmd_invoice)
 
+    p = sub.add_parser("scheduled-reorders",
+                       help="place the suggested purchase orders")
+    p.add_argument("--as-of", default=None,
+                   help="date to order for (default: today)")
+    p.add_argument("--threshold", type=int, default=None)
+    p.set_defaults(func=cmd_scheduled_reorders)
+
+    p = sub.add_parser("export-events", help="write the activity log to CSV")
+    p.add_argument("path")
+    p.add_argument("--op", default=None, help="keep only this exact op")
+    p.add_argument("--since", default=None,
+                   help="keep only events on or after this date")
+    p.set_defaults(func=cmd_export_events)
+
     p = sub.add_parser("undo", help="reverse the most recent change")
     p.set_defaults(func=cmd_undo)
 
@@ -544,6 +589,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by-category", action="store_true",
                    help="group the listing by shelf area")
     p.set_defaults(func=cmd_report_low)
+
+    p = report_sub.add_parser("weekly", help="units shipped per ISO week")
+    p.set_defaults(func=cmd_report_weekly)
 
     p = report_sub.add_parser("on-time", help="supplier delivery performance")
     p.set_defaults(func=cmd_report_on_time)

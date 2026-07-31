@@ -167,11 +167,15 @@ def order_history(store: Store, sku: str) -> list[dict]:
         if order.sku == sku:
             rows.append({
                 "id": order.id,
+                "sku": order.sku,
                 "qty": order.qty,
                 "date": order.date,
                 "status": order.status,
             })
-    rows.sort(key=lambda row: row["date"])
+    # Sort on parsed dates: legacy files spell them "2026-1-5", which
+    # sorts wrongly as plain text.  Same-day orders keep the order they
+    # were placed in.
+    rows.sort(key=lambda row: sort_key(row["date"]))
     return rows
 
 
@@ -365,6 +369,25 @@ def order_aging(store: Store, as_of=None) -> dict:
                               "qty": order.qty, "date": order.date,
                               "age_days": age})
     return buckets
+
+
+def weekly_shipments(store: Store) -> dict:
+    """Units shipped per ISO week.
+
+    Returns:
+        A mapping of week label ("2026-W28", ISO week-numbering year and
+        zero-padded week) -> units shipped, oldest week first.  Weeks
+        with no shipments do not appear.
+    """
+    weekly: dict[str, int] = {}
+    for shipment in store.shipments:
+        parsed = parse_date(shipment["date"])
+        if parsed is None:
+            continue
+        year, week, _ = parsed.isocalendar()
+        label = f"{year:04d}-W{week:02d}"
+        weekly[label] = weekly.get(label, 0) + shipment["qty"]
+    return {label: weekly[label] for label in sorted(weekly)}
 
 
 def turnover(store: Store) -> dict:

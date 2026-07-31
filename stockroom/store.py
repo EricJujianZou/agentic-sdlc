@@ -40,8 +40,9 @@ from .models import (
 # Schema version written to the state file.  Version 1 is the original
 # unversioned layout; 2 added the version stamp; 3 broke item quantities
 # down per warehouse; 4 moved money to whole cents; 5 stores every
-# date as a zero-padded ISO date.
-SCHEMA_VERSION = 5
+# date as a zero-padded ISO date; 6 moved the activity history to a
+# sidecar file.
+SCHEMA_VERSION = 6
 
 
 def _record_actor(record, actor: str | None) -> None:
@@ -103,6 +104,11 @@ class Store:
             return
         with open(self.path, encoding="utf-8") as f:
             raw = json.load(f)
+        # Events used to be embedded in the state file; since version 6
+        # they live in a sidecar next to it.
+        if "events" not in raw and os.path.exists(self.events_path):
+            with open(self.events_path, encoding="utf-8") as f:
+                raw = {**raw, "events": json.load(f).get("events", [])}
         self._apply_raw(raw)
 
     def _apply_raw(self, raw: dict) -> None:
@@ -145,10 +151,27 @@ class Store:
             "redo_stack": [dict(entry) for entry in self.redo_stack],
         }
 
+    @property
+    def events_path(self) -> str:
+        """The sidecar file holding the activity history."""
+        base = self.path
+        if base.endswith(".json"):
+            base = base[:-len(".json")]
+        return base + ".events.json"
+
     def save(self) -> None:
-        """Write the current state back to the JSON file."""
+        """Write the current state back to disk.
+
+        The activity history goes to its own sidecar file so the state
+        file stays small.
+        """
+        raw = self._raw_state()
+        events = raw.pop("events")
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(self._raw_state(), f, indent=2)
+            json.dump(raw, f, indent=2)
+            f.write("\n")
+        with open(self.events_path, "w", encoding="utf-8") as f:
+            json.dump({"events": events}, f, indent=2)
             f.write("\n")
 
     # ------------------------------------------------------------------
@@ -491,6 +514,29 @@ class Store:
                          "after_cents": item.unit_price_cents,
                          "entry": dict(item.price_history_cents[-1])}])
         return item
+
+    def scheduled_reorders(self, as_of: str | None = None,
+                           threshold: int | None = None,
+                           actor: str | None = None) -> list:
+        """Place the purchase orders today's reorder suggestions call for.
+
+        Idempotent per day and SKU: once a SKU has been auto-ordered for
+        a given day, that day is done for it.
+        """
+        from . import reports  # imported here to avoid a circular import
+
+        date = normalize_date(as_of or datetime.date.today().isoformat())
+        if threshold is None:
+            threshold = reports.DEFAULT_THRESHOLD
+        done = self.settings.setdefault("auto_ordered", {}).setdefault(date, [])
+        placed = []
+        for row in reports.reorder_suggestions(self, threshold=threshold):
+            if row["suggested_qty"] < 1 or row["sku"] in done:
+                continue
+            placed.append(self.place_order(row["sku"], row["suggested_qty"],
+                                           date, actor=actor))
+            done.append(row["sku"])
+        return placed
 
     # ------------------------------------------------------------------
     # discounts and settings
