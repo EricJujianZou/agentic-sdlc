@@ -18,6 +18,8 @@ Errors are reported by raising ``ValueError`` with a human readable
 message; the CLI turns those into exit code 1.
 """
 
+import datetime
+import glob
 import json
 import os
 
@@ -67,6 +69,8 @@ class Store:
         self.items: dict[str, Item] = {}
         self.suppliers: dict[str, Supplier] = {}
         self.orders: list[Order] = []
+        # supplier id -> the SKUs that supplier can supply
+        self.catalogs: dict[str, list[str]] = {}
 
     # ------------------------------------------------------------------
     # persistence
@@ -83,28 +87,74 @@ class Store:
             return
         with open(self.path, encoding="utf-8") as f:
             raw = json.load(f)
+        self._apply_raw(raw)
+
+    def _apply_raw(self, raw: dict) -> None:
+        """Replace the in-memory state with a state dict from disk."""
         self.items = {}
         for sku, data in raw.get("items", {}).items():
             item = Item.from_dict({**data, "sku": data.get("sku", sku)})
-            item.sku = canonical_sku(item.sku)
             self.items[item.sku] = item
         self.suppliers = {
             sid: Supplier.from_dict(data)
             for sid, data in raw.get("suppliers", {}).items()
         }
         self.orders = [Order.from_dict(data) for data in raw.get("orders", [])]
+        self.catalogs = {
+            sid: sorted(canonical_sku(sku) for sku in skus)
+            for sid, skus in raw.get("catalogs", {}).items()
+        }
 
-    def save(self) -> None:
-        """Write the current state back to the JSON file."""
-        raw = {
+    def _raw_state(self) -> dict:
+        """The current state as the plain dict we write to disk."""
+        return {
             "version": SCHEMA_VERSION,
             "items": {sku: item.to_dict() for sku, item in self.items.items()},
             "suppliers": {sid: s.to_dict() for sid, s in self.suppliers.items()},
             "orders": [order.to_dict() for order in self.orders],
+            "catalogs": {sid: list(skus) for sid, skus in self.catalogs.items()},
         }
+
+    def save(self) -> None:
+        """Write the current state back to the JSON file."""
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(raw, f, indent=2)
+            json.dump(self._raw_state(), f, indent=2)
             f.write("\n")
+
+    # ------------------------------------------------------------------
+    # backups
+    # ------------------------------------------------------------------
+
+    def _backup_prefix(self) -> str:
+        return self.path + ".bak-"
+
+    def backup(self) -> str:
+        """Snapshot the current state next to the state file.
+
+        Returns:
+            The name (not the full path) of the backup written.  The
+            timestamp in it avoids characters no OS allows in filenames.
+        """
+        stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S%f")
+        path = self._backup_prefix() + stamp
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self._raw_state(), f, indent=2)
+            f.write("\n")
+        return os.path.basename(path)
+
+    def list_backups(self) -> list[str]:
+        """Names of the backups taken so far, oldest first."""
+        return sorted(os.path.basename(p)
+                      for p in glob.glob(self._backup_prefix() + "*"))
+
+    def restore(self, name: str) -> None:
+        """Bring the state back to what the named backup captured."""
+        name = os.path.basename(name)
+        if name not in self.list_backups():
+            raise ValueError(f"unknown backup {name}")
+        with open(os.path.join(os.path.dirname(self.path) or ".", name),
+                  encoding="utf-8") as f:
+            self._apply_raw(json.load(f))
 
     # ------------------------------------------------------------------
     # items
@@ -215,6 +265,26 @@ class Store:
         """All suppliers, sorted by id for stable output."""
         return [self.suppliers[sid] for sid in sorted(self.suppliers)]
 
+    def add_supplier_sku(self, supplier_id: str, sku: str) -> None:
+        """Record that a supplier can supply a SKU."""
+        self.get_supplier(supplier_id)
+        item_sku = canonical_sku(sku)
+        skus = self.catalogs.setdefault(supplier_id, [])
+        if item_sku not in skus:
+            skus.append(item_sku)
+            skus.sort()
+
+    def supplier_skus(self, supplier_id: str) -> list[str]:
+        """The SKUs one supplier lists, sorted."""
+        self.get_supplier(supplier_id)
+        return list(self.catalogs.get(supplier_id, []))
+
+    def suppliers_for(self, sku: str) -> list[str]:
+        """Supplier ids whose catalogue lists *sku*, sorted."""
+        item_sku = canonical_sku(sku)
+        return sorted(sid for sid, skus in self.catalogs.items()
+                      if item_sku in skus)
+
     # ------------------------------------------------------------------
     # orders
     # ------------------------------------------------------------------
@@ -226,17 +296,34 @@ class Store:
         return max(order.id for order in self.orders) + 1
 
     def place_order(self, sku: str, qty: int, date: str,
+                    supplier_id: str | None = None,
                     actor: str | None = None) -> Order:
         """Record a new pending purchase order for an existing item.
 
         ``date`` is stored as given; the CLI defaults it to today when
-        the user does not pass one.
+        the user does not pass one.  The supplier is worked out from the
+        catalogues unless one is named explicitly.
         """
         item = self.get_item(sku)  # validates the SKU
+        supplier_id = self._order_supplier(item, supplier_id)
         order = Order(id=self.next_order_id(), sku=item.sku, qty=qty,
-                      date=date, last_actor=actor)
+                      date=date, supplier_id=supplier_id, last_actor=actor)
         self.orders.append(order)
         return order
+
+    def _order_supplier(self, item: Item, supplier_id: str | None) -> str | None:
+        """Who an order for *item* goes to; an explicit id always wins."""
+        if supplier_id is not None:
+            self.get_supplier(supplier_id)  # validates the id
+            return supplier_id
+        candidates = self.suppliers_for(item.sku)
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            raise ValueError(
+                f"{item.sku} is listed by several suppliers "
+                f"({', '.join(candidates)}); pass --supplier")
+        return item.supplier_id
 
     def get_order(self, order_id: int) -> Order:
         """Look up an order by id or raise ValueError."""
@@ -253,9 +340,34 @@ class Store:
         """
         order = self.get_order(order_id)
         _require_pending(order, "receive")
-        order.status = STATUS_RECEIVED
         item = self.get_item(order.sku)
-        item.add_qty(MAIN_WAREHOUSE, order.qty)
+        item.add_qty(MAIN_WAREHOUSE, order.outstanding)
+        order.shipped_qty = order.qty
+        order.status = STATUS_RECEIVED
+        _record_actor(order, actor)
+        _record_actor(item, actor)
+        return order
+
+    def ship_order(self, order_id: int, qty: int,
+                   actor: str | None = None) -> Order:
+        """Book a partial delivery of *qty* units against an order.
+
+        The order stays pending while anything is outstanding and flips
+        to received on its own once the whole quantity has arrived.
+        """
+        order = self.get_order(order_id)
+        _require_pending(order, "deliver against")
+        if qty < 1:
+            raise ValueError(f"delivery quantity must be at least 1, got {qty}")
+        if qty > order.outstanding:
+            raise ValueError(
+                f"cannot deliver {qty} against order {order.id}: "
+                f"only {order.outstanding} outstanding")
+        item = self.get_item(order.sku)
+        item.add_qty(MAIN_WAREHOUSE, qty)
+        order.shipped_qty += qty
+        if order.outstanding == 0:
+            order.status = STATUS_RECEIVED
         _record_actor(order, actor)
         _record_actor(item, actor)
         return order

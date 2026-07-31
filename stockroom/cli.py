@@ -85,7 +85,8 @@ def cmd_place_order(store: Store, args) -> int:
     date = args.date
     if date is None:
         date = datetime.date.today().isoformat()
-    order = store.place_order(args.sku, args.qty, date, actor=args.actor)
+    order = store.place_order(args.sku, args.qty, date,
+                              supplier_id=args.supplier, actor=args.actor)
     store.save()
     print(f"placed order {order.id}: {order.qty} x {order.sku} on {order.date}")
     return 0
@@ -112,6 +113,51 @@ def _print_stock_rows(rows) -> None:
     for row in rows:
         print(f"{row['sku']:<12} {row['name']:<24} {row['qty']:>6} "
               f"{row['unit_price']:>10.2f} {row['value']:>10.2f}")
+
+
+def cmd_ship_order(store: Store, args) -> int:
+    """Handle ``ship-order``: book a partial delivery of an order."""
+    order = store.ship_order(args.id, args.qty, actor=args.actor)
+    store.save()
+    print(f"delivered {args.qty} x {order.sku} against order {order.id}; "
+          f"{order.shipped_qty}/{order.qty} received, order is {order.status}")
+    return 0
+
+
+def cmd_catalog_add(store: Store, args) -> int:
+    """Handle ``catalog-add``: record that a supplier stocks a SKU."""
+    store.add_supplier_sku(args.supplier, args.sku)
+    store.save()
+    print(f"{args.supplier} can supply {args.sku.upper()}")
+    return 0
+
+
+def cmd_catalog_list(store: Store, args) -> int:
+    """Handle ``catalog-list``: print one supplier's catalogue."""
+    for sku in store.supplier_skus(args.supplier):
+        print(sku)
+    return 0
+
+
+def cmd_backup(store: Store, args) -> int:
+    """Handle ``backup``: snapshot the state file."""
+    print(store.backup())
+    return 0
+
+
+def cmd_list_backups(store: Store, args) -> int:
+    """Handle ``list-backups``: print the snapshots we hold, oldest first."""
+    for name in store.list_backups():
+        print(name)
+    return 0
+
+
+def cmd_restore(store: Store, args) -> int:
+    """Handle ``restore``: put a snapshot back."""
+    store.restore(args.name)
+    store.save()
+    print(f"restored {args.name}")
+    return 0
 
 
 def cmd_report_stock(store: Store, args) -> int:
@@ -239,7 +285,8 @@ examples:
 # Commands that change state; each of these takes --actor.
 MUTATING_COMMANDS = [
     "add-item", "add-supplier", "receive", "ship", "place-order",
-    "receive-order", "cancel-order", "import-csv", "transfer",
+    "receive-order", "cancel-order", "import-csv", "transfer", "ship-order",
+    "catalog-add", "restore",
 ]
 
 
@@ -298,6 +345,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("qty", type=int)
     p.add_argument("--date", default=None,
                    help="order date (default: today)")
+    p.add_argument("--supplier", default=None,
+                   help="who to order from (default: worked out from "
+                        "the supplier catalogues)")
     p.set_defaults(func=cmd_place_order)
 
     p = sub.add_parser("receive-order",
@@ -308,6 +358,31 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("cancel-order", help="cancel an order")
     p.add_argument("id", type=int)
     p.set_defaults(func=cmd_cancel_order)
+
+    p = sub.add_parser("ship-order", help="book a partial delivery")
+    p.add_argument("id", type=int)
+    p.add_argument("--qty", type=int, required=True,
+                   help="units delivered now")
+    p.set_defaults(func=cmd_ship_order)
+
+    p = sub.add_parser("catalog-add", help="record a SKU a supplier stocks")
+    p.add_argument("supplier")
+    p.add_argument("sku")
+    p.set_defaults(func=cmd_catalog_add)
+
+    p = sub.add_parser("catalog-list", help="list a supplier's SKUs")
+    p.add_argument("supplier")
+    p.set_defaults(func=cmd_catalog_list)
+
+    p = sub.add_parser("backup", help="snapshot the current state")
+    p.set_defaults(func=cmd_backup)
+
+    p = sub.add_parser("list-backups", help="list snapshots, oldest first")
+    p.set_defaults(func=cmd_list_backups)
+
+    p = sub.add_parser("restore", help="restore a snapshot by name")
+    p.add_argument("name")
+    p.set_defaults(func=cmd_restore)
 
     report = sub.add_parser("report", help="print a report")
     report_sub = report.add_subparsers(dest="report_kind", required=True)

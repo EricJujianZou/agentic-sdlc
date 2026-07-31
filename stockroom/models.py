@@ -170,6 +170,10 @@ class Order:
         date: the date the order was placed, as a string (whatever the
             user typed, normally YYYY-MM-DD).
         status: one of "pending", "received" or "cancelled".
+        shipped_qty: units delivered so far; suppliers deliver an order
+            in parts, and the order flips to received once this reaches
+            the ordered quantity.
+        supplier_id: who the order was placed with, or None.
         last_actor: who last created or changed this order, if recorded.
     """
 
@@ -178,7 +182,14 @@ class Order:
     qty: int
     date: str
     status: str = STATUS_PENDING
+    shipped_qty: int = 0
+    supplier_id: str | None = None
     last_actor: str | None = None
+
+    @property
+    def outstanding(self) -> int:
+        """Units still to be delivered on this order."""
+        return self.qty - self.shipped_qty
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this order."""
@@ -188,6 +199,8 @@ class Order:
             "qty": self.qty,
             "date": self.date,
             "status": self.status,
+            "shipped_qty": self.shipped_qty,
+            "supplier_id": self.supplier_id,
             "last_actor": self.last_actor,
         }
 
@@ -200,5 +213,7 @@ class Order:
             qty=data["qty"],
             date=data["date"],
             status=data.get("status", STATUS_PENDING),
+            shipped_qty=data.get("shipped_qty", 0),
+            supplier_id=data.get("supplier_id"),
             last_actor=data.get("last_actor"),
         )

@@ -6,6 +6,7 @@ module mutates state, so the CLI never saves after running a report.
 """
 
 from .dates import parse_date, sort_key
+from .models import STATUS_PENDING
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -163,8 +164,10 @@ def reorder_suggestions(store: Store,
     """Suggest order quantities for items running low.
 
     For each item below the threshold, suggest topping back up to the
-    threshold.  Only items with a supplier are included, since there is
-    nobody to order the rest from.
+    threshold, minus whatever is already on the way on pending orders.
+    Only items with a supplier are included, since there is nobody to
+    order the rest from, and items the pending orders already cover are
+    left out.
 
     Returns:
         A list of dicts (sku, supplier_id, qty, suggested_qty,
@@ -173,13 +176,23 @@ def reorder_suggestions(store: Store,
     """
     rows = []
     for item in store.list_items():
-        if item.qty < threshold and item.supplier_id is not None:
-            supplier = store.suppliers.get(item.supplier_id)
-            rows.append({
-                "sku": item.sku,
-                "supplier_id": item.supplier_id,
-                "qty": item.qty,
-                "suggested_qty": threshold - item.qty,
-                "lead_time_days": supplier.lead_time_days if supplier else 0,
-            })
+        if item.qty >= threshold or item.supplier_id is None:
+            continue
+        suggested = threshold - item.qty - pending_qty(store, item.sku)
+        if suggested <= 0:
+            continue
+        supplier = store.suppliers.get(item.supplier_id)
+        rows.append({
+            "sku": item.sku,
+            "supplier_id": item.supplier_id,
+            "qty": item.qty,
+            "suggested_qty": suggested,
+            "lead_time_days": supplier.lead_time_days if supplier else 0,
+        })
     return rows
+
+
+def pending_qty(store: Store, sku: str) -> int:
+    """Units of *sku* still on the way on pending purchase orders."""
+    return sum(order.outstanding for order in store.orders
+               if order.sku == sku and order.status == STATUS_PENDING)
