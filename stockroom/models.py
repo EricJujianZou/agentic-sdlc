@@ -112,6 +112,17 @@ class Item:
         self.quantities = {warehouse: qty}
         self.qty = qty
 
+    def set_warehouse_stock(
+        self, qty: int, warehouse: str = DEFAULT_WAREHOUSE
+    ) -> None:
+        """Set one warehouse's count, leaving the other warehouses alone.
+
+        A CSV row that names its warehouse only speaks for that room, so
+        several rows for one SKU build the breakdown up between them.
+        """
+        self.quantities[warehouse] = qty
+        self.qty = sum(self.quantities.values())
+
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this item."""
         return {
