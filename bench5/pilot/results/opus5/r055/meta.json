@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_element-hq__element-web-4fec436883b601a3cac2d4a58067e597f737b817-vnan",
+  "model": "claude-opus-5",
+  "started_at": "2026-07-31T22:55:00Z",
+  "finished_at": "2026-07-31T23:25:00Z",
+  "turns_estimate": 55,
+  "self_assessment": "Fairly confident on behaviour, less so on snapshots: I added DeviceDetailHeading (read view with a Rename link, edit view with a 100-char Field, Save/Cancel, visibility caption, spinner, and the exact 'Failed to set display name' error), exposed saveDeviceName(deviceId, deviceName) from useOwnDevices calling setDeviceDetails + refreshDevices and rethrowing _t('Failed to set display name'), threaded it through SessionManagerTab/CurrentDeviceSection/FilteredDeviceList/DeviceDetails, and gated the current-session spinner on isLoading && !device; I verified all of this with scratch component and SessionManagerTab-level tests (12 passing, since deleted) plus tsc/eslint/stylelint clean, but the hidden tests may assert exact data-testid names or jest snapshots whose markup I could only reconstruct, so DOM-shape mismatches are the main residual risk."
+}
