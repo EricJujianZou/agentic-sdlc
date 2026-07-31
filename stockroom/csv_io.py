@@ -14,11 +14,15 @@ SKUs are added).  Suppliers named in the file are not created - the
 supplier_id column is stored as-is, and an empty cell means no supplier.
 
 This is the format our suppliers exchange stock lists in, so the import
-side has to accept files we did not write ourselves.
+side has to accept files we did not write ourselves: a price cell may be
+spelled any of the ways :func:`money.parse_money` reads.  Export is the
+strict side of that bargain - it always writes a price with exactly two
+decimals, so a file we wrote reads back as the amounts it left with.
 """
 
 import csv
 
+from .money import format_amount, parse_money
 from .models import (
     DEFAULT_CATEGORY,
     DEFAULT_WAREHOUSE,
@@ -56,7 +60,7 @@ def export_items(store: Store, path: str) -> int:
                     "sku": item.sku,
                     "name": item.name,
                     "qty": item.qty_in(warehouse),
-                    "unit_price": item.unit_price,
+                    "unit_price": format_amount(item.unit_price_cents),
                     "supplier_id": item.supplier_id or "",
                     "category": item.category,
                     "warehouse": warehouse,
@@ -89,7 +93,7 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
         for row in reader:
             sku = normalize_sku(row["sku"])
             qty = int(row["qty"])
-            unit_price = float(row["unit_price"])
+            unit_price = parse_money(row["unit_price"])
             supplier_id = row.get("supplier_id") or None
             category = row.get("category") or DEFAULT_CATEGORY
             warehouse = row.get("warehouse") or DEFAULT_WAREHOUSE
