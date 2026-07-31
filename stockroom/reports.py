@@ -8,7 +8,8 @@ module mutates state, so the CLI never saves after running a report.
 import datetime
 
 from . import dates
-from .models import (STATUS_PENDING, STATUS_RECEIVED, percent_of, to_dollars)
+from .models import (STATUS_PENDING, STATUS_RECEIVED, normalize_sku,
+                     percent_of, to_dollars)
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -498,3 +499,75 @@ def reorder_suggestions(store: Store,
                 "lead_time_days": supplier.lead_time_days if supplier else 0,
             })
     return rows
+
+
+#: Audit-trail operations whose ``sku`` is not a claim that we stock the
+#: item: a supplier's catalogue is their list of what they can sell us,
+#: so a SKU on it we have never bought is ordinary, not dangling.
+CATALOG_OPS = ("catalog-add",)
+
+
+def _unknown_item(store: Store, sku: str) -> bool:
+    """Whether a recorded SKU names no item in the catalogue."""
+    return normalize_sku(sku) not in store.items
+
+
+def fsck(store: Store) -> list[str]:
+    """Cross-check the state and describe everything that does not add up.
+
+    Records point at each other by SKU and by supplier id, and nothing
+    stops a bad sync (or a bug we have since fixed) leaving a pointer
+    with nothing on the other end, or a shelf holding fewer than no
+    units.  Neither shows up in a report - a stock listing simply skips
+    an order it cannot price - so this looks for them on purpose.
+
+    Returns:
+        One message per problem found, in a stable order: the items
+        first, then the orders, the shipments and the audit trail.  An
+        empty list means the data is consistent.  Like everything else
+        in this module it only reads: what to do about a dangling
+        reference is a judgement call, and a check that quietly
+        "repaired" one would be a worse thing to run nightly than one
+        that just says what it found.
+    """
+    problems = []
+    for item in store.list_items():
+        for warehouse in sorted(item.quantities):
+            qty = item.quantities[warehouse]
+            if qty < 0:
+                problems.append(
+                    f"item {item.sku} has a negative quantity ({qty}) in "
+                    f"warehouse {warehouse}"
+                )
+        if (item.supplier_id is not None
+                and item.supplier_id not in store.suppliers):
+            problems.append(
+                f"item {item.sku} references unknown supplier "
+                f"{item.supplier_id}"
+            )
+    for order in store.orders:
+        if _unknown_item(store, order.sku):
+            problems.append(
+                f"order {order.id} references unknown item {order.sku}"
+            )
+        if (order.supplier_id is not None
+                and order.supplier_id not in store.suppliers):
+            problems.append(
+                f"order {order.id} references unknown supplier "
+                f"{order.supplier_id}"
+            )
+    for number, shipment in enumerate(store.shipments, 1):
+        if _unknown_item(store, shipment.sku):
+            problems.append(
+                f"shipment {number} references unknown item {shipment.sku}"
+            )
+    for number, event in enumerate(store.events, 1):
+        sku = (event.get("args") or {}).get("sku")
+        op = event.get("op")
+        if sku is None or op in CATALOG_OPS:
+            continue
+        if _unknown_item(store, sku):
+            problems.append(
+                f"event {number} ({op}) references unknown item {sku}"
+            )
+    return problems

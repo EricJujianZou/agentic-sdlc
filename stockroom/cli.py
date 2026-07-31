@@ -9,7 +9,8 @@ Usage::
 does ``lock`` until somebody runs ``unlock``.
 
 Exit codes: 0 on success, 1 on a user error (unknown SKU, bad order id,
-missing file, ...), 2 when the state file cannot be parsed.
+missing file, ...), 2 when the state file cannot be parsed - and from
+``fsck``, when the data it checked has something wrong with it.
 """
 
 import argparse
@@ -530,6 +531,23 @@ def cmd_restore(store: Store, args) -> int:
     return 0
 
 
+def cmd_fsck(store: Store, args) -> int:
+    """Handle ``fsck``: cross-check the data and report what is wrong.
+
+    One line per finding and exit code 2 when there is anything to say,
+    so cron can run it nightly and only hear from it when something
+    needs looking at.  It writes nothing whatever it finds - a bad
+    reference wants a person's decision, not an automatic repair.
+    """
+    problems = reports.fsck(store)
+    for problem in problems:
+        print(f"problem: {problem}")
+    if problems:
+        return 2
+    print("fsck: ok")
+    return 0
+
+
 def cmd_lock(store: Store, args) -> int:
     """Handle ``lock``: mark the data read-only until it is unlocked."""
     store.lock()
@@ -587,6 +605,7 @@ examples:
   stockroom --data ./data batch monday-movements.csv
   stockroom --data ./data backup
   stockroom --data ./data restore state.json.bak-20260101T090000000000
+  stockroom --data ./data fsck
   stockroom --data ./data --read-only report stock
   stockroom --data ./data lock
   stockroom --data ./data unlock
@@ -847,6 +866,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("restore", help="put the state back to a backup")
     p.add_argument("name", help="backup name, as printed by backup")
     p.set_defaults(func=cmd_restore)
+
+    p = sub.add_parser("fsck", help="check the data for inconsistencies")
+    p.set_defaults(func=cmd_fsck, read_only_ok=True)
 
     p = sub.add_parser("lock", help="mark the data read-only from now on")
     p.set_defaults(func=cmd_lock)
