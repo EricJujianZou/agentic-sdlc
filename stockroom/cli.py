@@ -238,6 +238,19 @@ def cmd_cancel_order(store: Store, args) -> int:
     return 0
 
 
+def cmd_undo(store: Store, args) -> int:
+    """Handle ``undo``: reverse the most recent change.
+
+    Nothing is saved unless the reversal went through, so an undo with
+    no history behind it (or one the store refuses) leaves the state
+    file exactly as it was.
+    """
+    event = store.undo()
+    store.save()
+    print(f"undid {event['op']}")
+    return 0
+
+
 def _print_stock_header() -> None:
     print(f"{'SKU':<12} {'NAME':<24} {'QTY':>6} {'PRICE':>10} {'VALUE':>10}")
 
@@ -473,6 +486,7 @@ examples:
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01 --supplier acme
   stockroom --data ./data ship-order 1 --qty 5
   stockroom --data ./data receive-order 1 --date 2026-07-06
+  stockroom --data ./data undo
   stockroom --data ./data report stock
   stockroom --data ./data report monthly 2026-07
   stockroom --data ./data report revenue 2026-07
@@ -635,6 +649,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id", type=int)
     _add_actor(p)
     p.set_defaults(func=cmd_cancel_order)
+
+    p = sub.add_parser("undo", help="reverse the most recent change")
+    p.set_defaults(func=cmd_undo)
 
     report = sub.add_parser("report", help="print a report")
     report_sub = report.add_subparsers(dest="report_kind", required=True)

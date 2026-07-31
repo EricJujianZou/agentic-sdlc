@@ -663,3 +663,118 @@ class Store:
                 f"cannot {action} order {order.id}: it is already "
                 f"{order.status}"
             )
+
+    # ------------------------------------------------------------------
+    # undo
+    # ------------------------------------------------------------------
+
+    def undo(self) -> dict:
+        """Reverse the most recent change and return the event undone.
+
+        The audit trail is the undo history: its last entry says what
+        changed and with which arguments, so backing that change out is
+        a matter of applying the entry's inverse.  The entry is then
+        dropped - the trail is the story of how the state got this way,
+        and a change that has been reversed is no longer part of it -
+        which is also what makes a second undo step back to the change
+        before it, and a third to the one before that.  Since the trail
+        is saved alongside the state, undo reaches into earlier sessions
+        just as well as into this one.
+
+        An empty trail leaves nothing to undo, and some changes cannot
+        be reversed from what was recorded at all - nobody wrote down
+        the discount rate a ``set-discount`` replaced, so putting it
+        back would be a guess.  Either way ``ValueError`` is raised
+        before anything is touched, rather than a wrong reversal being
+        applied quietly.
+
+        Only the records themselves are put back.  Whoever an undone
+        change named as the item's or order's last actor stays named:
+        undo is a correction, not a way to make a change unhappen.
+        """
+        if not self.events:
+            raise ValueError("nothing to undo")
+        event = self.events[-1]
+        reverse = self._UNDO.get(event.get("op"))
+        if reverse is None:
+            raise ValueError(f"cannot undo {event.get('op')}")
+        reverse(self, event.get("args") or {})
+        self.events.pop()
+        return event
+
+    def _undo_add_item(self, args: dict) -> None:
+        """Take back an ``add-item``: the item goes away again."""
+        self.items.pop(normalize_sku(args["sku"]), None)
+
+    def _undo_add_supplier(self, args: dict) -> None:
+        """Take back an ``add-supplier``: the supplier goes away again."""
+        self.suppliers.pop(args["id"], None)
+
+    def _undo_receive(self, args: dict) -> None:
+        """Take back a ``receive``: the units arrived off again."""
+        item = self.get_item(args["sku"])
+        item.adjust(-args["qty"], args.get("warehouse", DEFAULT_WAREHOUSE))
+
+    def _undo_ship(self, args: dict) -> None:
+        """Take back a ``ship``: the units come back on the shelf.
+
+        The shipment it logged goes with them - the goods never left,
+        so leaving the movement in the log would have reports counting
+        turnover that did not happen.
+        """
+        warehouse = args.get("warehouse", DEFAULT_WAREHOUSE)
+        item = self.get_item(args["sku"])
+        item.adjust(args["qty"], warehouse)
+        for index in range(len(self.shipments) - 1, -1, -1):
+            shipment = self.shipments[index]
+            if (shipment.sku == item.sku and shipment.qty == args["qty"]
+                    and shipment.warehouse == warehouse
+                    and shipment.date == args.get("date")):
+                del self.shipments[index]
+                break
+
+    def _undo_transfer(self, args: dict) -> None:
+        """Take back a ``transfer``: the units walk back where they were."""
+        item = self.get_item(args["sku"])
+        item.adjust(-args["qty"], args["dst"])
+        item.adjust(args["qty"], args["src"])
+
+    def _undo_place_order(self, args: dict) -> None:
+        """Take back a ``place-order``: the order was never placed."""
+        self.orders = [order for order in self.orders
+                       if order.id != args["id"]]
+
+    def _undo_cancel_order(self, args: dict) -> None:
+        """Take back a ``cancel-order``: the order is pending again."""
+        self.get_order(args["id"]).status = STATUS_PENDING
+
+    def _undo_set_price(self, args: dict) -> None:
+        """Take back a ``set-price``: the old price is the price again.
+
+        What it was is on the item's own price history, which is where
+        the change wrote it down, so that entry both restores the price
+        and comes off with it.
+        """
+        item = self.get_item(args["sku"])
+        if not item.price_history:
+            raise ValueError(
+                f"cannot undo set-price: no price change recorded "
+                f"for {item.sku}"
+            )
+        item.unit_price = item.price_history.pop()["old"]
+
+    #: How each kind of change is reversed, keyed by the op the trail
+    #: records.  An operation missing here is one the trail does not
+    #: carry enough to reverse exactly (what a ``set-tax-rate`` or an
+    #: ``import-csv`` overwrote is simply gone), so ``undo`` refuses it
+    #: rather than guess at it.
+    _UNDO = {
+        "add-item": _undo_add_item,
+        "add-supplier": _undo_add_supplier,
+        "receive": _undo_receive,
+        "ship": _undo_ship,
+        "transfer": _undo_transfer,
+        "place-order": _undo_place_order,
+        "cancel-order": _undo_cancel_order,
+        "set-price": _undo_set_price,
+    }
