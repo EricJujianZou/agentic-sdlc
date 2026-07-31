@@ -80,6 +80,13 @@ class Store:
         self.discounts: dict[str, float] = {}
         # odds and ends we keep with the data, such as the tax rate
         self.settings: dict = {}
+        # activity history, oldest first
+        self.events: list[dict] = []
+        # what undo would step back through, and what redo would replay
+        self.undo_stack: list[dict] = []
+        self.redo_stack: list[dict] = []
+        # bumped by every mutation; readers use it to spot stale caches
+        self.revision: int = 0
 
     # ------------------------------------------------------------------
     # persistence
@@ -118,6 +125,9 @@ class Store:
                           for entry in raw.get("shipments", [])]
         self.discounts = {c: float(p) for c, p in raw.get("discounts", {}).items()}
         self.settings = dict(raw.get("settings", {}))
+        self.events = [dict(entry) for entry in raw.get("events", [])]
+        self.undo_stack = [dict(entry) for entry in raw.get("undo_stack", [])]
+        self.redo_stack = [dict(entry) for entry in raw.get("redo_stack", [])]
 
     def _raw_state(self) -> dict:
         """The current state as the plain dict we write to disk."""
@@ -130,6 +140,9 @@ class Store:
             "shipments": [dict(entry) for entry in self.shipments],
             "discounts": dict(self.discounts),
             "settings": dict(self.settings),
+            "events": [dict(entry) for entry in self.events],
+            "undo_stack": [dict(entry) for entry in self.undo_stack],
+            "redo_stack": [dict(entry) for entry in self.redo_stack],
         }
 
     def save(self) -> None:
@@ -137,6 +150,170 @@ class Store:
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump(self._raw_state(), f, indent=2)
             f.write("\n")
+
+    # ------------------------------------------------------------------
+    # activity history and undo
+    # ------------------------------------------------------------------
+
+    def log_event(self, op: str, args: dict | None = None,
+                  actor: str | None = None,
+                  changes: list | None = None) -> dict:
+        """Record one change in the activity history.
+
+        *changes* describes how to walk the change back (and forward
+        again), which is what ``undo`` and ``redo`` work from.  Any new
+        change makes whatever was undone unredoable, as usual.
+        """
+        entry = {
+            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+            "op": op,
+            "args": dict(args or {}),
+            "actor": actor,
+        }
+        self.events.append(entry)
+        self.revision += 1
+        if changes is not None:
+            self.undo_stack.append({"op": op, "args": dict(args or {}),
+                                    "changes": changes})
+            self.redo_stack = []
+        return entry
+
+    def undo(self, steps: int = 1) -> list[dict]:
+        """Step back through the *steps* most recent changes, newest first."""
+        if steps < 1:
+            raise ValueError("steps must be at least 1")
+        if len(self.undo_stack) < steps:
+            raise ValueError(
+                f"nothing to undo (asked for {steps}, "
+                f"have {len(self.undo_stack)})")
+        undone = []
+        for _ in range(steps):
+            entry = self.undo_stack.pop()
+            for change in reversed(entry["changes"]):
+                self._revert_change(change)
+            self.redo_stack.append(entry)
+            undone.append(entry)
+        self.log_event("undo", {"steps": steps})
+        return undone
+
+    def redo(self, steps: int = 1) -> list[dict]:
+        """Walk forward again through changes that were undone."""
+        if steps < 1:
+            raise ValueError("steps must be at least 1")
+        if len(self.redo_stack) < steps:
+            raise ValueError(
+                f"nothing to redo (asked for {steps}, "
+                f"have {len(self.redo_stack)})")
+        redone = []
+        for _ in range(steps):
+            entry = self.redo_stack.pop()
+            for change in entry["changes"]:
+                self._reapply_change(change)
+            self.undo_stack.append(entry)
+            redone.append(entry)
+        self.log_event("redo", {"steps": steps})
+        return redone
+
+    def _revert_change(self, change: dict) -> None:
+        """Walk one recorded change backwards."""
+        kind = change["kind"]
+        if kind == "qty":
+            self.items[change["sku"]].add_qty(change["warehouse"],
+                                              -change["delta"])
+        elif kind == "item-add":
+            self.items.pop(change["sku"], None)
+        elif kind == "supplier-add":
+            self.suppliers.pop(change["id"], None)
+        elif kind == "order-add":
+            self.orders = [o for o in self.orders
+                           if o.id != change["order"]["id"]]
+        elif kind == "order-set":
+            self._replace_order(Order.from_dict(change["before"]))
+        elif kind == "price":
+            item = self.items[change["sku"]]
+            item.unit_price_cents = change["before_cents"]
+            if item.price_history_cents:
+                item.price_history_cents.pop()
+        elif kind == "shipment":
+            if self.shipments:
+                self.shipments.pop()
+        elif kind == "catalog":
+            skus = self.catalogs.get(change["supplier"], [])
+            if change["sku"] in skus:
+                skus.remove(change["sku"])
+        elif kind == "settings":
+            self.discounts = dict(change["before"]["discounts"])
+            self.settings = dict(change["before"]["settings"])
+        elif kind == "snapshot":
+            self._restore_snapshot(change["before"])
+        else:
+            raise ValueError(f"cannot undo {kind}")
+
+    def _reapply_change(self, change: dict) -> None:
+        """Walk one recorded change forwards again."""
+        kind = change["kind"]
+        if kind == "qty":
+            self.items[change["sku"]].add_qty(change["warehouse"],
+                                              change["delta"])
+        elif kind == "item-add":
+            item = Item.from_dict(change["item"])
+            self.items[item.sku] = item
+        elif kind == "supplier-add":
+            supplier = Supplier.from_dict(change["supplier"])
+            self.suppliers[supplier.id] = supplier
+        elif kind == "order-add":
+            self.orders.append(Order.from_dict(change["order"]))
+        elif kind == "order-set":
+            self._replace_order(Order.from_dict(change["after"]))
+        elif kind == "price":
+            item = self.items[change["sku"]]
+            item.unit_price_cents = change["after_cents"]
+            item.price_history_cents.append(dict(change["entry"]))
+        elif kind == "shipment":
+            self.shipments.append(dict(change["entry"]))
+        elif kind == "catalog":
+            self.add_supplier_sku(change["supplier"], change["sku"])
+        elif kind == "settings":
+            self.discounts = dict(change["after"]["discounts"])
+            self.settings = dict(change["after"]["settings"])
+        elif kind == "snapshot":
+            self._restore_snapshot(change["after"])
+        else:
+            raise ValueError(f"cannot redo {kind}")
+
+    def _replace_order(self, order: Order) -> None:
+        """Put *order* back in place of the one with the same id."""
+        for index, existing in enumerate(self.orders):
+            if existing.id == order.id:
+                self.orders[index] = order
+                return
+        self.orders.append(order)
+
+    def _snapshot(self) -> dict:
+        """Everything a bulk operation might disturb, for undoing it."""
+        raw = self._raw_state()
+        return {key: raw[key] for key in
+                ("items", "suppliers", "orders", "catalogs", "shipments",
+                 "discounts", "settings")}
+
+    def _restore_snapshot(self, snapshot: dict) -> None:
+        """Put back the state a bulk operation was applied to."""
+        keep = {"events": self.events, "undo_stack": self.undo_stack,
+                "redo_stack": self.redo_stack}
+        self._apply_raw(snapshot)
+        self.events = keep["events"]
+        self.undo_stack = keep["undo_stack"]
+        self.redo_stack = keep["redo_stack"]
+
+    def _log_settings(self, op: str, args: dict, before: dict) -> None:
+        """Log a change to the discount rules or settings."""
+        self.log_event(op, args, None,
+                       [{"kind": "settings", "before": before,
+                         "after": self._settings_state()}])
+
+    def _settings_state(self) -> dict:
+        return {"discounts": dict(self.discounts),
+                "settings": dict(self.settings)}
 
     # ------------------------------------------------------------------
     # backups
@@ -169,9 +346,14 @@ class Store:
         name = os.path.basename(name)
         if name not in self.list_backups():
             raise ValueError(f"unknown backup {name}")
+        before = self._snapshot()
         with open(os.path.join(os.path.dirname(self.path) or ".", name),
                   encoding="utf-8") as f:
-            self._apply_raw(json.load(f))
+            snapshot = json.load(f)
+        self._restore_snapshot(snapshot)
+        self.log_event("restore", {"name": name}, None,
+                       [{"kind": "snapshot", "before": before,
+                         "after": self._snapshot()}])
 
     # ------------------------------------------------------------------
     # items
@@ -202,6 +384,12 @@ class Store:
                     category=category or DEFAULT_CATEGORY,
                     last_actor=actor)
         self.items[sku] = item
+        self.log_event("add-item",
+                       {"sku": sku, "name": name, "qty": qty,
+                        "category": item.category},
+                       actor,
+                       [{"kind": "item-add", "sku": sku,
+                         "item": item.to_dict()}])
         return item
 
     def get_item(self, sku: str) -> Item:
@@ -221,6 +409,11 @@ class Store:
         item = self.get_item(sku)
         item.add_qty(warehouse, qty)
         _record_actor(item, actor)
+        self.log_event("receive",
+                       {"sku": item.sku, "qty": qty, "warehouse": warehouse},
+                       actor,
+                       [{"kind": "qty", "sku": item.sku,
+                         "warehouse": warehouse, "delta": qty}])
         return item
 
     def ship(self, sku: str, qty: int, warehouse: str = MAIN_WAREHOUSE,
@@ -239,13 +432,21 @@ class Store:
                 f"cannot ship {qty} x {item.sku} from {warehouse}: "
                 f"only {on_hand} on hand")
         item.add_qty(warehouse, -qty)
-        self.shipments.append({
+        shipment = {
             "sku": item.sku,
             "qty": qty,
             "warehouse": warehouse,
             "date": normalize_date(date or datetime.date.today().isoformat()),
-        })
+        }
+        self.shipments.append(shipment)
         _record_actor(item, actor)
+        self.log_event("ship",
+                       {"sku": item.sku, "qty": qty, "warehouse": warehouse,
+                        "date": shipment["date"]},
+                       actor,
+                       [{"kind": "qty", "sku": item.sku,
+                         "warehouse": warehouse, "delta": -qty},
+                        {"kind": "shipment", "entry": dict(shipment)}])
         return item
 
     def transfer(self, sku: str, qty: int, src: str, dst: str,
@@ -264,16 +465,31 @@ class Store:
         item.add_qty(src, -qty)
         item.add_qty(dst, qty)
         _record_actor(item, actor)
+        self.log_event("transfer",
+                       {"sku": item.sku, "qty": qty, "src": src, "dst": dst},
+                       actor,
+                       [{"kind": "qty", "sku": item.sku, "warehouse": src,
+                         "delta": -qty},
+                        {"kind": "qty", "sku": item.sku, "warehouse": dst,
+                         "delta": qty}])
         return item
 
     def set_price(self, sku: str, price, date: str | None = None,
                   actor: str | None = None) -> Item:
         """Set an item's unit price, remembering the old one."""
         item = self.get_item(sku)
+        before_cents = item.unit_price_cents
         item.record_price(
             to_cents(price),
             normalize_date(date or datetime.date.today().isoformat()))
         _record_actor(item, actor)
+        self.log_event("set-price",
+                       {"sku": item.sku, "price": item.unit_price},
+                       actor,
+                       [{"kind": "price", "sku": item.sku,
+                         "before_cents": before_cents,
+                         "after_cents": item.unit_price_cents,
+                         "entry": dict(item.price_history_cents[-1])}])
         return item
 
     # ------------------------------------------------------------------
@@ -286,7 +502,10 @@ class Store:
         if not 0 <= percent <= 100:
             raise ValueError(
                 f"discount percent must be between 0 and 100, got {percent}")
+        before = self._settings_state()
         self.discounts[category] = percent
+        self._log_settings("set-discount",
+                           {"category": category, "percent": percent}, before)
 
     def get_discount(self, category: str) -> float:
         """The discount percent for a category, 0 when there is no rule."""
@@ -296,7 +515,9 @@ class Store:
         """Delete a category's discount rule."""
         if category not in self.discounts:
             raise ValueError(f"no discount rule for {category}")
+        before = self._settings_state()
         del self.discounts[category]
+        self._log_settings("remove-discount", {"category": category}, before)
 
     @property
     def tax_rate(self) -> float:
@@ -308,20 +529,29 @@ class Store:
         percent = float(percent)
         if percent < 0:
             raise ValueError(f"tax rate cannot be negative, got {percent}")
+        before = self._settings_state()
         self.settings["tax_rate"] = percent
+        self._log_settings("set-tax-rate", {"percent": percent}, before)
 
     # ------------------------------------------------------------------
     # suppliers
     # ------------------------------------------------------------------
 
     def add_supplier(self, supplier_id: str, name: str, email: str,
-                     lead_time_days: int = 0) -> Supplier:
+                     lead_time_days: int = 0,
+                     actor: str | None = None) -> Supplier:
         """Create a new supplier.  The id must not already exist."""
         if supplier_id in self.suppliers:
             raise ValueError(f"supplier {supplier_id} already exists")
         supplier = Supplier(id=supplier_id, name=name, email=email,
                             lead_time_days=lead_time_days)
         self.suppliers[supplier_id] = supplier
+        self.log_event("add-supplier",
+                       {"id": supplier_id, "name": name,
+                        "lead_time_days": lead_time_days},
+                       actor,
+                       [{"kind": "supplier-add", "id": supplier_id,
+                         "supplier": supplier.to_dict()}])
         return supplier
 
     def get_supplier(self, supplier_id: str) -> Supplier:
@@ -334,7 +564,8 @@ class Store:
         """All suppliers, sorted by id for stable output."""
         return [self.suppliers[sid] for sid in sorted(self.suppliers)]
 
-    def add_supplier_sku(self, supplier_id: str, sku: str) -> None:
+    def add_supplier_sku(self, supplier_id: str, sku: str,
+                         actor: str | None = None) -> None:
         """Record that a supplier can supply a SKU."""
         self.get_supplier(supplier_id)
         item_sku = canonical_sku(sku)
@@ -342,6 +573,11 @@ class Store:
         if item_sku not in skus:
             skus.append(item_sku)
             skus.sort()
+            self.log_event("catalog-add",
+                           {"supplier": supplier_id, "sku": item_sku},
+                           actor,
+                           [{"kind": "catalog", "supplier": supplier_id,
+                             "sku": item_sku}])
 
     def supplier_skus(self, supplier_id: str) -> list[str]:
         """The SKUs one supplier lists, sorted."""
@@ -379,6 +615,11 @@ class Store:
                       date=normalize_date(date), supplier_id=supplier_id,
                       last_actor=actor)
         self.orders.append(order)
+        self.log_event("place-order",
+                       {"id": order.id, "sku": order.sku, "qty": qty,
+                        "date": order.date, "supplier": supplier_id},
+                       actor,
+                       [{"kind": "order-add", "order": order.to_dict()}])
         return order
 
     def _order_supplier(self, item: Item, supplier_id: str | None) -> str | None:
@@ -411,14 +652,24 @@ class Store:
         """
         order = self.get_order(order_id)
         _require_pending(order, "receive")
+        before = order.to_dict()
         item = self.get_item(order.sku)
-        item.add_qty(MAIN_WAREHOUSE, order.outstanding)
+        delivered = order.outstanding
+        item.add_qty(MAIN_WAREHOUSE, delivered)
         order.shipped_qty = order.qty
         order.status = STATUS_RECEIVED
         order.received_date = normalize_date(
             date or datetime.date.today().isoformat())
         _record_actor(order, actor)
         _record_actor(item, actor)
+        self.log_event("receive-order",
+                       {"id": order.id, "sku": order.sku, "qty": delivered,
+                        "date": order.received_date},
+                       actor,
+                       [{"kind": "qty", "sku": order.sku,
+                         "warehouse": MAIN_WAREHOUSE, "delta": delivered},
+                        {"kind": "order-set", "id": order.id,
+                         "before": before, "after": order.to_dict()}])
         return order
 
     def ship_order(self, order_id: int, qty: int,
@@ -436,6 +687,7 @@ class Store:
             raise ValueError(
                 f"cannot deliver {qty} against order {order.id}: "
                 f"only {order.outstanding} outstanding")
+        before = order.to_dict()
         item = self.get_item(order.sku)
         item.add_qty(MAIN_WAREHOUSE, qty)
         order.shipped_qty += qty
@@ -443,12 +695,24 @@ class Store:
             order.status = STATUS_RECEIVED
         _record_actor(order, actor)
         _record_actor(item, actor)
+        self.log_event("ship-order",
+                       {"id": order.id, "sku": order.sku, "qty": qty},
+                       actor,
+                       [{"kind": "qty", "sku": order.sku,
+                         "warehouse": MAIN_WAREHOUSE, "delta": qty},
+                        {"kind": "order-set", "id": order.id,
+                         "before": before, "after": order.to_dict()}])
         return order
 
     def cancel_order(self, order_id: int, actor: str | None = None) -> Order:
         """Mark a pending order cancelled.  Stock is not affected."""
         order = self.get_order(order_id)
         _require_pending(order, "cancel")
+        before = order.to_dict()
         order.status = STATUS_CANCELLED
         _record_actor(order, actor)
+        self.log_event("cancel-order", {"id": order.id, "sku": order.sku},
+                       actor,
+                       [{"kind": "order-set", "id": order.id,
+                         "before": before, "after": order.to_dict()}])
         return order

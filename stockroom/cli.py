@@ -45,7 +45,8 @@ def cmd_add_item(store: Store, args) -> int:
 def cmd_add_supplier(store: Store, args) -> int:
     """Handle ``add-supplier``: register a new supplier."""
     supplier = store.add_supplier(args.id, args.name, args.email,
-                                  lead_time_days=args.lead_time)
+                                  lead_time_days=args.lead_time,
+                                  actor=args.actor)
     store.save()
     print(f"added supplier {supplier.id} ({supplier.name})")
     return 0
@@ -137,7 +138,7 @@ def cmd_ship_order(store: Store, args) -> int:
 
 def cmd_catalog_add(store: Store, args) -> int:
     """Handle ``catalog-add``: record that a supplier stocks a SKU."""
-    store.add_supplier_sku(args.supplier, args.sku)
+    store.add_supplier_sku(args.supplier, args.sku, actor=args.actor)
     store.save()
     print(f"{args.supplier} can supply {args.sku.upper()}")
     return 0
@@ -188,6 +189,15 @@ def cmd_invoice(store: Store, args) -> int:
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
+    return 0
+
+
+def cmd_undo(store: Store, args) -> int:
+    """Handle ``undo``: reverse the most recent change."""
+    undone = store.undo()
+    store.save()
+    for entry in undone:
+        print(f"undid {entry['op']}")
     return 0
 
 
@@ -384,7 +394,7 @@ examples:
 MUTATING_COMMANDS = [
     "add-item", "add-supplier", "receive", "ship", "place-order",
     "receive-order", "cancel-order", "import-csv", "transfer", "ship-order",
-    "catalog-add", "restore", "set-price", "set-discount",
+    "catalog-add", "restore", "set-price", "set-discount", "undo",
     "remove-discount", "set-tax-rate",
 ]
 
@@ -505,6 +515,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output", default=None,
                    help="also write the invoice to this file")
     p.set_defaults(func=cmd_invoice)
+
+    p = sub.add_parser("undo", help="reverse the most recent change")
+    p.set_defaults(func=cmd_undo)
 
     p = sub.add_parser("backup", help="snapshot the current state")
     p.set_defaults(func=cmd_backup)

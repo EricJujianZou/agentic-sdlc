@@ -71,6 +71,7 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
         The number of rows processed.
     """
     count = 0
+    before = store._snapshot()
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -106,4 +107,7 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
                 store.items[sku] = item
             item.set_qty(warehouse, qty)
             count += 1
+    store.log_event("import-csv", {"path": path, "rows": count}, actor,
+                    [{"kind": "snapshot", "before": before,
+                      "after": store._snapshot()}])
     return count
