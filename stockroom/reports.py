@@ -6,7 +6,7 @@ module mutates state, so the CLI never saves after running a report.
 """
 
 from .dates import parse_date, sort_key
-from .models import STATUS_PENDING
+from .models import DEFAULT_CATEGORY, STATUS_PENDING
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -190,6 +190,26 @@ def reorder_suggestions(store: Store,
             "lead_time_days": supplier.lead_time_days if supplier else 0,
         })
     return rows
+
+
+def turnover(store: Store) -> dict:
+    """Units shipped out per category per month.
+
+    Returns:
+        A mapping of category name -> {"YYYY-MM": units}.  Only real
+        shipments count: transfers between warehouses are internal moves
+        and stock coming in is not turnover at all.
+    """
+    result: dict[str, dict[str, int]] = {}
+    for shipment in store.shipments:
+        item = store.items.get(shipment["sku"])
+        category = item.category if item else DEFAULT_CATEGORY
+        parsed = parse_date(shipment["date"])
+        month = (parsed.strftime("%Y-%m") if parsed
+                 else str(shipment["date"])[:7])
+        by_month = result.setdefault(category, {})
+        by_month[month] = by_month.get(month, 0) + shipment["qty"]
+    return result
 
 
 def pending_qty(store: Store, sku: str) -> int:

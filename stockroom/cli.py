@@ -63,7 +63,7 @@ def cmd_receive(store: Store, args) -> int:
 def cmd_ship(store: Store, args) -> int:
     """Handle ``ship``: send units out of the stockroom."""
     item = store.ship(args.sku, args.qty, warehouse=args.warehouse,
-                      actor=args.actor)
+                      date=args.date, actor=args.actor)
     store.save()
     print(f"shipped {args.qty} x {item.sku} from {args.warehouse}, "
           f"now {item.qty_in(args.warehouse)} there ({item.qty} in total)")
@@ -215,6 +215,15 @@ def cmd_report_low(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_turnover(store: Store, args) -> int:
+    """Handle ``report turnover``: units shipped per category per month."""
+    report = reports.turnover(store)
+    for category in sorted(report):
+        for month in sorted(report[category]):
+            print(f"{category:<16} {month}  {report[category][month]:>6}")
+    return 0
+
+
 def cmd_report_monthly(store: Store, args) -> int:
     """Handle ``report monthly``: print orders for one month."""
     rows = reports.monthly_orders(store, args.month)
@@ -331,6 +340,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("sku")
     p.add_argument("qty", type=int)
     p.add_argument("--warehouse", default=MAIN_WAREHOUSE)
+    p.add_argument("--date", default=None,
+                   help="shipment date (default: today)")
     p.set_defaults(func=cmd_ship)
 
     p = sub.add_parser("transfer", help="move stock between warehouses")
@@ -399,6 +410,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by-category", action="store_true",
                    help="group the listing by shelf area")
     p.set_defaults(func=cmd_report_low)
+
+    p = report_sub.add_parser("turnover",
+                              help="units shipped per category per month")
+    p.set_defaults(func=cmd_report_turnover)
 
     p = report_sub.add_parser("monthly", help="orders placed in a month")
     p.add_argument("month", help="month prefix, e.g. 2026-01")

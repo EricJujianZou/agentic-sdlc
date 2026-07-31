@@ -71,6 +71,8 @@ class Store:
         self.orders: list[Order] = []
         # supplier id -> the SKUs that supplier can supply
         self.catalogs: dict[str, list[str]] = {}
+        # one entry per shipment out of the room: sku, qty, warehouse, date
+        self.shipments: list[dict] = []
 
     # ------------------------------------------------------------------
     # persistence
@@ -104,6 +106,7 @@ class Store:
             sid: sorted(canonical_sku(sku) for sku in skus)
             for sid, skus in raw.get("catalogs", {}).items()
         }
+        self.shipments = [dict(entry) for entry in raw.get("shipments", [])]
 
     def _raw_state(self) -> dict:
         """The current state as the plain dict we write to disk."""
@@ -113,6 +116,7 @@ class Store:
             "suppliers": {sid: s.to_dict() for sid, s in self.suppliers.items()},
             "orders": [order.to_dict() for order in self.orders],
             "catalogs": {sid: list(skus) for sid, skus in self.catalogs.items()},
+            "shipments": [dict(entry) for entry in self.shipments],
         }
 
     def save(self) -> None:
@@ -207,11 +211,13 @@ class Store:
         return item
 
     def ship(self, sku: str, qty: int, warehouse: str = MAIN_WAREHOUSE,
-             actor: str | None = None) -> Item:
+             date: str | None = None, actor: str | None = None) -> Item:
         """Remove ``qty`` units of an item from one warehouse.
 
         The shelf cannot go negative: shipping more than that warehouse
-        holds is refused and leaves the item untouched.
+        holds is refused and leaves the item untouched.  Every shipment
+        that does go out is recorded, which is what the turnover and
+        weekly reports read.
         """
         item = self.get_item(sku)
         on_hand = item.qty_in(warehouse)
@@ -220,6 +226,12 @@ class Store:
                 f"cannot ship {qty} x {item.sku} from {warehouse}: "
                 f"only {on_hand} on hand")
         item.add_qty(warehouse, -qty)
+        self.shipments.append({
+            "sku": item.sku,
+            "qty": qty,
+            "warehouse": warehouse,
+            "date": date or datetime.date.today().isoformat(),
+        })
         _record_actor(item, actor)
         return item
 
