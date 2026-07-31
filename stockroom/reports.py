@@ -7,6 +7,7 @@ module mutates state, so the CLI never saves after running a report.
 
 from .dates import parse_date, sort_key
 from .models import DEFAULT_CATEGORY, STATUS_PENDING
+from .money import to_dollars
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -42,26 +43,30 @@ def stock_report(store: Store, by_category: bool = False,
     """
     rows = []
     categories: dict[str, list[dict]] = {}
-    total_value = 0.0
+    total_cents = 0
     for item in store.list_items():
         qty = item.qty if warehouse is None else item.qty_in(warehouse)
         if warehouse is not None and qty == 0:
             continue
-        value = qty * item.unit_price
-        total_value += value
+        # Valuation is done in whole cents so totals come out exact.
+        value_cents = qty * item.unit_price_cents
+        total_cents += value_cents
+        value = to_dollars(value_cents)
         row = {
             "sku": item.sku,
             "name": item.name,
             "qty": qty,
             "unit_price": item.unit_price,
             "value": value,
+            "value_cents": value_cents,
             "category": item.category,
         }
         rows.append(row)
         categories.setdefault(item.category, []).append(row)
     if by_category:
-        return {"categories": categories, "total_value": total_value}
-    return {"rows": rows, "total_value": total_value}
+        return {"categories": categories,
+                "total_value": to_dollars(total_cents)}
+    return {"rows": rows, "total_value": to_dollars(total_cents)}
 
 
 def low_stock(store: Store, threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
@@ -189,6 +194,21 @@ def reorder_suggestions(store: Store,
             "suggested_qty": suggested,
             "lead_time_days": supplier.lead_time_days if supplier else 0,
         })
+    return rows
+
+
+def price_changes(store: Store) -> list[dict]:
+    """Every recorded price change across all items, oldest first.
+
+    Returns:
+        A list of dicts (sku, date, old, new) with the prices in
+        dollars, sorted by date.
+    """
+    rows = []
+    for item in store.list_items():
+        for entry in item.price_history:
+            rows.append({"sku": item.sku, **entry})
+    rows.sort(key=lambda row: sort_key(row["date"]))
     return rows
 
 

@@ -23,6 +23,7 @@ import glob
 import json
 import os
 
+from .money import to_cents
 from .models import (
     DEFAULT_CATEGORY,
     Item,
@@ -37,8 +38,8 @@ from .models import (
 
 # Schema version written to the state file.  Version 1 is the original
 # unversioned layout; 2 added the version stamp; 3 broke item quantities
-# down per warehouse.
-SCHEMA_VERSION = 3
+# down per warehouse; 4 moved money to whole cents.
+SCHEMA_VERSION = 4
 
 
 def _record_actor(record, actor: str | None) -> None:
@@ -250,6 +251,15 @@ class Store:
                 f"only {on_hand} on hand")
         item.add_qty(src, -qty)
         item.add_qty(dst, qty)
+        _record_actor(item, actor)
+        return item
+
+    def set_price(self, sku: str, price, date: str | None = None,
+                  actor: str | None = None) -> Item:
+        """Set an item's unit price, remembering the old one."""
+        item = self.get_item(sku)
+        item.record_price(to_cents(price),
+                          date or datetime.date.today().isoformat())
         _record_actor(item, actor)
         return item
 

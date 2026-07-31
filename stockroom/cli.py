@@ -18,6 +18,7 @@ import sys
 
 from . import __version__, csv_io, reports
 from .models import MAIN_WAREHOUSE
+from .money import format_money
 from .store import Store
 
 
@@ -70,6 +71,15 @@ def cmd_ship(store: Store, args) -> int:
     return 0
 
 
+def cmd_set_price(store: Store, args) -> int:
+    """Handle ``set-price``: change an item's unit price."""
+    item = store.set_price(args.sku, args.price, date=args.date,
+                           actor=args.actor)
+    store.save()
+    print(f"{item.sku} now {format_money(item.unit_price)}")
+    return 0
+
+
 def cmd_transfer(store: Store, args) -> int:
     """Handle ``transfer``: walk stock from one warehouse to another."""
     item = store.transfer(args.sku, args.qty, args.src, args.dst,
@@ -112,7 +122,8 @@ def _print_stock_rows(rows) -> None:
     """Print the body of a stock listing (no header, no total)."""
     for row in rows:
         print(f"{row['sku']:<12} {row['name']:<24} {row['qty']:>6} "
-              f"{row['unit_price']:>10.2f} {row['value']:>10.2f}")
+              f"{format_money(row['unit_price']):>10} "
+              f"{format_money(row['value']):>10}")
 
 
 def cmd_ship_order(store: Store, args) -> int:
@@ -177,7 +188,7 @@ def cmd_report_stock(store: Store, args) -> int:
         report = reports.stock_report(store, warehouse=args.warehouse)
         print(header)
         _print_stock_rows(report["rows"])
-    print(f"Total value: {report['total_value']:.2f}")
+    print(f"Total value: {format_money(report['total_value'])}")
     return 0
 
 
@@ -212,6 +223,14 @@ def cmd_report_low(store: Store, args) -> int:
         for row in suggestions:
             print(f"  {row['sku']}: order {row['suggested_qty']} "
                   f"from {row['supplier_id']}")
+    return 0
+
+
+def cmd_report_price_changes(store: Store, args) -> int:
+    """Handle ``report price-changes``: every recorded price change."""
+    for row in reports.price_changes(store):
+        print(f"{row['date']:<12} {row['sku']:<12} "
+              f"{format_money(row['old'])} -> {format_money(row['new'])}")
     return 0
 
 
@@ -295,7 +314,7 @@ examples:
 MUTATING_COMMANDS = [
     "add-item", "add-supplier", "receive", "ship", "place-order",
     "receive-order", "cancel-order", "import-csv", "transfer", "ship-order",
-    "catalog-add", "restore",
+    "catalog-add", "restore", "set-price",
 ]
 
 
@@ -343,6 +362,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--date", default=None,
                    help="shipment date (default: today)")
     p.set_defaults(func=cmd_ship)
+
+    p = sub.add_parser("set-price", help="change an item's unit price")
+    p.add_argument("sku")
+    p.add_argument("price", type=float)
+    p.add_argument("--date", default=None,
+                   help="date of the change (default: today)")
+    p.set_defaults(func=cmd_set_price)
 
     p = sub.add_parser("transfer", help="move stock between warehouses")
     p.add_argument("sku")
@@ -410,6 +436,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by-category", action="store_true",
                    help="group the listing by shelf area")
     p.set_defaults(func=cmd_report_low)
+
+    p = report_sub.add_parser("price-changes",
+                              help="every recorded price change")
+    p.set_defaults(func=cmd_report_price_changes)
 
     p = report_sub.add_parser("turnover",
                               help="units shipped per category per month")

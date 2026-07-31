@@ -11,7 +11,9 @@ the store can serialise state to JSON without any extra machinery.  The
 dict shape is exactly what ends up on disk, so keep the keys stable.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from .money import to_cents, to_dollars
 
 # Order lifecycle: an order starts out pending, then is either received
 # (goods arrived and were added to stock) or cancelled.
@@ -31,6 +33,17 @@ def canonical_sku(sku: str) -> str:
     return str(sku).strip().upper()
 
 
+def _price_entry(entry: dict) -> dict:
+    """Normalize a stored price-history entry to whole cents."""
+    if "old_cents" in entry or "new_cents" in entry:
+        return {"date": entry["date"],
+                "old_cents": int(entry.get("old_cents", 0)),
+                "new_cents": int(entry.get("new_cents", 0))}
+    return {"date": entry["date"],
+            "old_cents": to_cents(entry.get("old", 0.0)),
+            "new_cents": to_cents(entry.get("new", 0.0))}
+
+
 class Item:
     """A single stocked item.
 
@@ -42,7 +55,8 @@ class Item:
         sku: the stock keeping unit, our unique identifier for the item.
         name: human readable description.
         quantities: mapping of warehouse name -> units held there.
-        unit_price: what we pay per unit, in dollars.
+        unit_price_cents: what we pay per unit, in whole cents.
+        unit_price: the same price as an ordinary dollar amount.
         supplier_id: id of the Supplier we buy this from, or None for
             items we do not reorder.
         category: shelf area the item lives in.
@@ -53,7 +67,9 @@ class Item:
                  unit_price: float = 0.0, supplier_id: str | None = None,
                  category: str = DEFAULT_CATEGORY,
                  last_actor: str | None = None,
-                 quantities: dict | None = None):
+                 quantities: dict | None = None,
+                 unit_price_cents: int | None = None,
+                 price_history: list | None = None):
         self.sku = canonical_sku(sku)
         self.name = name
         self.quantities = {w: int(q) for w, q in (quantities or {}).items()}
@@ -61,10 +77,14 @@ class Item:
         if qty or not self.quantities:
             self.quantities[MAIN_WAREHOUSE] = (
                 self.quantities.get(MAIN_WAREHOUSE, 0) + int(qty))
-        self.unit_price = unit_price
+        self.unit_price_cents = (to_cents(unit_price)
+                                 if unit_price_cents is None
+                                 else int(unit_price_cents))
         self.supplier_id = supplier_id
         self.category = category or DEFAULT_CATEGORY
         self.last_actor = last_actor
+        # Each entry is {"date": ..., "old_cents": ..., "new_cents": ...}.
+        self.price_history_cents = [dict(e) for e in (price_history or [])]
 
     def __repr__(self) -> str:
         return (f"Item(sku={self.sku!r}, name={self.name!r}, "
@@ -74,6 +94,32 @@ class Item:
     def qty(self) -> int:
         """Units on hand across every warehouse."""
         return sum(self.quantities.values())
+
+    @property
+    def unit_price(self) -> float:
+        """What we pay per unit, in dollars."""
+        return to_dollars(self.unit_price_cents)
+
+    @unit_price.setter
+    def unit_price(self, value) -> None:
+        self.unit_price_cents = to_cents(value)
+
+    @property
+    def price_history(self) -> list[dict]:
+        """Recorded price changes, with the amounts in dollars."""
+        return [{"date": entry["date"],
+                 "old": to_dollars(entry["old_cents"]),
+                 "new": to_dollars(entry["new_cents"])}
+                for entry in self.price_history_cents]
+
+    def record_price(self, price_cents: int, date: str) -> None:
+        """Set a new price, remembering what it was before."""
+        self.price_history_cents.append({
+            "date": date,
+            "old_cents": self.unit_price_cents,
+            "new_cents": int(price_cents),
+        })
+        self.unit_price_cents = int(price_cents)
 
     def qty_in(self, warehouse: str) -> int:
         """Units held in one warehouse (0 if it never held this item)."""
@@ -93,10 +139,11 @@ class Item:
             "sku": self.sku,
             "name": self.name,
             "qty": dict(self.quantities),
-            "unit_price": self.unit_price,
+            "unit_price_cents": self.unit_price_cents,
             "supplier_id": self.supplier_id,
             "category": self.category,
             "last_actor": self.last_actor,
+            "price_history": [dict(e) for e in self.price_history_cents],
         }
 
     @classmethod
@@ -104,22 +151,29 @@ class Item:
         """Build an Item from a dict previously produced by to_dict.
 
         Files written before warehouses existed carry a plain integer
-        quantity; all of that stock belongs to the main room.
+        quantity; all of that stock belongs to the main room.  Files
+        written before money moved to cents carry fractional dollars.
         """
         stored_qty = data.get("qty", 0)
         if isinstance(stored_qty, dict):
             quantities, qty = stored_qty, 0
         else:
             quantities, qty = None, stored_qty
+        if "unit_price_cents" in data:
+            price_cents = int(data["unit_price_cents"])
+        else:
+            price_cents = to_cents(data.get("unit_price", 0.0))
         return cls(
             sku=data["sku"],
             name=data["name"],
             qty=qty,
-            unit_price=data.get("unit_price", 0.0),
             supplier_id=data.get("supplier_id"),
             category=data.get("category") or DEFAULT_CATEGORY,
             last_actor=data.get("last_actor"),
             quantities=quantities,
+            unit_price_cents=price_cents,
+            price_history=[_price_entry(e)
+                           for e in data.get("price_history", [])],
         )
 
 
