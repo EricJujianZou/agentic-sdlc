@@ -280,6 +280,31 @@ def invoice_text(store: Store, order_id: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def summary(store: Store, threshold: int = DEFAULT_THRESHOLD) -> dict:
+    """The day's numbers on one screen.
+
+    Returns:
+        A dict with ``valuation`` (a formatted money string),
+        ``low_stock`` (SKUs at or below the threshold, sorted),
+        ``pending_orders``, ``top_category`` (most units shipped
+        overall, None when nothing ever shipped) and ``events``.
+    """
+    shipped = turnover(store)
+    totals = {category: sum(months.values())
+              for category, months in shipped.items()}
+    top_category = None
+    if totals:
+        top_category = max(sorted(totals), key=lambda name: totals[name])
+    return {
+        "valuation": format_money(stock_report(store)["total_value"]),
+        "low_stock": [row["sku"] for row in low_stock(store, threshold)],
+        "pending_orders": sum(1 for order in store.orders
+                              if order.status == STATUS_PENDING),
+        "top_category": top_category,
+        "events": len(store.events),
+    }
+
+
 def price_changes(store: Store) -> list[dict]:
     """Every recorded price change across all items, oldest first.
 

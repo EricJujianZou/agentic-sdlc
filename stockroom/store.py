@@ -659,6 +659,18 @@ class Store:
         del self.undo_stack[marks[1]:]
         del self.redo_stack[marks[2]:]
 
+    def export_archive(self, path: str) -> None:
+        """Write one self-contained snapshot of everything we hold."""
+        _write_json(path, self._backup_state())
+
+    def import_archive(self, path: str) -> None:
+        """Load an archive into an empty data directory."""
+        if self.items or self.orders or self.suppliers or self.events:
+            raise ValueError("data directory is not empty")
+        if os.path.exists(self.path):
+            raise ValueError(f"data directory already holds {self.path}")
+        self._apply_raw(_read_json(path))
+
     def fsck(self) -> list[str]:
         """Cross-check the data and describe anything that looks wrong."""
         problems = []

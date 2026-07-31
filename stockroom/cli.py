@@ -259,11 +259,37 @@ def cmd_export_events(store: Store, args) -> int:
 
 
 def cmd_undo(store: Store, args) -> int:
-    """Handle ``undo``: reverse the most recent change."""
-    undone = store.undo()
+    """Handle ``undo``: reverse the most recent change(s)."""
+    undone = store.undo(args.steps)
     store.save()
     for entry in undone:
         print(f"undid {entry['op']}")
+    return 0
+
+
+def cmd_redo(store: Store, args) -> int:
+    """Handle ``redo``: re-apply what was just undone."""
+    redone = store.redo(args.steps)
+    store.save()
+    for entry in redone:
+        print(f"redid {entry['op']}")
+    return 0
+
+
+def cmd_export_archive(store: Store, args) -> int:
+    """Handle ``export-archive``: write a single-file snapshot."""
+    store.export_archive(args.path)
+    print(f"exported archive to {args.path}")
+    return 0
+
+
+def cmd_import_archive(store: Store, args) -> int:
+    """Handle ``import-archive``: restore a snapshot into an empty dir."""
+    if not os.path.exists(args.path):
+        raise ValueError(f"no such file: {args.path}")
+    store.import_archive(args.path)
+    store.save()
+    print(f"imported archive from {args.path}")
     return 0
 
 
@@ -343,6 +369,18 @@ def cmd_report_low(store: Store, args) -> int:
         for row in suggestions:
             print(f"  {row['sku']}: order {row['suggested_qty']} "
                   f"from {row['supplier_id']}")
+    return 0
+
+
+def cmd_report_summary(store: Store, args) -> int:
+    """Handle ``report summary``: the day's numbers on one screen."""
+    report = reports.summary(store, threshold=args.threshold)
+    print(f"valuation: {report['valuation']}")
+    print(f"low stock (threshold {args.threshold}): "
+          f"{', '.join(report['low_stock'])}")
+    print(f"pending orders: {report['pending_orders']}")
+    print(f"top category: {report['top_category'] or ''}")
+    print(f"events: {report['events']}")
     return 0
 
 
@@ -472,6 +510,7 @@ MUTATING_COMMANDS = [
     "receive-order", "cancel-order", "import-csv", "transfer", "ship-order",
     "catalog-add", "restore", "set-price", "set-discount", "undo",
     "scheduled-reorders", "remove-discount", "set-tax-rate", "batch",
+    "redo", "import-archive",
 ]
 
 # Everything above plus the commands that write other files in the data
@@ -628,7 +667,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_export_events)
 
     p = sub.add_parser("undo", help="reverse the most recent change")
+    p.add_argument("--steps", type=int, default=1,
+                   help="how many changes to step back")
     p.set_defaults(func=cmd_undo)
+
+    p = sub.add_parser("redo", help="re-apply what was just undone")
+    p.add_argument("--steps", type=int, default=1,
+                   help="how many changes to walk forward")
+    p.set_defaults(func=cmd_redo)
+
+    p = sub.add_parser("export-archive", help="write a single-file snapshot")
+    p.add_argument("path")
+    p.set_defaults(func=cmd_export_archive)
+
+    p = sub.add_parser("import-archive",
+                       help="restore a snapshot into an empty data directory")
+    p.add_argument("path")
+    p.set_defaults(func=cmd_import_archive)
 
     p = sub.add_parser("backup", help="snapshot the current state")
     p.set_defaults(func=cmd_backup)
@@ -655,6 +710,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by-category", action="store_true",
                    help="group the listing by shelf area")
     p.set_defaults(func=cmd_report_low)
+
+    p = report_sub.add_parser("summary", help="the day's numbers on one screen")
+    p.add_argument("--threshold", type=int, default=reports.DEFAULT_THRESHOLD)
+    p.set_defaults(func=cmd_report_summary)
 
     p = report_sub.add_parser("weekly", help="units shipped per ISO week")
     p.set_defaults(func=cmd_report_weekly)
