@@ -97,6 +97,11 @@ EVENTS_SUFFIX = ".events.json"
 #: state file's own name with this suffix appended.
 LOCK_SUFFIX = ".lock"
 
+#: The layout stamped into every archive we write.  An archive is one
+#: file rather than a directory, so it carries its own version rather
+#: than the schema one - the state inside it keeps that.
+ARCHIVE_VERSION = 1
+
 #: The stock movements a batch file may ask for, spelled as its ``op``
 #: cell spells them.
 BATCH_OPS = ("receive", "ship", "transfer")
@@ -365,6 +370,20 @@ class Store:
             return
         with open(self.path, encoding="utf-8") as f:
             raw = json.load(f)
+        self._apply_state(raw)
+        self.events = self._load_events(raw)
+        self.redo_stack = self._load_redo()
+        if not _has_embedded_quantities(raw):
+            self._load_quantities()
+
+    def _apply_state(self, raw: dict) -> None:
+        """Take the state - everything but the trail - out of ``raw``.
+
+        Split out of ``load`` so an archive, which carries the same
+        payload inside it, comes back in through exactly the code a
+        state file does rather than a second reader that could drift
+        from it.
+        """
         self.items = {
             sku: Item.from_dict(data) for sku, data in raw.get("items", {}).items()
         }
@@ -382,10 +401,6 @@ class Store:
             for category, percent in raw.get("discounts", {}).items()
         }
         self.tax_rate = float(raw.get("tax_rate", 0.0))
-        self.events = self._load_events(raw)
-        self.redo_stack = self._load_redo()
-        if not _has_embedded_quantities(raw):
-            self._load_quantities()
 
     def _load_orders(self, raw: dict) -> list[dict]:
         """The order records: ``orders.json``'s, else ``raw``'s own."""
@@ -511,11 +526,18 @@ class Store:
         every earlier version used.  The events are not part of it:
         they live in their own file, so what this writes is state alone.
         """
+        _write_json(path, self._state_payload())
+
+    def _state_payload(self) -> dict:
+        """The whole state as one dict: meta, stock, orders and all.
+
+        What a backup holds, and what an archive carries inside it.
+        """
         raw = self._meta()
         raw["items"] = {sku: item.to_dict()
                         for sku, item in self.items.items()}
         raw["orders"] = [order.to_dict() for order in self.orders]
-        _write_json(path, raw)
+        return raw
 
     def _write_events(self, path: str) -> None:
         """Serialize the audit trail, and its redo history, to ``path``."""
@@ -581,6 +603,79 @@ class Store:
         # Nothing was logged, but every record in memory just changed.
         self.revision += 1
         return name
+
+    # ------------------------------------------------------------------
+    # archives
+    # ------------------------------------------------------------------
+
+    def data_files(self) -> list[str]:
+        """The paths in the data directory this store keeps its data in.
+
+        The state file and its companions, whichever of them exist -
+        what makes a data directory occupied rather than empty.  The
+        lock marker is not data, but a directory holding one is not
+        somewhere to unpack an archive either, so it counts.
+        """
+        candidates = [self.path, self.orders_path(), self.events_path(),
+                      self.lock_path()]
+        candidates += [self.items_path(warehouse)
+                       for warehouse in self._stored_warehouses()]
+        candidates += [os.path.join(self._backup_dir(), name)
+                       for name in self.list_backups()]
+        return [path for path in candidates if os.path.exists(path)]
+
+    def archive(self) -> dict:
+        """Everything this store knows, as one self-contained dict.
+
+        The state goes in whole - the same payload a backup holds, so
+        the quantities and the orders travel inside it rather than in
+        sibling files - and the audit trail (with its redo history)
+        alongside it, since a snapshot you restore onto another machine
+        should be able to answer "how did we get here", not just "where
+        are we".  The read-only marker is deliberately left out: it says
+        something about that copy of the data, not about the stock.
+        """
+        return {
+            "archive_version": ARCHIVE_VERSION,
+            "state": self._state_payload(),
+            "events": [dict(event) for event in self.events],
+            "redo": [dict(event) for event in self.redo_stack],
+        }
+
+    def export_archive(self, path: str) -> str:
+        """Write the whole store to ``path`` as one file, and return it."""
+        _write_json(path, self.archive())
+        return path
+
+    def import_archive(self, path: str) -> None:
+        """Unpack an archive into this - empty - data directory.
+
+        Refused with ``ValueError`` before anything is written if the
+        directory already holds data: an archive is a whole state, so
+        unpacking it over one that exists would not merge but silently
+        replace it, and the operator meant a fresh directory.
+
+        Nothing is logged.  The trail comes out of the archive exactly
+        as it went in, so that the reports on the restored copy - the
+        event count among them - read the same as on the original.
+        """
+        if not os.path.exists(path):
+            raise ValueError(f"no such file: {path}")
+        occupied = self.data_files()
+        if occupied:
+            raise ValueError(
+                f"{self.data_dir()} already contains data "
+                f"({os.path.basename(occupied[0])}); "
+                "import-archive needs an empty data directory")
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+        if not isinstance(raw, dict) or "state" not in raw:
+            raise ValueError(f"{path} is not a stockroom archive")
+        self._apply_state(raw["state"])
+        self.events = [dict(event) for event in raw.get("events", [])]
+        self.redo_stack = [dict(event) for event in raw.get("redo", [])]
+        self.revision += 1
+        self.save()
 
     # ------------------------------------------------------------------
     # items

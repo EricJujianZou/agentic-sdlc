@@ -42,16 +42,7 @@
 
 - T47 - `reports.summary(store, threshold=DEFAULT_THRESHOLD)` -> `{"valuation"` (dollars, from `stock_report`), `"threshold"`, `"low_stock"` (the `low_stock` SKUs, sorted), `"pending_orders"`, `"top_category"` (most units shipped over all time, summing `turnover`'s months, ties by name, `None` when nothing ever shipped), `"events"` (trail length)`}` - built from the existing reports so the dashboard cannot drift from them. Kind "summary" in `cache.KINDS`; CLI `report summary [--threshold N]` (`read_only_ok=True`) prints the five lines, money via `format_money`, `(none)` for an empty top category; never saves.
 
-- T48 - `undo(steps=1)`/`redo(steps=1)` return the events worked, in the order
-  worked, all-or-nothing: `_history_window(history, steps, action, table)`
-  refuses (`nothing to undo|redo`, `cannot ACTION N changes: only M to ACTION`,
-  `cannot ACTION OP`) before anything moves. `undo` takes the trail's newest end
-  first, pushing each event onto `Store.redo_stack`; `redo` pops that stack (so
-  it walks forward in the original order), applies `_REDO[op](args, actor)`
-  (handlers mirroring `_UNDO`'s eight ops) and puts the event back on the trail
-  as it was. `log_event` clears `redo_stack` (any new change ends the redo
-  history); the stack rides in the events sidecar (`{"events", "redo"}`, via
-  `_read_sidecar`/`_load_redo`, missing = none) and joins `_batch_snapshot`.
-  CLI `undo --steps N` + new `redo [--steps N]`, an `undid|redid OP` line each.
+- T48 - `undo(steps=1)`/`redo(steps=1)` return the events worked, in the order worked, all-or-nothing: `_history_window(history, steps, action, table)` refuses (`nothing to undo|redo`, `cannot ACTION N changes: only M to ACTION`, `cannot ACTION OP`) before anything moves. `undo` takes the trail's newest end first, pushing each event onto `Store.redo_stack`; `redo` pops that stack (forward, original order), applies `_REDO[op](args, actor)` (mirroring `_UNDO`'s eight ops) and puts the event back on the trail. `log_event` clears `redo_stack`; the stack rides in the events sidecar (`{"events", "redo"}`, `_load_redo`) and joins `_batch_snapshot`. CLI `undo --steps N` + `redo [--steps N]`, an `undid|redid OP` line each.
+- T49 - single-file archive: `Store.archive()` -> `{"archive_version"` (=1)`, "state"` (`_state_payload()`, split out of `_write` - the whole state, quantities and orders embedded)`, "events", "redo"}`; `export_archive(path)` writes it, `import_archive(path)` refuses (ValueError, before writing) when `data_files()` finds any store file - state/orders/events/lock/warehouse/backup - else `_apply_state()` (split out of `load`, so an archive reads in through the load path) + the trail verbatim, then `save()`. Logs nothing and bumps `revision`: the trail must round-trip exactly, since `report summary` counts it. The lock marker stays out. CLI `export-archive PATH` (`read_only_ok=True`) / `import-archive PATH` (mutating).
 
-## current - none (T48 done)
+## current - none (T49 done)

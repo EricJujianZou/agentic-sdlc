@@ -501,6 +501,25 @@ def cmd_export_events(store: Store, args) -> int:
     return 0
 
 
+def cmd_export_archive(store: Store, args) -> int:
+    """Handle ``export-archive``: write the whole store to one file."""
+    store.export_archive(args.path)
+    print(f"exported archive to {args.path}")
+    return 0
+
+
+def cmd_import_archive(store: Store, args) -> int:
+    """Handle ``import-archive``: unpack an archive into an empty dir.
+
+    The store saves itself as part of the import, so there is nothing
+    to save here; a directory that already holds data is refused before
+    a byte is written.
+    """
+    store.import_archive(args.path)
+    print(f"imported archive from {args.path}")
+    return 0
+
+
 def cmd_import_csv(store: Store, args) -> int:
     """Handle ``import-csv``: merge items from a CSV file."""
     if not os.path.exists(args.path):
@@ -888,6 +907,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--since", default=None, metavar="YYYY-MM-DD",
                    help="keep only the events stamped this day or later")
     p.set_defaults(func=cmd_export_events, read_only_ok=True)
+
+    p = sub.add_parser("export-archive",
+                       help="write the whole store to one JSON file")
+    p.add_argument("path")
+    p.set_defaults(func=cmd_export_archive, read_only_ok=True)
+
+    p = sub.add_parser("import-archive",
+                       help="restore a whole store from an archive file")
+    p.add_argument("path")
+    p.set_defaults(func=cmd_import_archive)
 
     p = sub.add_parser("import-csv", help="read items from a CSV file")
     p.add_argument("path")
