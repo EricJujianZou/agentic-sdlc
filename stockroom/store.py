@@ -4,18 +4,20 @@ The whole application state lives in one JSON file, stamped with the
 schema version it was written by::
 
     {
-        "version":   3,
+        "version":   4,
         "items":     {sku: {...}, ...},
         "suppliers": {supplier_id: {...}, ...},
         "orders":    [{...}, ...],
         "shipments": [{...}, ...]
     }
 
-Version 3 broke each item's ``qty`` down per warehouse; version 2 and
-the original unversioned layout (version 1, no ``"version"`` key) store
-it as one total.  Both still load - their stock lands in the default
-warehouse - and are rewritten in the current layout the next time state
-is saved.
+Version 4 keeps every price as a whole number of cents; version 3 and
+earlier wrote fractional dollars.  Version 3 broke each item's ``qty``
+down per warehouse; version 2 and the original unversioned layout
+(version 1, no ``"version"`` key) store it as one total.  All of them
+still load - their prices are converted and their stock lands in the
+default warehouse - and are rewritten in the current layout the next
+time state is saved.
 
 ``Store`` loads that file into dataclasses, lets callers mutate the state
 through simple methods, and writes it back out with ``save()``.  All the
@@ -47,7 +49,7 @@ from .models import (
 
 #: Schema version stamped into every state file we write.  Version 1 is
 #: the original unversioned layout, which carries no ``"version"`` key.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 #: What separates the state file's name from a backup's timestamp.
 BACKUP_SUFFIX = ".bak-"
@@ -268,17 +270,20 @@ class Store:
 
         The old and new price are noted on the item's ``price_history``,
         dated ``date`` or today when no date is given, so a report can
-        say later what anything cost at the time.
+        say later what anything cost at the time.  The history records
+        the price the item ended up holding, rounded to whole cents,
+        rather than whatever was typed.
         """
         item = self.get_item(sku)
         if date is None:
             date = datetime.date.today().isoformat()
+        old_price = item.unit_price
+        item.unit_price = price
         item.price_history.append({
             "date": date,
-            "old": item.unit_price,
-            "new": price,
+            "old": old_price,
+            "new": item.unit_price,
         })
-        item.unit_price = price
         record_actor(item, actor)
         return item
 

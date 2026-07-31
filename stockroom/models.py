@@ -13,6 +13,7 @@ dict shape is exactly what ends up on disk, so keep the keys stable.
 """
 
 from dataclasses import dataclass, field
+from decimal import Decimal, ROUND_HALF_UP
 
 # Order lifecycle: an order starts out pending, then is either received
 # (goods arrived and were added to stock) or cancelled.
@@ -27,6 +28,25 @@ DEFAULT_CATEGORY = "uncategorized"
 # warehouse named - and all stock in state files written before we rented
 # the second room - lives here.
 DEFAULT_WAREHOUSE = "main"
+
+
+def to_cents(dollars: float) -> int:
+    """Return a dollar amount as a whole number of cents.
+
+    Money is held in cents everywhere inside the system: a fraction of a
+    dollar has no exact binary form, so keeping dollars around lets a
+    long column of them drift off what the same sum does on paper.
+    Dollars are what people type and read, so they are converted the
+    moment they arrive - through the decimal spelling of the amount, and
+    rounding a half cent up, the way a till does.
+    """
+    cents = Decimal(str(dollars)) * 100
+    return int(cents.to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def to_dollars(cents: int) -> float:
+    """Return whole cents as a dollar amount, for showing and reporting."""
+    return cents / 100
 
 
 def normalize_sku(sku: str) -> str:
@@ -66,7 +86,12 @@ class Item:
         qty: number of units currently on hand, across all warehouses.
             Passed to the constructor as the starting stock, which lands
             in ``DEFAULT_WAREHOUSE``.
-        unit_price: what we pay per unit, in dollars.
+        unit_price_cents: what we pay per unit, in whole cents.  This is
+            the figure the item actually holds and the one all money
+            arithmetic uses.
+        unit_price: the same price in dollars.  Reading and writing it
+            (including ``Item(unit_price=3.5)``) goes through the cents
+            above, so an item never holds a fraction of a cent.
         supplier_id: id of the Supplier we buy this from, or None for
             items we do not reorder.
         category: shelf area the item belongs to.
@@ -74,8 +99,9 @@ class Item:
             no change has been made with an actor named.
         quantities: units on hand per warehouse name.
         price_history: one entry per price change, oldest first, each a
-            dict of date / old price / new price.  An item whose price
-            has never been changed has an empty history.
+            dict of date / old price / new price, the prices in dollars.
+            An item whose price has never been changed has an empty
+            history.
     """
 
     sku: str
@@ -129,16 +155,28 @@ class Item:
         self.qty = sum(self.quantities.values())
 
     def to_dict(self) -> dict:
-        """Return a JSON-ready dict for this item."""
+        """Return a JSON-ready dict for this item.
+
+        Prices go to disk as whole cents - ``unit_price_cents`` and, on
+        each history entry, ``old_cents`` / ``new_cents`` - so a state
+        file holds no fractional amount either.
+        """
         return {
             "sku": self.sku,
             "name": self.name,
             "qty": dict(self.quantities),
-            "unit_price": self.unit_price,
+            "unit_price_cents": self.unit_price_cents,
             "supplier_id": self.supplier_id,
             "category": self.category,
             "last_actor": self.last_actor,
-            "price_history": [dict(entry) for entry in self.price_history],
+            "price_history": [
+                {
+                    "date": entry["date"],
+                    "old_cents": to_cents(entry["old"]),
+                    "new_cents": to_cents(entry["new"]),
+                }
+                for entry in self.price_history
+            ],
         }
 
     @classmethod
@@ -149,22 +187,62 @@ class Item:
         plain total in files written before warehouses existed; a total
         is read as that many units in the default warehouse.  Items
         written before prices were tracked have no history, which is
-        simply an empty one.
+        simply an empty one.  Prices are stored as whole cents; files
+        written before that carry them as fractional dollars, which are
+        converted on the way in.
         """
         stored_qty = data.get("qty", 0)
         quantities = dict(stored_qty) if isinstance(stored_qty, dict) else {}
-        return cls(
+        item = cls(
             sku=data["sku"],
             name=data["name"],
             qty=0 if quantities else stored_qty,
-            unit_price=data.get("unit_price", 0.0),
             supplier_id=data.get("supplier_id"),
             category=data.get("category") or DEFAULT_CATEGORY,
             last_actor=data.get("last_actor"),
             quantities=quantities,
-            price_history=[dict(entry)
+            price_history=[_price_change_from_dict(entry)
                            for entry in data.get("price_history", [])],
         )
+        if "unit_price_cents" in data:
+            item.unit_price_cents = int(data["unit_price_cents"])
+        else:
+            item.unit_price = data.get("unit_price", 0.0)
+        return item
+
+
+def _read_unit_price(item: Item) -> float:
+    """The unit price in dollars, worked out from the cents held."""
+    return to_dollars(item.unit_price_cents)
+
+
+def _write_unit_price(item: Item, dollars: float) -> None:
+    """Set the unit price from a dollar amount, holding it as cents."""
+    item.unit_price_cents = to_cents(dollars)
+
+
+#: ``unit_price`` stays an ordinary field of the dataclass - so
+#: ``Item(unit_price=3.5)`` and ``item.unit_price`` still speak dollars -
+#: but nothing is kept behind it: this property turns every read and write
+#: into ``unit_price_cents``, which is what the item holds.  It is attached
+#: after the decorator has run so the field keeps its plain 0.0 default.
+Item.unit_price = property(_read_unit_price, _write_unit_price)
+
+
+def _price_change_from_dict(entry: dict) -> dict:
+    """Read one stored price-change entry, in dollars.
+
+    Entries record whole cents (``old_cents`` / ``new_cents``); ones
+    written before that carry fractional dollars under ``old`` / ``new``
+    and are taken as they are.
+    """
+    if "old_cents" in entry:
+        return {
+            "date": entry["date"],
+            "old": to_dollars(entry["old_cents"]),
+            "new": to_dollars(entry["new_cents"]),
+        }
+    return dict(entry)
 
 
 @dataclass

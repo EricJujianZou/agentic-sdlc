@@ -5,9 +5,7 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
-from decimal import Decimal
-
-from .models import STATUS_PENDING
+from .models import STATUS_PENDING, to_dollars
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -35,33 +33,34 @@ def stock_report(store: Store,
         line ``value`` (qty times unit price) - or, when ``by_category``
         is set, ``categories``, mapping each category name to the rows
         for that category (still sorted by SKU).  Both the line values
-        and the total are worked out in exact decimal arithmetic, so
-        they match a hand-added column to the cent.
+        and the total are worked out in whole cents, so they match a
+        hand-added column to the cent.
     """
     rows = []
-    total_value = Decimal(0)
+    total_cents = 0
     categories: dict[str, list[dict]] = {}
     for item in store.list_items():
         qty = item.qty if warehouse is None else item.qty_in(warehouse)
         if warehouse is not None and qty == 0:
             continue
-        # Money is counted in decimal, not binary: a price like 0.10 has no
-        # exact float form, so multiplying and adding them up drifts a
-        # fraction of a cent off what the same sum does on paper.
-        value = qty * Decimal(str(item.unit_price))
-        total_value += value
+        # Money is counted in whole cents: a price like 0.10 has no exact
+        # form as a fraction of a dollar, so multiplying and adding those
+        # up drifts off what the same column does on paper.
+        value_cents = qty * item.unit_price_cents
+        total_cents += value_cents
         row = {
             "sku": item.sku,
             "name": item.name,
             "qty": qty,
             "unit_price": item.unit_price,
-            "value": float(value),
+            "value": to_dollars(value_cents),
         }
         rows.append(row)
         categories.setdefault(item.category, []).append(row)
     if by_category:
-        return {"categories": categories, "total_value": float(total_value)}
-    return {"rows": rows, "total_value": float(total_value)}
+        return {"categories": categories,
+                "total_value": to_dollars(total_cents)}
+    return {"rows": rows, "total_value": to_dollars(total_cents)}
 
 
 def low_stock(store: Store, threshold: int = DEFAULT_THRESHOLD) -> list[dict]:

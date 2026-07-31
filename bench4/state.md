@@ -19,9 +19,8 @@
   `get_item` (so receive/ship/orders too), `place_order`, `csv_io.import_items`.
 - T09 — `reports.search_items(store, query)` -> sku/name/qty rows matching name
   OR sku (case-insensitive substring); CLI `search QUERY`.
-- T10 — `Item.last_actor`/`Order.last_actor` (persisted) +
-  `models.record_actor(record, actor)` (writes only when not None); `actor=None`
-  on every mutating `Store` method + `csv_io.import_items`; CLI `--actor NAME`.
+- T10 — `Item.last_actor`/`Order.last_actor` + `models.record_actor(record,
+  actor)` (writes only when not None); `actor=None` on mutators; CLI `--actor`.
 - T11 — `store.SCHEMA_VERSION` -> top-level `"version"` key (first) by `save()`.
 - T12 — warehouses: `DEFAULT_WAREHOUSE`="main"; `Item.quantities` is the truth,
   `qty` its total; `qty_in(wh)`/`adjust(qty,wh)`/`set_stock(qty,wh)`; `receive`/
@@ -37,23 +36,21 @@
 - T16 — `Store._write(path)` split out of `save()`; `backup()` ->
   `<state-file>.bak-<colon-free stamp>` beside it, `list_backups()` sorted,
   `restore(name)` -> ValueError unless listed, else copy over + reload.
-- T17 — `Order.shipped_qty` (persisted; older -> `qty` when received) +
-  `outstanding`; `ship_order(id, qty)` pending-only, `1<=qty<=outstanding` or
-  ValueError, else `_book_delivery` (received at 0); `receive_order` = the rest.
-- T18 — `Supplier.skus` (persisted, older -> []), `add_supplier_sku(sid,sku)`/`catalog_skus`/
-  `suppliers_for(sku)`; `place_order(...,supplier_id=None)` sets `Order.supplier_id`:
-  named > sole catalogue match > item's own; several matches -> ValueError.
-- T19 — CSV v3: `warehouse` last in `csv_io.FIELDNAMES`; export = one row per warehouse
-  holding stock (sorted, `qty` = that room's), stockless -> `main`/0. Import is header-name
-  driven (any column order); `warehouse` column -> `set_warehouse_stock`, none -> main.
-- T20 — `models.Shipment` (sku/qty/warehouse/date) in top-level `"shipments"`
-  (missing -> []); `ship(..., date=None)` -> today appends one (only `ship`);
-  `turnover(store)` -> `{category: {"YYYY-MM": units}}`; CLI `report turnover`.
-- T21 — `Item.price_history` of `{"date","old","new"}` (persisted, missing ->
-  []); `set_price(sku, price, date=None, actor=None)` -> today appends one, sets
-  `unit_price`; `reports.price_changes(store)` -> sku/date/old/new sorted by
-  `_normalize_date`. CLI `set-price SKU PRICE [--date]`, `report price-changes`.
-- T22 — `stock_report` values exact: `qty * Decimal(str(item.unit_price))`,
-  `float()` only when filling `value`/`total_value`. API/CLI unchanged.
+- T17 — `Order.shipped_qty` (older -> `qty` when received) + `outstanding`;
+  `ship_order(id, qty)` pending-only, 1..outstanding; `receive_order` = the rest.
+- T18 — `Supplier.skus` (older -> []), `add_supplier_sku`/`catalog_skus`/
+  `suppliers_for`; `place_order(...,supplier_id=)`: named > sole match > item's.
+- T19 — CSV v3: `warehouse` last in `csv_io.FIELDNAMES`, one row per stocked
+  warehouse; import is header-name driven, no column -> main.
+- T20 — `models.Shipment` (sku/qty/warehouse/date) in `"shipments"`; `ship(...,
+  date=None)` appends one; `turnover(store)` -> `{category: {"YYYY-MM": units}}`.
+- T21 — `Item.price_history` of `{"date","old","new"}` (dollars); `set_price(sku,
+  price, date=None, actor=None)`; `reports.price_changes`; CLI `set-price`.
+- T22 — `stock_report` values exact (no float drift in line values or total).
+  API/CLI unchanged.
+- T23 — money is whole cents: `models.to_cents`/`to_dollars`,
+  `Item.unit_price_cents` is the truth and `unit_price` a dollars property over
+  it; schema v4 stores `unit_price_cents` + history `old_cents`/`new_cents`
+  (v1-v3 float keys still read); `stock_report` sums in cents. API/CLI same.
 
-## current — none (T22 done)
+## current — none (T23 done)
