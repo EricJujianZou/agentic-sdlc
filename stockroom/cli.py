@@ -228,6 +228,31 @@ def cmd_import_csv(store: Store, args) -> int:
     return 0
 
 
+def cmd_backup(store: Store, args) -> int:
+    """Handle ``backup``: snapshot the state beside the state file."""
+    name = store.backup()
+    print(f"created backup {name}")
+    return 0
+
+
+def cmd_list_backups(store: Store, args) -> int:
+    """Handle ``list-backups``: print the backup names, oldest first."""
+    for name in store.list_backups():
+        print(name)
+    return 0
+
+
+def cmd_restore(store: Store, args) -> int:
+    """Handle ``restore``: put the state back to a named backup.
+
+    Nothing is saved afterwards - the backup is the state file now, and
+    writing this session's stale copy over it would undo the restore.
+    """
+    name = store.restore(args.name)
+    print(f"restored from {name}")
+    return 0
+
+
 # ----------------------------------------------------------------------
 # argument parsing
 # ----------------------------------------------------------------------
@@ -245,6 +270,8 @@ examples:
   stockroom --data ./data report monthly 2026-07
   stockroom --data ./data search widget
   stockroom --data ./data export-csv items.csv
+  stockroom --data ./data backup
+  stockroom --data ./data restore state.json.bak-20260101T090000000000
 """
 
 
@@ -373,6 +400,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("path")
     _add_actor(p)
     p.set_defaults(func=cmd_import_csv)
+
+    p = sub.add_parser("backup", help="snapshot the current state")
+    p.set_defaults(func=cmd_backup)
+
+    p = sub.add_parser("list-backups", help="list the existing backups")
+    p.set_defaults(func=cmd_list_backups)
+
+    p = sub.add_parser("restore", help="put the state back to a backup")
+    p.add_argument("name", help="backup name, as printed by backup")
+    p.set_defaults(func=cmd_restore)
 
     return parser
 

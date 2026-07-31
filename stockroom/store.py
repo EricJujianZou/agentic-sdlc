@@ -25,8 +25,10 @@ Errors are reported by raising ``ValueError`` with a human readable
 message; the CLI turns those into exit code 1.
 """
 
+import datetime
 import json
 import os
+import shutil
 
 from .models import (
     DEFAULT_CATEGORY,
@@ -44,6 +46,19 @@ from .models import (
 #: Schema version stamped into every state file we write.  Version 1 is
 #: the original unversioned layout, which carries no ``"version"`` key.
 SCHEMA_VERSION = 3
+
+#: What separates the state file's name from a backup's timestamp.
+BACKUP_SUFFIX = ".bak-"
+
+
+def _backup_stamp() -> str:
+    """Timestamp for a backup name: sortable, and legal in a filename.
+
+    No colons (Windows refuses them), so this is safe on any OS, and the
+    fields run big-endian, so sorting the names sorts them by age.  The
+    microseconds are there to keep two backups a moment apart distinct.
+    """
+    return datetime.datetime.now().strftime("%Y%m%dT%H%M%S%f")
 
 
 class Store:
@@ -93,15 +108,69 @@ class Store:
 
         The file always declares the schema version it was written by.
         """
+        self._write(self.path)
+
+    def _write(self, path: str) -> None:
+        """Serialize the current state to ``path`` in the current layout."""
         raw = {
             "version": SCHEMA_VERSION,
             "items": {sku: item.to_dict() for sku, item in self.items.items()},
             "suppliers": {sid: s.to_dict() for sid, s in self.suppliers.items()},
             "orders": [order.to_dict() for order in self.orders],
         }
-        with open(self.path, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(raw, f, indent=2)
             f.write("\n")
+
+    # ------------------------------------------------------------------
+    # backups
+    # ------------------------------------------------------------------
+
+    def _backup_dir(self) -> str:
+        """The directory backups live in - the state file's own."""
+        return os.path.dirname(self.path) or "."
+
+    def _backup_prefix(self) -> str:
+        """What every backup name for this state file starts with."""
+        return os.path.basename(self.path) + BACKUP_SUFFIX
+
+    def backup(self) -> str:
+        """Snapshot the current state beside the state file.
+
+        Returns the backup's name (not its full path) - the same name
+        ``list_backups`` reports and ``restore`` takes.
+        """
+        name = self._backup_prefix() + _backup_stamp()
+        self._write(os.path.join(self._backup_dir(), name))
+        return name
+
+    def list_backups(self) -> list[str]:
+        """The existing backup names, oldest first.
+
+        The stamp sorts the same way it ages, so plain name order is age
+        order.  Having no backups at all is not a problem, just an empty
+        list.
+        """
+        directory = self._backup_dir()
+        if not os.path.isdir(directory):
+            return []
+        prefix = self._backup_prefix()
+        return sorted(name for name in os.listdir(directory)
+                      if name.startswith(prefix))
+
+    def restore(self, name: str) -> str:
+        """Put the state back to what the named backup captured.
+
+        A name that is not one of ours is refused with ``ValueError``
+        before anything is written, so a typo cannot cost you the state
+        you were trying to protect.  On success the state file *is* the
+        backup, and this store is reloaded from it.
+        """
+        if name not in self.list_backups():
+            raise ValueError(f"unknown backup {name}")
+        shutil.copyfile(os.path.join(self._backup_dir(), name), self.path)
+        self.load()
+        return name
 
     # ------------------------------------------------------------------
     # items
