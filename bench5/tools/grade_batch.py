@@ -45,6 +45,8 @@ def main():
     ap.add_argument("--eval-dir", default="bench5_eval/out_batch",
                     help="output dir under the harness checkout")
     ap.add_argument("--redo", action="store_true")
+    ap.add_argument("--keep-images", action="store_true",
+                    help="skip post-run removal of sweap eval images (disk!)")
     args = ap.parse_args()
 
     sh(["git", "fetch", "origin"])
@@ -78,6 +80,23 @@ def main():
     if not patches:
         print("nothing to grade")
         return
+
+    # Pre-pull eval images via docker CLI: the harness's SDK pull fails
+    # silently on large images and grades become "no output.json".
+    import sys
+    sys.path.insert(0, HARNESS_WIN)
+    from helper_code.image_uri import get_dockerhub_image_uri
+    for iid, row in rows.items():
+        uri = get_dockerhub_image_uri(iid, "jefzda", row["repo"])
+        for attempt in (1, 2):
+            r = subprocess.run(["docker", "pull", "-q", uri],
+                               capture_output=True, text=True, timeout=3600)
+            if r.returncode == 0:
+                print(f"pulled {uri.split(':')[1][:60]}")
+                break
+            print(f"pull attempt {attempt} failed for {iid[:50]}: {r.stderr[:200]}")
+        else:
+            print(f"GIVING UP on image for {iid[:60]} - will grade as infra-fail")
 
     eval_dir_win = os.path.join(HARNESS_WIN, "bench5_eval")
     os.makedirs(eval_dir_win, exist_ok=True)
@@ -124,6 +143,14 @@ def main():
         verdicts[branch] = {"pass": needed <= passed,
                             "n_needed": len(needed), "n_passed_needed":
                             len(needed & passed), **info}
+
+    if not args.keep_images:
+        # ~5-20GB per instance image; the disk cannot hold a full campaign
+        rm = subprocess.run(
+            'docker images --format "{{.Repository}}:{{.Tag}}" | '
+            'grep "^jefzda/sweap-images:" | xargs -r docker rmi',
+            shell=True, capture_output=True, text=True)
+        print("image cleanup:", (rm.stdout or rm.stderr)[-300:].strip() or "nothing to remove")
 
     os.makedirs(os.path.dirname(os.path.join(REPO, args.out)), exist_ok=True)
     with open(os.path.join(REPO, args.out), "w", newline="\n") as f:

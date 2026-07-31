@@ -89,6 +89,29 @@ within-model scaffolding contrasts (H2, H3) nor McNemar pairing, but the
 cross-model comparisons (H1, H5) lean on the low-probe subset. Raw
 results: `probe/probe_results.json`.
 
+## 2026-07-31/08-01 — Pilot execution (gate 5, in progress)
+
+20 fresh cloud sessions (10 decile instances x {sonnet-5, opus-5}), bare
+kickoff per `pilot/kickoff_template.md`, model pinned via trigger
+session_context, `persist_session:false`. Session ledger:
+`pilot/sessions.json`. Proof pair (r005 both models) fired 20:36 UTC and
+delivered in ~36/55 min; remaining 18 fired pipelined 23:01-23:26 UTC.
+
+Execution notes:
+- Both r005 sessions self-reported `started_at` BEFORE the trigger fire
+  time (20:24/20:15 vs 20:36:21) — self-reported timestamps are treated as
+  unreliable; fire times + push times are ground truth for H4.
+- Local grading infra incidents (do not affect subjects): (a) WSL wedged
+  twice after .wslconfig change (owner thermal request: 6GB/3cpu) — full
+  shutdown + service restart required; Docker Desktop relaunch races its
+  own shutdown if issued immediately (backend log-confirmed) — wait ~15s.
+  (b) The harness SDK image pull fails silently on large images -> grades
+  read "no output.json"; fixed by CLI pre-pull in `tools/grade_batch.py`
+  (all such non-grades re-run, never scored). (c) The WSL docker socket
+  dropped transiently mid-batch (memory pressure suspected) failing 4
+  evals with FileNotFoundError; re-run. Rule stands: a grade only counts
+  if `{prefix}_output.json` exists with a parsed test list.
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are

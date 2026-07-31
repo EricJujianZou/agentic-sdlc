@@ -1,0 +1,83 @@
+{
+ "bench5/pilot-sonnet5-r015": {
+  "pass": false,
+  "n_needed": 21,
+  "n_passed_needed": 0,
+  "status": "collected",
+  "instance_id": "instance_flipt-io__flipt-86906cbfc3a5d3629a583f98e6301142f5f14bdb-v6bea0cc3a6fc532d7da914314f2944fc1cd04dee",
+  "prefix": "bench5_pilot-sonnet5-r015",
+  "meta": {
+   "instance_id": "instance_flipt-io__flipt-86906cbfc3a5d3629a583f98e6301142f5f14bdb-v6bea0cc3a6fc532d7da914314f2944fc1cd04dee",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-07-31T23:02:13Z",
+   "finished_at": "2026-07-31T23:12:09Z",
+   "turns_estimate": 30,
+   "self_assessment": "Empty patch submitted: at the given base_commit, internal/storage/fs/cache.go's Delete and internal/storage/fs/git/store.go's listRemoteRefs already implement every requirement verbatim (fixed-ref rejection with the exact 'cannot be deleted' substring, GC of orphaned snapshot keys via the LRU's onEvicted callback, idempotent no-op delete for unknown refs, thread-safe mutex-guarded access, and listRemoteRefs with 10s timeout and the exact 'origin remote not found' substring), confirmed by a full green run of the existing package test suite plus two targeted tests I wrote and ran (then removed) to directly exercise the GC-on-delete behavior since no existing test covered it; I believe this is correct because the requirements describe already-present, already-tested code rather than a gap, so no source change was warranted."
+  },
+  "patch_bytes": 0
+ },
+ "bench5/pilot-opus5-r015": {
+  "pass": false,
+  "note": "no output.json",
+  "status": "collected",
+  "instance_id": "instance_flipt-io__flipt-86906cbfc3a5d3629a583f98e6301142f5f14bdb-v6bea0cc3a6fc532d7da914314f2944fc1cd04dee",
+  "prefix": "bench5_pilot-opus5-r015",
+  "meta": {
+   "instance_id": "instance_flipt-io__flipt-86906cbfc3a5d3629a583f98e6301142f5f14bdb-v6bea0cc3a6fc532d7da914314f2944fc1cd04dee",
+   "model": "claude-opus-5",
+   "started_at": "2026-07-31T22:58:00Z",
+   "finished_at": "2026-07-31T23:24:00Z",
+   "turns_estimate": 24,
+   "self_assessment": "Empty patch, submitted deliberately: every behavior the issue asks for is already present and passing at base commit 358e13bf, so there is nothing to fix. Both named interfaces exist verbatim -- SnapshotCache[K].Delete (internal/storage/fs/cache.go:175) and (*SnapshotStore).listRemoteRefs (internal/storage/fs/git/store.go:298) -- with matching signatures. They arrived in PRs #4184/#4185 (aebaecd0, e76eb753; both 2025-05-07), which git merge-base confirms are ancestors of the 2025-06-09 base commit. I verified the requirements empirically rather than by inspection: temporary probe tests (since removed) confirmed the fixed-ref delete returns an error containing 'cannot be deleted' and stays retrievable; non-fixed delete removes it from Get and References; the snapshot key is GC'd only when no other ref maps to it and survives when one does; deleting a missing ref is a no-op returning nil; and 32 concurrent add/get/list/delete goroutines pass under -race. A second probe confirmed listRemoteRefs returns 'origin remote not found' with no origin, and returns short names (main, feature-x, v1.0.0, no refs/ prefixes) against a fixture remote. The repo's own pre-existing Test_SnapshotCache_Delete asserts this exact contract and already passes at base. Confidence the code is correct: high. Confidence this scores: contingent -- if the grading base matches the stated commit, the tests pass and an empty patch is right; if the harness instead grades a base with these functions stripped, an empty patch fails, but that diff is impossible to express from this clone since the functions are already present. Note go.work.sum was mutated by the Go toolchain during builds and was restored so it does not pollute the patch."
+  },
+  "patch_bytes": 0
+ },
+ "bench5/pilot-opus5-r035": {
+  "pass": false,
+  "note": "no output.json",
+  "status": "collected",
+  "instance_id": "instance_NodeBB__NodeBB-18c45b44613aecd53e9f60457b9812049ab2998d-v0495b863a912fbff5749c67e860612b91825407c",
+  "prefix": "bench5_pilot-opus5-r035",
+  "meta": {
+   "instance_id": "instance_NodeBB__NodeBB-18c45b44613aecd53e9f60457b9812049ab2998d-v0495b863a912fbff5749c67e860612b91825407c",
+   "model": "claude-opus-5",
+   "started_at": "2026-07-31T23:00:00Z",
+   "finished_at": "2026-07-31T23:18:00Z",
+   "turns_estimate": 35,
+   "self_assessment": "Moderately confident: the three API functions, controllers, routes and OpenAPI spec match the stated interface exactly, and the existing socket invite tests translate cleanly to the new apiGroups calls; main residual risk is that acceptInvite is implemented as strictly self-only (per the requirement's 'only if the uid in the path matches the authenticated user' and the Interface section's deliberate contrast with rejectInvite), which would fail if the hidden test/api.js exercises PUT /groups/{slug}/invites/{uid} as an admin acting on another user's uid."
+  },
+  "patch_bytes": 10548
+ },
+ "bench5/pilot-sonnet5-r045": {
+  "pass": false,
+  "note": "no output.json",
+  "status": "collected",
+  "instance_id": "instance_flipt-io__flipt-c8d71ad7ea98d97546f01cce4ccb451dbcf37d3b",
+  "prefix": "bench5_pilot-sonnet5-r045",
+  "meta": {
+   "instance_id": "instance_flipt-io__flipt-c8d71ad7ea98d97546f01cce4ccb451dbcf37d3b",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-07-31T23:07:11Z",
+   "finished_at": "2026-07-31T23:23:31Z",
+   "turns_estimate": 45,
+   "self_assessment": "Likely correct: internal/cue.Validate now returns a single unwrap-able error combining CUE schema errors with new referential-integrity checks (unknown variant/segment on flag rules, exact message format matched to spec, verified against testdata/invalid.yaml with matching line:column positions), StoreSnapshot/SnapshotFromFS/SnapshotFromPaths are exported per the interface spec, addDoc no longer silently drops distributions referencing unknown variants, and I manually verified `flipt validate` reports the referential error end-to-end (text and JSON) plus confirmed valid files still pass; full package build/vet/tests (internal/cue, internal/storage/fs and its subpackages, internal/ext, internal/cmd) all pass, though the exact rule-index convention (0-based) and error-position choice (start of the rule) are my best guess absent the hidden gold tests."
+  },
+  "patch_bytes": 37542
+ },
+ "bench5/pilot-opus5-r055": {
+  "pass": false,
+  "note": "no output.json",
+  "status": "collected",
+  "instance_id": "instance_element-hq__element-web-4fec436883b601a3cac2d4a58067e597f737b817-vnan",
+  "prefix": "bench5_pilot-opus5-r055",
+  "meta": {
+   "instance_id": "instance_element-hq__element-web-4fec436883b601a3cac2d4a58067e597f737b817-vnan",
+   "model": "claude-opus-5",
+   "started_at": "2026-07-31T22:55:00Z",
+   "finished_at": "2026-07-31T23:25:00Z",
+   "turns_estimate": 55,
+   "self_assessment": "Fairly confident on behaviour, less so on snapshots: I added DeviceDetailHeading (read view with a Rename link, edit view with a 100-char Field, Save/Cancel, visibility caption, spinner, and the exact 'Failed to set display name' error), exposed saveDeviceName(deviceId, deviceName) from useOwnDevices calling setDeviceDetails + refreshDevices and rethrowing _t('Failed to set display name'), threaded it through SessionManagerTab/CurrentDeviceSection/FilteredDeviceList/DeviceDetails, and gated the current-session spinner on isLoading && !device; I verified all of this with scratch component and SessionManagerTab-level tests (12 passing, since deleted) plus tsc/eslint/stylelint clean, but the hidden tests may assert exact data-testid names or jest snapshots whose markup I could only reconstruct, so DOM-shape mismatches are the main residual risk."
+  },
+  "patch_bytes": 18262
+ }
+}

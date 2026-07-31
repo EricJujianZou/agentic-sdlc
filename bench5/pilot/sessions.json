@@ -1,0 +1,26 @@
+{
+ "pilot_sessions": [
+  {"rank": "r005", "model": "claude-sonnet-5", "session_id": "cse_01R8Su8kB88hcvxPebnHVyYv", "fired_utc": "2026-07-31T20:36:21Z"},
+  {"rank": "r005", "model": "claude-opus-5", "session_id": "cse_011FCiDdnFnmU8fopbvgFCi1", "fired_utc": "2026-07-31T20:36:21Z"},
+  {"rank": "r015", "model": "claude-sonnet-5", "session_id": "cse_01GN2JUJr1UtsBEPaeEgtuLn", "fired_utc": "2026-07-31T23:01:40Z"},
+  {"rank": "r015", "model": "claude-opus-5", "session_id": "cse_014kV4BYDBMTWBrnKAdYm5Dy", "fired_utc": "2026-07-31T23:02:00Z"},
+  {"rank": "r025", "model": "claude-sonnet-5", "session_id": "cse_01FANczXqNgERBTEG5N3f57B", "fired_utc": "2026-07-31T23:02:25Z"},
+  {"rank": "r025", "model": "claude-opus-5", "session_id": "cse_01REnNEN137kPCWtjGUqX2L9", "fired_utc": "2026-07-31T23:02:39Z"},
+  {"rank": "r035", "model": "claude-sonnet-5", "session_id": "cse_01GgjBTMANhpJy5RfaiUSaYX", "fired_utc": "2026-07-31T23:02:55Z"},
+  {"rank": "r035", "model": "claude-opus-5", "session_id": "cse_01QtjjdRvAcrwKhKDUViDhDC", "fired_utc": "2026-07-31T23:03:14Z"},
+  {"rank": "r045", "model": "claude-sonnet-5", "session_id": "cse_01VABaPr4jHRpT9XwymNkzwk", "fired_utc": "2026-07-31T23:03:28Z"},
+  {"rank": "r045", "model": "claude-opus-5", "session_id": "cse_01DufjpMzMnoMkon2S4kviw1", "fired_utc": "2026-07-31T23:03:42Z"},
+  {"rank": "r055", "model": "claude-sonnet-5", "session_id": "cse_01KyBsNKu6wu7zE1TRkajCt1", "fired_utc": "2026-07-31T23:03:56Z"},
+  {"rank": "r055", "model": "claude-opus-5", "session_id": "cse_011NFZXPkK8hwYpSK68miPLU", "fired_utc": "2026-07-31T23:04:10Z"},
+  {"rank": "r065", "model": "claude-sonnet-5", "session_id": "cse_019KRNdoe9PtWSoevfdFh9PZ", "fired_utc": "2026-07-31T23:24:47Z"},
+  {"rank": "r065", "model": "claude-opus-5", "session_id": "cse_018bQmF5upp19JJ7sAqBp7t3", "fired_utc": "2026-07-31T23:25:02Z"},
+  {"rank": "r075", "model": "claude-sonnet-5", "session_id": "cse_01LynQi3FXVCtmZG6qnnr2yF", "fired_utc": "2026-07-31T23:25:17Z"},
+  {"rank": "r075", "model": "claude-opus-5", "session_id": "cse_01CH7VFoyNoWzsV8bCrtpwkt", "fired_utc": "2026-07-31T23:25:32Z"},
+  {"rank": "r085", "model": "claude-sonnet-5", "session_id": "cse_01KfqG2fBk1R5hQoPH7u3WuA", "fired_utc": "2026-07-31T23:25:52Z"},
+  {"rank": "r085", "model": "claude-opus-5", "session_id": "cse_01R4wSGUzYsxg9e5U6sqzuUg", "fired_utc": "2026-07-31T23:26:07Z"},
+  {"rank": "r095", "model": "claude-sonnet-5", "session_id": "cse_01CesEh38BJhM16TDBU5D4Zw", "fired_utc": "2026-07-31T23:26:21Z"},
+  {"rank": "r095", "model": "claude-opus-5", "session_id": "cse_01VaUqF6UaSP93DraeWScGBY", "fired_utc": "2026-07-31T23:26:40Z"}
+ ],
+ "triggers": {"sonnet5": "trig_01NhFCHZRrUMxbbnnmUD3KX8", "opus5": "trig_01FrBzyQvMhdWPDNPaLEkE2f"},
+ "note": "wave 2 (r065-r095) fired after wave-1 arrivals confirm session health"
+}
