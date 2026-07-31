@@ -1,17 +1,25 @@
 """Persistence and business operations for the stockroom.
 
-The whole application state lives in one JSON file, stamped with the
-schema version it was written by::
+The state lives in a small directory of JSON files, headed by
+``state.json``, which is stamped with the schema version it was written
+by::
 
-    {
-        "version":   6,
-        "items":     {sku: {...}, ...},
-        "suppliers": {supplier_id: {...}, ...},
-        "orders":    [{...}, ...],
-        "shipments": [{...}, ...],
-        "discounts": {category: percent, ...},
-        "tax_rate":  percent
-    }
+    state.json          {"version": 7, "items": {sku: {...}, ...},
+                         "suppliers": {supplier_id: {...}, ...},
+                         "shipments": [{...}, ...],
+                         "discounts": {category: percent, ...},
+                         "tax_rate": percent}
+    items.<warehouse>.json   {sku: qty, ...}
+    orders.json         [{...}, ...]
+    state.events.json   {"events": [...]}
+
+Version 7 splits that directory up.  ``state.json`` keeps only the
+catalogue and the settings - what an item *is*, not how much of it is on
+a shelf - so it stays small and two people syncing the share stop
+colliding on it; each warehouse's quantities are its own file, and the
+orders are theirs.  Every one of those files is written to a temporary
+name and renamed into place, so a save that is interrupted leaves the
+previous file intact rather than a half-written one.
 
 Version 6 keeps the audit trail out of that file and in a sidecar of
 its own beside it - ``state.json`` gets a ``state.events.json`` holding
@@ -20,7 +28,11 @@ backup of it is not mostly log.  Version 5 and earlier embedded the
 events under an ``"events"`` key; those files still load, and the next
 save moves their trail out to the sidecar.
 Version 5 writes every date zero-padded as ``YYYY-MM-DD``; earlier
-versions wrote them however they were typed.  Version 4 keeps every
+versions wrote them however they were typed.  Version 6 and earlier
+wrote the whole state - quantities and orders included - into
+``state.json`` itself; those files still load, and the first save after
+one of them upgrades the directory to the split layout in place.
+Version 4 keeps every
 price as a whole number of cents; version 3 and earlier wrote fractional
 dollars.  Version 3 broke each item's ``qty`` down per warehouse;
 version 2 and the original unversioned layout (version 1, no
@@ -42,7 +54,6 @@ import copy
 import datetime
 import json
 import os
-import shutil
 
 from .dates import normalize_date
 from .models import (
@@ -61,10 +72,22 @@ from .models import (
 
 #: Schema version stamped into every state file we write.  Version 1 is
 #: the original unversioned layout, which carries no ``"version"`` key.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 #: What separates the state file's name from a backup's timestamp.
 BACKUP_SUFFIX = ".bak-"
+
+#: What a warehouse's quantity file is called, around the warehouse's
+#: own name: ``items.main.json`` holds the main room's counts.
+ITEMS_PREFIX = "items."
+ITEMS_SUFFIX = ".json"
+
+#: What the file holding the orders is called.
+ORDERS_NAME = "orders.json"
+
+#: What a file half way through being written is called, before it is
+#: renamed over the real one.  Nothing is ever read from this name.
+TMP_SUFFIX = ".tmp"
 
 #: What the sidecar holding the audit trail is called: the state file's
 #: name with its ``.json`` suffix replaced by this one.
@@ -87,6 +110,62 @@ def _backup_stamp() -> str:
     microseconds are there to keep two backups a moment apart distinct.
     """
     return datetime.datetime.now().strftime("%Y%m%dT%H%M%S%f")
+
+
+def _write_atomic(path: str, text: str) -> None:
+    """Write ``text`` to ``path`` so a reader never sees it half done.
+
+    The bytes go to a temporary file beside the real one, which is then
+    renamed over it - a rename either happens or it does not, so a
+    reader (or a power cut) finds the whole of the old file or the whole
+    of the new one, never a truncated mixture.  A write that fails part
+    way takes its temporary file with it rather than leaving litter
+    behind.
+    """
+    tmp = path + TMP_SUFFIX
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+def _write_json(path: str, payload) -> None:
+    """Write ``payload`` to ``path`` as JSON, atomically."""
+    _write_atomic(path, json.dumps(payload, indent=2) + "\n")
+
+
+def _read_json(path: str, default):
+    """The JSON at ``path``, or ``default`` when there is no such file."""
+    if not os.path.exists(path):
+        return default
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _has_embedded_quantities(raw: dict) -> bool:
+    """Whether a state file carries the stock itself, as v6 and back did.
+
+    An item's record holds its ``qty`` in every layout up to version 6,
+    and in a backup of any age; from version 7 the counts are in the
+    warehouse files instead, and the record has no ``qty`` at all.
+    """
+    return any("qty" in data for data in raw.get("items", {}).values())
+
+
+def _item_meta(item: Item) -> dict:
+    """One item's record for the meta file: everything but the counts.
+
+    What an item *is* belongs in the catalogue; how many of it sit in
+    which room belongs in that room's own file.
+    """
+    return {key: value for key, value in item.to_dict().items()
+            if key != "qty"}
 
 
 def _batch_qty(raw: str | None) -> int:
@@ -176,6 +255,19 @@ class Store:
     # persistence
     # ------------------------------------------------------------------
 
+    def data_dir(self) -> str:
+        """The directory the state file and its companions live in."""
+        return os.path.dirname(self.path) or "."
+
+    def items_path(self, warehouse: str) -> str:
+        """Where one warehouse's quantities are kept."""
+        return os.path.join(self.data_dir(),
+                            ITEMS_PREFIX + warehouse + ITEMS_SUFFIX)
+
+    def orders_path(self) -> str:
+        """Where the orders are kept."""
+        return os.path.join(self.data_dir(), ORDERS_NAME)
+
     def events_path(self) -> str:
         """Where this store's audit trail is kept.
 
@@ -205,8 +297,7 @@ class Store:
     def lock(self) -> str:
         """Mark this data read-only and return the marker's path."""
         path = self.lock_path()
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("read-only\n")
+        _write_atomic(path, "read-only\n")
         return path
 
     def unlock(self) -> None:
@@ -215,23 +306,25 @@ class Store:
             os.remove(self.lock_path())
 
     def load(self) -> None:
-        """Read state from the JSON file.
+        """Read state from the data directory.
 
-        A missing file just means a fresh, empty store.  A file that is
-        not valid JSON raises ``json.JSONDecodeError`` for the caller to
-        deal with.  Older layouts (version 2, and version 1 - which
-        carries no ``"version"`` key) are read the same way; the item
-        records themselves know how to read an older quantity.  A file
-        written before shipments were logged has none, which is simply
-        an empty log, and one written before discounts were negotiated
-        has no rules and no tax.  A file written before changes were
-        audited carries no events, which is likewise an empty trail.
+        A missing state file just means a fresh, empty store.  A file
+        that is not valid JSON raises ``json.JSONDecodeError`` for the
+        caller to deal with.  Older layouts (version 2, and version 1 -
+        which carries no ``"version"`` key) are read the same way; the
+        item records themselves know how to read an older quantity.  A
+        file written before shipments were logged has none, which is
+        simply an empty log, and one written before discounts were
+        negotiated has no rules and no tax.  A file written before
+        changes were audited carries no events, which is likewise an
+        empty trail.
 
-        The audit trail comes from the sidecar when there is one, and
-        from the state file itself when there is not - which is how a
-        version 5 file, whose trail is still embedded, reads back whole.
-        No sidecar and nothing embedded is a store nothing has happened
-        to yet.
+        The quantities and the orders come from their own files, and
+        from the state file itself when it still carries them - which is
+        how a version 6 file, or a backup, reads back whole.  The audit
+        trail works the same way: the sidecar when there is one, else
+        what the state file has embedded.  Nothing anywhere is a store
+        nothing has happened to yet.
         """
         if not os.path.exists(self.path):
             return
@@ -244,7 +337,8 @@ class Store:
             sid: Supplier.from_dict(data)
             for sid, data in raw.get("suppliers", {}).items()
         }
-        self.orders = [Order.from_dict(data) for data in raw.get("orders", [])]
+        self.orders = [Order.from_dict(data)
+                       for data in self._load_orders(raw)]
         self.shipments = [
             Shipment.from_dict(data) for data in raw.get("shipments", [])
         ]
@@ -254,6 +348,45 @@ class Store:
         }
         self.tax_rate = float(raw.get("tax_rate", 0.0))
         self.events = self._load_events(raw)
+        if not _has_embedded_quantities(raw):
+            self._load_quantities()
+
+    def _load_orders(self, raw: dict) -> list[dict]:
+        """The order records: ``orders.json``'s, else ``raw``'s own."""
+        if "orders" in raw:
+            return list(raw["orders"])
+        return _read_json(self.orders_path(), [])
+
+    def _load_quantities(self) -> None:
+        """Fill the items' per-warehouse counts from the warehouse files.
+
+        These files are the stock's only home in the current layout, so
+        whatever the items came back holding is replaced by what they
+        say: an item no file mentions has nothing on any shelf.  A count
+        for a SKU we no longer stock is skipped - the catalogue says
+        what exists.
+        """
+        for item in self.items.values():
+            item.quantities = {}
+            item.qty = 0
+        for warehouse in self._stored_warehouses():
+            counts = _read_json(self.items_path(warehouse), {})
+            for sku, qty in counts.items():
+                item = self.items.get(normalize_sku(sku))
+                if item is not None:
+                    item.set_warehouse_stock(int(qty), warehouse)
+
+    def _stored_warehouses(self) -> list[str]:
+        """The warehouses the data directory holds a file for, sorted."""
+        directory = self.data_dir()
+        if not os.path.isdir(directory):
+            return []
+        return sorted(
+            name[len(ITEMS_PREFIX):-len(ITEMS_SUFFIX)]
+            for name in os.listdir(directory)
+            if name.startswith(ITEMS_PREFIX) and name.endswith(ITEMS_SUFFIX)
+            and len(name) > len(ITEMS_PREFIX) + len(ITEMS_SUFFIX)
+        )
 
     def _load_events(self, raw: dict) -> list[dict]:
         """The audit trail: the sidecar's when it exists, else ``raw``'s."""
@@ -265,41 +398,75 @@ class Store:
         return [dict(event) for event in sidecar.get("events", [])]
 
     def save(self) -> None:
-        """Write the current state back to the JSON file.
+        """Write the current state back out to the data directory.
 
-        The file always declares the schema version it was written by.
-        The audit trail goes to the sidecar rather than into that file -
-        every time, so a trail that has been undone back to nothing does
-        not come back to life out of a stale sidecar.
+        The state file always declares the schema version it was written
+        by, and carries the catalogue and the settings alone; the counts
+        go to one file per warehouse and the orders to theirs, so a
+        change to the stock rewrites a small file rather than all of it.
+        A directory still in an older layout is brought up to this one
+        here, which is what makes the upgrade happen in place on the
+        first save.
+
+        The audit trail goes to its sidecar rather than into the state
+        file - every time, so a trail that has been undone back to
+        nothing does not come back to life out of a stale sidecar.
         """
-        self._write(self.path)
+        _write_json(self.path, self._meta())
+        self._write_quantities()
+        _write_json(self.orders_path(),
+                    [order.to_dict() for order in self.orders])
         self._write_events(self.events_path())
 
-    def _write(self, path: str) -> None:
-        """Serialize the current state to ``path`` in the current layout.
-
-        The events are not part of it: they live in their own file, so
-        what this writes - including a backup - is state alone.
-        """
-        raw = {
+    def _meta(self) -> dict:
+        """The state file's own contents: the catalogue and the settings."""
+        return {
             "version": SCHEMA_VERSION,
-            "items": {sku: item.to_dict() for sku, item in self.items.items()},
+            "items": {sku: _item_meta(item)
+                      for sku, item in self.items.items()},
             "suppliers": {sid: s.to_dict() for sid, s in self.suppliers.items()},
-            "orders": [order.to_dict() for order in self.orders],
             "shipments": [s.to_dict() for s in self.shipments],
             "discounts": dict(self.discounts),
             "tax_rate": self.tax_rate,
         }
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(raw, f, indent=2)
-            f.write("\n")
+
+    def _write_quantities(self) -> None:
+        """Write one file per warehouse, and drop the ones left over.
+
+        A warehouse the state no longer knows about - after an undo, or
+        a restore from a backup taken before it was rented - must lose
+        its file too, or the next load would find its stock again.
+        """
+        warehouses = set()
+        for item in self.items.values():
+            warehouses.update(item.quantities)
+        for warehouse in sorted(warehouses):
+            counts = {item.sku: item.quantities[warehouse]
+                      for item in self.items.values()
+                      if warehouse in item.quantities}
+            _write_json(self.items_path(warehouse), counts)
+        for warehouse in self._stored_warehouses():
+            if warehouse not in warehouses:
+                os.remove(self.items_path(warehouse))
+
+    def _write(self, path: str) -> None:
+        """Serialize the whole state to a single self-contained ``path``.
+
+        A backup has to stand on its own - restoring one puts that file
+        back as the state file, and nothing else - so unlike a save this
+        keeps the quantities and the orders inside it, in the layout
+        every earlier version used.  The events are not part of it:
+        they live in their own file, so what this writes is state alone.
+        """
+        raw = self._meta()
+        raw["items"] = {sku: item.to_dict()
+                        for sku, item in self.items.items()}
+        raw["orders"] = [order.to_dict() for order in self.orders]
+        _write_json(path, raw)
 
     def _write_events(self, path: str) -> None:
         """Serialize the audit trail to its sidecar at ``path``."""
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({"events": [dict(event) for event in self.events]},
-                      f, indent=2)
-            f.write("\n")
+        _write_json(path, {"events": [dict(event) for event in self.events]})
 
     # ------------------------------------------------------------------
     # backups
@@ -307,7 +474,7 @@ class Store:
 
     def _backup_dir(self) -> str:
         """The directory backups live in - the state file's own."""
-        return os.path.dirname(self.path) or "."
+        return self.data_dir()
 
     def _backup_prefix(self) -> str:
         """What every backup name for this state file starts with."""
@@ -343,11 +510,17 @@ class Store:
         A name that is not one of ours is refused with ``ValueError``
         before anything is written, so a typo cannot cost you the state
         you were trying to protect.  On success the state file *is* the
-        backup, and this store is reloaded from it.
+        backup - put in place by a rename, like every other write, so an
+        interrupted restore leaves the state that was there - and this
+        store is reloaded from it.  A backup carries the whole state, so
+        the quantity and order files beside it are ignored from here on
+        and rewritten by the next save.
         """
         if name not in self.list_backups():
             raise ValueError(f"unknown backup {name}")
-        shutil.copyfile(os.path.join(self._backup_dir(), name), self.path)
+        source = os.path.join(self._backup_dir(), name)
+        with open(source, encoding="utf-8") as f:
+            _write_atomic(self.path, f.read())
         self.load()
         # Nothing was logged, but every record in memory just changed.
         self.revision += 1
