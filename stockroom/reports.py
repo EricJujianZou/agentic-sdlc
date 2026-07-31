@@ -5,6 +5,7 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
+from .models import STATUS_PENDING
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -185,23 +186,34 @@ def reorder_suggestions(store: Store,
     """Suggest order quantities for items running low.
 
     For each item below the threshold, suggest topping back up to the
-    threshold.  Only items with a supplier are included, since there is
-    nobody to order the rest from.
+    threshold, minus whatever is already on the way on that item's
+    pending orders - orders that were received or cancelled count for
+    nothing.  An item whose pending orders already cover the top-up is
+    left out rather than suggested at 0.  Only items with a supplier are
+    included, since there is nobody to order the rest from.
 
     Returns:
         A list of dicts (sku, supplier_id, qty, suggested_qty,
         lead_time_days), sorted by SKU.  ``lead_time_days`` is the
         supplier's lead time, so slow suppliers stand out.
     """
+    pending: dict[str, int] = {}
+    for order in store.orders:
+        if order.status == STATUS_PENDING:
+            pending[order.sku] = pending.get(order.sku, 0) + order.qty
     rows = []
     for item in store.list_items():
         if item.qty < threshold and item.supplier_id is not None:
+            suggested_qty = max(
+                0, threshold - item.qty - pending.get(item.sku, 0))
+            if suggested_qty == 0:
+                continue
             supplier = store.suppliers.get(item.supplier_id)
             rows.append({
                 "sku": item.sku,
                 "supplier_id": item.supplier_id,
                 "qty": item.qty,
-                "suggested_qty": threshold - item.qty,
+                "suggested_qty": suggested_qty,
                 "lead_time_days": supplier.lead_time_days if supplier else 0,
             })
     return rows
