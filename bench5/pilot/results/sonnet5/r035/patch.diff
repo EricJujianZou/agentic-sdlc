@@ -1,0 +1,586 @@
+diff --git a/public/openapi/write.yaml b/public/openapi/write.yaml
+index 995502a515..a55df3e219 100644
+--- a/public/openapi/write.yaml
++++ b/public/openapi/write.yaml
+@@ -102,6 +102,8 @@ paths:
+     $ref: 'write/groups/slug/pending/uid.yaml'
+   /groups/{slug}/invites:
+     $ref: 'write/groups/slug/invites.yaml'
++  /groups/{slug}/invites/{uid}:
++    $ref: 'write/groups/slug/invites/uid.yaml'
+   /categories/:
+     $ref: 'write/categories.yaml'
+   /categories/{cid}:
+diff --git a/public/openapi/write/groups/slug/invites/uid.yaml b/public/openapi/write/groups/slug/invites/uid.yaml
+new file mode 100644
+index 0000000000..fbaeb95a15
+--- /dev/null
++++ b/public/openapi/write/groups/slug/invites/uid.yaml
+@@ -0,0 +1,99 @@
++post:
++  tags:
++    - groups
++  summary: issue a group invitation
++  description: This operation issues an invitation to join a group to a given user. The caller must be an owner or administrator of the group.
++  parameters:
++    - in: path
++      name: slug
++      schema:
++        type: string
++      required: true
++      description: a group slug
++      example: private-group
++    - in: path
++      name: uid
++      schema:
++        type: number
++      required: true
++      description: a user id
++      example: 2
++  responses:
++    '200':
++      description: Invitation issued.
++      content:
++        application/json:
++          schema:
++            type: object
++            properties:
++              status:
++                $ref: ../../../../components/schemas/Status.yaml#/Status
++              response:
++                type: object
++                properties: {}
++put:
++  tags:
++    - groups
++  summary: accept a group invitation
++  description: This operation accepts a pending invitation to join a group. The caller must be the invited user.
++  parameters:
++    - in: path
++      name: slug
++      schema:
++        type: string
++      required: true
++      description: a group slug
++      example: private-group
++    - in: path
++      name: uid
++      schema:
++        type: number
++      required: true
++      description: a user id
++      example: 2
++  responses:
++    '200':
++      description: Invitation accepted.
++      content:
++        application/json:
++          schema:
++            type: object
++            properties:
++              status:
++                $ref: ../../../../components/schemas/Status.yaml#/Status
++              response:
++                type: object
++                properties: {}
++delete:
++  tags:
++    - groups
++  summary: reject or rescind a group invitation
++  description: This operation rejects a pending invitation to join a group. The caller must be either the invited user or an owner/administrator of the group.
++  parameters:
++    - in: path
++      name: slug
++      schema:
++        type: string
++      required: true
++      description: a group slug
++      example: private-group
++    - in: path
++      name: uid
++      schema:
++        type: number
++      required: true
++      description: a user id
++      example: 3
++  responses:
++    '200':
++      description: Invitation rejected or rescinded.
++      content:
++        application/json:
++          schema:
++            type: object
++            properties:
++              status:
++                $ref: ../../../../components/schemas/Status.yaml#/Status
++              response:
++                type: object
++                properties: {}
+diff --git a/public/src/client/groups/details.js b/public/src/client/groups/details.js
+index 9202b56935..42d3992ac4 100644
+--- a/public/src/client/groups/details.js
++++ b/public/src/client/groups/details.js
+@@ -120,11 +120,21 @@ define('forum/groups/details', [
+ 					api.del(`/groups/${ajaxify.data.group.slug}/pending/${uid}`).then(() => ajaxify.refresh()).catch(alerts.error);
+ 					break;
+ 
+-				// TODO (14/10/2020): rewrite these to use api module and merge with above 2 case blocks
+-				case 'issueInvite': // intentional fall-throughs!
++				case 'issueInvite':
++					api.post(`/groups/${ajaxify.data.group.slug}/invites/${uid}`, {}).then(() => {
++						userRow.remove();
++					}).catch(alerts.error);
++					break;
++
+ 				case 'rescindInvite':
+-				case 'acceptInvite':
+ 				case 'rejectInvite':
++					api.del(`/groups/${ajaxify.data.group.slug}/invites/${uid}`, undefined).then(() => userRow.remove()).catch(alerts.error);
++					break;
++
++				case 'acceptInvite':
++					api.put(`/groups/${ajaxify.data.group.slug}/invites/${uid}`, undefined).then(() => ajaxify.refresh()).catch(alerts.error);
++					break;
++
+ 				case 'acceptAll':
+ 				case 'rejectAll':
+ 					socket.emit('groups.' + action, {
+@@ -134,9 +144,6 @@ define('forum/groups/details', [
+ 						if (err) {
+ 							return alerts.error(err);
+ 						}
+-						if (action === 'rescindInvite' || action === 'accept' || action === 'reject') {
+-							return userRow.remove();
+-						}
+ 						ajaxify.refresh();
+ 					});
+ 					break;
+@@ -260,15 +267,9 @@ define('forum/groups/details', [
+ 		const searchInput = $('[component="groups/members/invite"]');
+ 		require(['autocomplete'], function (autocomplete) {
+ 			autocomplete.user(searchInput, function (event, selected) {
+-				socket.emit('groups.issueInvite', {
+-					toUid: selected.item.user.uid,
+-					groupName: ajaxify.data.group.name,
+-				}, function (err) {
+-					if (err) {
+-						return alerts.error(err);
+-					}
++				api.post(`/groups/${ajaxify.data.group.slug}/invites/${selected.item.user.uid}`, {}).then(() => {
+ 					updateList();
+-				});
++				}).catch(alerts.error);
+ 			});
+ 		});
+ 
+diff --git a/src/api/groups.js b/src/api/groups.js
+index 1abc90ada8..72a8d17215 100644
+--- a/src/api/groups.js
++++ b/src/api/groups.js
+@@ -257,6 +257,77 @@ groupsAPI.getInvites = async (caller, { slug }) => {
+ 	return await groups.getInvites(groupName);
+ };
+ 
++groupsAPI.issueInvite = async (caller, { slug, uid }) => {
++	const groupName = await groups.getGroupNameByGroupSlug(slug);
++	await isOwner(caller, groupName);
++
++	const userExists = await user.exists(uid);
++	if (!userExists) {
++		throw new Error('[[error:invalid-uid]]');
++	}
++
++	await groups.invite(groupName, uid);
++	logGroupEvent(caller, 'group-invite', {
++		groupName,
++		targetUid: uid,
++	});
++};
++
++groupsAPI.acceptInvite = async (caller, { slug, uid }) => {
++	const groupName = await groups.getGroupNameByGroupSlug(slug);
++	if (!groupName) {
++		throw new Error('[[error:no-group]]');
++	}
++	if (parseInt(caller.uid, 10) !== parseInt(uid, 10)) {
++		throw new Error('[[error:not-allowed]]');
++	}
++
++	const isInvited = await groups.isInvited(uid, groupName);
++	if (!isInvited) {
++		throw new Error('[[error:not-invited]]');
++	}
++
++	await groups.acceptMembership(groupName, uid);
++	logGroupEvent(caller, 'group-invite-accept', {
++		groupName,
++		targetUid: uid,
++	});
++};
++
++groupsAPI.rejectInvite = async (caller, { slug, uid }) => {
++	const groupName = await groups.getGroupNameByGroupSlug(slug);
++	if (!groupName) {
++		throw new Error('[[error:no-group]]');
++	}
++
++	const isSelf = parseInt(caller.uid, 10) === parseInt(uid, 10);
++	if (!isSelf) {
++		const [hasAdminPrivilege, isGlobalModerator, isCallerOwner, group] = await Promise.all([
++			privileges.admin.can('admin:groups', caller.uid),
++			user.isGlobalModerator(caller.uid),
++			groups.ownership.isOwner(caller.uid, groupName),
++			groups.getGroupData(groupName),
++		]);
++		const isAllowed = isCallerOwner || hasAdminPrivilege || (isGlobalModerator && !group.system);
++		if (!isAllowed) {
++			throw new Error('[[error:not-allowed]]');
++		}
++	}
++
++	const isInvited = await groups.isInvited(uid, groupName);
++	if (!isInvited) {
++		throw new Error('[[error:not-invited]]');
++	}
++
++	await groups.rejectMembership(groupName, uid);
++	if (isSelf) {
++		logGroupEvent(caller, 'group-invite-reject', {
++			groupName,
++			targetUid: uid,
++		});
++	}
++};
++
+ async function isOwner(caller, groupName) {
+ 	if (typeof groupName !== 'string') {
+ 		throw new Error('[[error:invalid-group-name]]');
+diff --git a/src/controllers/write/groups.js b/src/controllers/write/groups.js
+index ed66d6f075..a8abd56404 100644
+--- a/src/controllers/write/groups.js
++++ b/src/controllers/write/groups.js
+@@ -67,3 +67,18 @@ Groups.getInvites = async (req, res) => {
+ 	const invites = await api.groups.getInvites(req, req.params);
+ 	helpers.formatApiResponse(200, res, { invites });
+ };
++
++Groups.issueInvite = async (req, res) => {
++	await api.groups.issueInvite(req, req.params);
++	helpers.formatApiResponse(200, res);
++};
++
++Groups.acceptInvite = async (req, res) => {
++	await api.groups.acceptInvite(req, req.params);
++	helpers.formatApiResponse(200, res);
++};
++
++Groups.rejectInvite = async (req, res) => {
++	await api.groups.rejectInvite(req, req.params);
++	helpers.formatApiResponse(200, res);
++};
+diff --git a/src/routes/write/groups.js b/src/routes/write/groups.js
+index f247d69e9a..f2ee86eab6 100644
+--- a/src/routes/write/groups.js
++++ b/src/routes/write/groups.js
+@@ -26,9 +26,9 @@ module.exports = function () {
+ 	setupApiRoute(router, 'delete', '/:slug/pending/:uid', [...middlewares, middleware.assert.group], controllers.write.groups.reject);
+ 
+ 	setupApiRoute(router, 'get', '/:slug/invites', [...middlewares, middleware.assert.group], controllers.write.groups.getInvites);
+-	// setupApiRoute(router, 'post', '/:slug/invites', [...middlewares, middleware.assert.group], controllers.write.groups.issueInvite);
+-	// setupApiRoute(router, 'put', '/:slug/invites/:uid', [...middlewares, middleware.assert.group], controllers.write.groups.acceptInvite);
+-	// setupApiRoute(router, 'delete', '/:slug/invites/:uid', [...middlewares, middleware.assert.group], controllers.write.groups.rejectInvite);
++	setupApiRoute(router, 'post', '/:slug/invites/:uid', [...middlewares, middleware.assert.group], controllers.write.groups.issueInvite);
++	setupApiRoute(router, 'put', '/:slug/invites/:uid', [...middlewares, middleware.assert.group], controllers.write.groups.acceptInvite);
++	setupApiRoute(router, 'delete', '/:slug/invites/:uid', [...middlewares, middleware.assert.group], controllers.write.groups.rejectInvite);
+ 
+ 	return router;
+ };
+diff --git a/src/socket.io/groups.js b/src/socket.io/groups.js
+index 2fc889996a..f2eb91b725 100644
+--- a/src/socket.io/groups.js
++++ b/src/socket.io/groups.js
+@@ -56,16 +56,6 @@ async function isOwner(socket, data) {
+ 	}
+ }
+ 
+-async function isInvited(socket, data) {
+-	if (typeof data.groupName !== 'string') {
+-		throw new Error('[[error:invalid-group-name]]');
+-	}
+-	const invited = await groups.isInvited(socket.uid, data.groupName);
+-	if (!invited) {
+-		throw new Error('[[error:not-invited]]');
+-	}
+-}
+-
+ SocketGroups.acceptAll = async (socket, data) => {
+ 	await isOwner(socket, data);
+ 	await acceptRejectAll(SocketGroups.accept, socket, data);
+@@ -87,15 +77,6 @@ async function acceptRejectAll(method, socket, data) {
+ 	}));
+ }
+ 
+-SocketGroups.issueInvite = async (socket, data) => {
+-	await isOwner(socket, data);
+-	await groups.invite(data.groupName, data.toUid);
+-	logGroupEvent(socket, 'group-invite', {
+-		groupName: data.groupName,
+-		targetUid: data.toUid,
+-	});
+-};
+-
+ SocketGroups.issueMassInvite = async (socket, data) => {
+ 	await isOwner(socket, data);
+ 	if (!data || !data.usernames || !data.groupName) {
+@@ -117,27 +98,6 @@ SocketGroups.issueMassInvite = async (socket, data) => {
+ 	}
+ };
+ 
+-SocketGroups.rescindInvite = async (socket, data) => {
+-	await isOwner(socket, data);
+-	await groups.rejectMembership(data.groupName, data.toUid);
+-};
+-
+-SocketGroups.acceptInvite = async (socket, data) => {
+-	await isInvited(socket, data);
+-	await groups.acceptMembership(data.groupName, socket.uid);
+-	logGroupEvent(socket, 'group-invite-accept', {
+-		groupName: data.groupName,
+-	});
+-};
+-
+-SocketGroups.rejectInvite = async (socket, data) => {
+-	await isInvited(socket, data);
+-	await groups.rejectMembership(data.groupName, socket.uid);
+-	logGroupEvent(socket, 'group-invite-reject', {
+-		groupName: data.groupName,
+-	});
+-};
+-
+ SocketGroups.kick = async (socket, data) => {
+ 	await isOwner(socket, data);
+ 	if (socket.uid === parseInt(data.uid, 10)) {
+diff --git a/test/api.js b/test/api.js
+index 01b8512013..309aa22e9c 100644
+--- a/test/api.js
++++ b/test/api.js
+@@ -57,7 +57,20 @@ describe('API', async () => {
+ 				},
+ 			],
+ 		},
+-		post: {},
++		post: {
++			'/groups/{slug}/invites/{uid}': [
++				{
++					in: 'path',
++					name: 'slug',
++					example: 'invitations-only',
++				},
++				{
++					in: 'path',
++					name: 'uid',
++					example: '', // to be defined later...
++				},
++			],
++		},
+ 		put: {
+ 			'/groups/{slug}/pending/{uid}': [
+ 				{
+@@ -71,6 +84,18 @@ describe('API', async () => {
+ 					example: '', // to be defined later...
+ 				},
+ 			],
++			'/groups/{slug}/invites/{uid}': [
++				{
++					in: 'path',
++					name: 'slug',
++					example: 'invitations-only',
++				},
++				{
++					in: 'path',
++					name: 'uid',
++					example: '', // to be defined later...
++				},
++			],
+ 		},
+ 		delete: {
+ 			'/users/{uid}/tokens/{token}': [
+@@ -121,6 +146,18 @@ describe('API', async () => {
+ 					example: '', // to be defined later...
+ 				},
+ 			],
++			'/groups/{slug}/invites/{uid}': [
++				{
++					in: 'path',
++					name: 'slug',
++					example: 'invitations-only',
++				},
++				{
++					in: 'path',
++					name: 'uid',
++					example: '', // to be defined later...
++				},
++			],
+ 		},
+ 	};
+ 
+@@ -176,7 +213,10 @@ describe('API', async () => {
+ 		}));
+ 		await groups.requestMembership('private-group', pending1);
+ 		await groups.requestMembership('private-group', pending2);
+-		await groups.invite('invitations-only', [pending1, pending2]);
++		await groups.invite('invitations-only', [pending1, pending2, adminUid, invite2]);
++		mocks.post['/groups/{slug}/invites/{uid}'][1].example = invite1;
++		mocks.put['/groups/{slug}/invites/{uid}'][1].example = adminUid;
++		mocks.delete['/groups/{slug}/invites/{uid}'][1].example = invite2;
+ 
+ 		await meta.settings.set('core.api', {
+ 			tokens: [{
+diff --git a/test/groups.js b/test/groups.js
+index 3731eec89a..18992f61c4 100644
+--- a/test/groups.js
++++ b/test/groups.js
+@@ -953,18 +953,26 @@ describe('Groups', () => {
+ 			assert.deepStrictEqual(isMembers, [true, true]);
+ 		});
+ 
+-		it('should issue invite to user', (done) => {
+-			User.create({ username: 'invite1' }, (err, uid) => {
+-				assert.ifError(err);
+-				socketGroups.issueInvite({ uid: adminUid }, { groupName: 'PrivateCanJoin', toUid: uid }, (err) => {
+-					assert.ifError(err);
+-					Groups.isInvited(uid, 'PrivateCanJoin', (err, isInvited) => {
+-						assert.ifError(err);
+-						assert(isInvited);
+-						done();
+-					});
+-				});
+-			});
++		it('should issue invite to user', async () => {
++			const uid = await User.create({ username: 'invite1' });
++			await apiGroups.issueInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: uid });
++			const isInvited = await Groups.isInvited(uid, 'PrivateCanJoin');
++			assert(isInvited);
++		});
++
++		it('should error issuing invite if not owner or admin', async () => {
++			const uid = await User.create({ username: 'invite1b' });
++			await assert.rejects(
++				apiGroups.issueInvite({ uid: testUid }, { slug: 'privatecanjoin', uid: uid }),
++				{ message: '[[error:no-privileges]]' }
++			);
++		});
++
++		it('should error issuing invite to a nonexistent user', async () => {
++			await assert.rejects(
++				apiGroups.issueInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: 1234567 }),
++				{ message: '[[error:invalid-uid]]' }
++			);
+ 		});
+ 
+ 		it('should fail with invalid data', (done) => {
+@@ -988,62 +996,54 @@ describe('Groups', () => {
+ 			});
+ 		});
+ 
+-		it('should rescind invite', (done) => {
+-			User.create({ username: 'invite3' }, (err, uid) => {
+-				assert.ifError(err);
+-				socketGroups.issueInvite({ uid: adminUid }, { groupName: 'PrivateCanJoin', toUid: uid }, (err) => {
+-					assert.ifError(err);
+-					socketGroups.rescindInvite({ uid: adminUid }, { groupName: 'PrivateCanJoin', toUid: uid }, (err) => {
+-						assert.ifError(err);
+-						Groups.isInvited(uid, 'PrivateCanJoin', (err, isInvited) => {
+-							assert.ifError(err);
+-							assert(!isInvited);
+-							done();
+-						});
+-					});
+-				});
+-			});
++		it('should rescind invite', async () => {
++			const uid = await User.create({ username: 'invite3' });
++			await apiGroups.issueInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: uid });
++			await apiGroups.rejectInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: uid });
++			const isInvited = await Groups.isInvited(uid, 'PrivateCanJoin');
++			assert(!isInvited);
+ 		});
+ 
+-		it('should error if user is not invited', (done) => {
+-			socketGroups.acceptInvite({ uid: adminUid }, { groupName: 'PrivateCanJoin' }, (err) => {
+-				assert.equal(err.message, '[[error:not-invited]]');
+-				done();
+-			});
++		it('should error if user is not invited', async () => {
++			await assert.rejects(
++				apiGroups.acceptInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: adminUid }),
++				{ message: '[[error:not-invited]]' }
++			);
+ 		});
+ 
+-		it('should accept invite', (done) => {
+-			User.create({ username: 'invite4' }, (err, uid) => {
+-				assert.ifError(err);
+-				socketGroups.issueInvite({ uid: adminUid }, { groupName: 'PrivateCanJoin', toUid: uid }, (err) => {
+-					assert.ifError(err);
+-					socketGroups.acceptInvite({ uid: uid }, { groupName: 'PrivateCanJoin' }, (err) => {
+-						assert.ifError(err);
+-						Groups.isMember(uid, 'PrivateCanJoin', (err, isMember) => {
+-							assert.ifError(err);
+-							assert(isMember);
+-							done();
+-						});
+-					});
+-				});
+-			});
++		it('should error accepting invite if uid does not match caller', async () => {
++			const uid = await User.create({ username: 'invite3b' });
++			await apiGroups.issueInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: uid });
++			await assert.rejects(
++				apiGroups.acceptInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: uid }),
++				{ message: '[[error:not-allowed]]' }
++			);
+ 		});
+ 
+-		it('should reject invite', (done) => {
+-			User.create({ username: 'invite5' }, (err, uid) => {
+-				assert.ifError(err);
+-				socketGroups.issueInvite({ uid: adminUid }, { groupName: 'PrivateCanJoin', toUid: uid }, (err) => {
+-					assert.ifError(err);
+-					socketGroups.rejectInvite({ uid: uid }, { groupName: 'PrivateCanJoin' }, (err) => {
+-						assert.ifError(err);
+-						Groups.isInvited(uid, 'PrivateCanJoin', (err, isInvited) => {
+-							assert.ifError(err);
+-							assert(!isInvited);
+-							done();
+-						});
+-					});
+-				});
+-			});
++		it('should accept invite', async () => {
++			const uid = await User.create({ username: 'invite4' });
++			await apiGroups.issueInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: uid });
++			await apiGroups.acceptInvite({ uid: uid }, { slug: 'privatecanjoin', uid: uid });
++			const isMember = await Groups.isMember(uid, 'PrivateCanJoin');
++			assert(isMember);
++		});
++
++		it('should error rejecting invite if not invited user or owner', async () => {
++			const uid = await User.create({ username: 'invite5b' });
++			const otherUid = await User.create({ username: 'invite5c' });
++			await apiGroups.issueInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: uid });
++			await assert.rejects(
++				apiGroups.rejectInvite({ uid: otherUid }, { slug: 'privatecanjoin', uid: uid }),
++				{ message: '[[error:not-allowed]]' }
++			);
++		});
++
++		it('should reject invite', async () => {
++			const uid = await User.create({ username: 'invite5' });
++			await apiGroups.issueInvite({ uid: adminUid }, { slug: 'privatecanjoin', uid: uid });
++			await apiGroups.rejectInvite({ uid: uid }, { slug: 'privatecanjoin', uid: uid });
++			const isInvited = await Groups.isInvited(uid, 'PrivateCanJoin');
++			assert(!isInvited);
+ 		});
+ 
+ 		it('should grant ownership to user', async () => {

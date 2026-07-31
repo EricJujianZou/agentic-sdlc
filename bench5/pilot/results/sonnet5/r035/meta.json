@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_NodeBB__NodeBB-18c45b44613aecd53e9f60457b9812049ab2998d-v0495b863a912fbff5749c67e860612b91825407c",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-07-31T23:03:00Z",
+  "finished_at": "2026-07-31T23:32:23Z",
+  "turns_estimate": 55,
+  "self_assessment": "Confident: added groupsAPI.issueInvite/acceptInvite/rejectInvite in src/api/groups.js with the exact permission/error semantics specified (owner-only issue, self-only accept, self-or-owner reject with not-invited/not-allowed errors), wired POST/PUT/DELETE /groups/{slug}/invites/{uid} through the existing controller+route+OpenAPI scaffolding (the routes were already stubbed out commented in src/routes/write/groups.js), removed the now-superseded socket.io invite handlers, updated the client to call the new API routes, and verified with a full local redis-backed run of test/groups.js (34/35 passing, the one unrelated failure is a pre-existing missing-build-artifact issue with admin widget templates, not the invite feature) plus a passing rewrite of the invite test cases (10/10) and a clean eslint pass."
+}
