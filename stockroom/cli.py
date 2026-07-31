@@ -34,6 +34,7 @@ def cmd_add_item(store: Store, args) -> int:
         unit_price=args.price,
         supplier_id=args.supplier,
         category=args.category,
+        actor=args.actor,
     )
     store.save()
     print(f"added item {item.sku} ({item.name})")
@@ -41,7 +42,11 @@ def cmd_add_item(store: Store, args) -> int:
 
 
 def cmd_add_supplier(store: Store, args) -> int:
-    """Handle ``add-supplier``: register a new supplier."""
+    """Handle ``add-supplier``: register a new supplier.
+
+    ``--actor`` is accepted for consistency with the other
+    state-changing commands, but only items and orders carry an actor.
+    """
     supplier = store.add_supplier(args.id, args.name, args.email,
                                   lead_time_days=args.lead_time)
     store.save()
@@ -51,7 +56,7 @@ def cmd_add_supplier(store: Store, args) -> int:
 
 def cmd_receive(store: Store, args) -> int:
     """Handle ``receive``: goods arrived outside of an order."""
-    item = store.receive(args.sku, args.qty)
+    item = store.receive(args.sku, args.qty, actor=args.actor)
     store.save()
     print(f"received {args.qty} x {item.sku}, now {item.qty} on hand")
     return 0
@@ -59,7 +64,7 @@ def cmd_receive(store: Store, args) -> int:
 
 def cmd_ship(store: Store, args) -> int:
     """Handle ``ship``: send units out of the stockroom."""
-    item = store.ship(args.sku, args.qty)
+    item = store.ship(args.sku, args.qty, actor=args.actor)
     store.save()
     print(f"shipped {args.qty} x {item.sku}, now {item.qty} on hand")
     return 0
@@ -70,7 +75,7 @@ def cmd_place_order(store: Store, args) -> int:
     date = args.date
     if date is None:
         date = datetime.date.today().isoformat()
-    order = store.place_order(args.sku, args.qty, date)
+    order = store.place_order(args.sku, args.qty, date, actor=args.actor)
     store.save()
     print(f"placed order {order.id}: {order.qty} x {order.sku} on {order.date}")
     return 0
@@ -78,7 +83,7 @@ def cmd_place_order(store: Store, args) -> int:
 
 def cmd_receive_order(store: Store, args) -> int:
     """Handle ``receive-order``: an order arrived; stock it."""
-    order = store.receive_order(args.id)
+    order = store.receive_order(args.id, actor=args.actor)
     store.save()
     print(f"order {order.id} received, {order.qty} x {order.sku} added to stock")
     return 0
@@ -86,7 +91,7 @@ def cmd_receive_order(store: Store, args) -> int:
 
 def cmd_cancel_order(store: Store, args) -> int:
     """Handle ``cancel-order``: mark an order cancelled."""
-    order = store.cancel_order(args.id)
+    order = store.cancel_order(args.id, actor=args.actor)
     store.save()
     print(f"order {order.id} cancelled")
     return 0
@@ -203,7 +208,7 @@ def cmd_import_csv(store: Store, args) -> int:
     """Handle ``import-csv``: merge items from a CSV file."""
     if not os.path.exists(args.path):
         raise ValueError(f"no such file: {args.path}")
-    count = csv_io.import_items(store, args.path)
+    count = csv_io.import_items(store, args.path, actor=args.actor)
     store.save()
     print(f"imported {count} rows from {args.path}")
     return 0
@@ -227,6 +232,13 @@ examples:
 """
 
 
+def _add_actor(parser: argparse.ArgumentParser) -> None:
+    """Attach the optional ``--actor`` flag to a state-changing command."""
+    parser.add_argument("--actor", default=None,
+                        help="who is running this, recorded on the records "
+                             "it changes")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="stockroom",
@@ -248,6 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--supplier", default=None)
     p.add_argument("--category", default=DEFAULT_CATEGORY,
                    help=f"shelf area (default: {DEFAULT_CATEGORY})")
+    _add_actor(p)
     p.set_defaults(func=cmd_add_item)
 
     p = sub.add_parser("add-supplier", help="create a new supplier")
@@ -256,16 +269,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("email")
     p.add_argument("--lead-time", type=int, default=0, dest="lead_time",
                    help="days between placing an order and delivery")
+    _add_actor(p)
     p.set_defaults(func=cmd_add_supplier)
 
     p = sub.add_parser("receive", help="add units of an item to stock")
     p.add_argument("sku")
     p.add_argument("qty", type=int)
+    _add_actor(p)
     p.set_defaults(func=cmd_receive)
 
     p = sub.add_parser("ship", help="remove units of an item from stock")
     p.add_argument("sku")
     p.add_argument("qty", type=int)
+    _add_actor(p)
     p.set_defaults(func=cmd_ship)
 
     p = sub.add_parser("place-order", help="record a purchase order")
@@ -273,15 +289,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("qty", type=int)
     p.add_argument("--date", default=None,
                    help="order date (default: today)")
+    _add_actor(p)
     p.set_defaults(func=cmd_place_order)
 
     p = sub.add_parser("receive-order",
                        help="mark an order received and stock the goods")
     p.add_argument("id", type=int)
+    _add_actor(p)
     p.set_defaults(func=cmd_receive_order)
 
     p = sub.add_parser("cancel-order", help="cancel an order")
     p.add_argument("id", type=int)
+    _add_actor(p)
     p.set_defaults(func=cmd_cancel_order)
 
     report = sub.add_parser("report", help="print a report")
@@ -316,6 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("import-csv", help="read items from a CSV file")
     p.add_argument("path")
+    _add_actor(p)
     p.set_defaults(func=cmd_import_csv)
 
     return parser

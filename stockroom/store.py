@@ -30,6 +30,7 @@ from .models import (
     STATUS_RECEIVED,
     Supplier,
     normalize_sku,
+    record_actor,
 )
 
 
@@ -96,12 +97,14 @@ class Store:
         unit_price: float = 0.0,
         supplier_id: str | None = None,
         category: str = DEFAULT_CATEGORY,
+        actor: str | None = None,
     ) -> Item:
         """Create a new item.
 
         The SKU must not already exist, and if a supplier is given it
         must be one we know about.  SKUs are stored in their canonical
-        (upper case) spelling.
+        (upper case) spelling.  ``actor``, when given, is recorded as
+        the item's last actor.
         """
         sku = normalize_sku(sku)
         if sku in self.items:
@@ -111,6 +114,7 @@ class Store:
         item = Item(sku=sku, name=name, qty=qty, unit_price=unit_price,
                     supplier_id=supplier_id,
                     category=category or DEFAULT_CATEGORY)
+        record_actor(item, actor)
         self.items[sku] = item
         return item
 
@@ -125,13 +129,14 @@ class Store:
         """All items, sorted by SKU for stable output."""
         return [self.items[sku] for sku in sorted(self.items)]
 
-    def receive(self, sku: str, qty: int) -> Item:
+    def receive(self, sku: str, qty: int, actor: str | None = None) -> Item:
         """Add ``qty`` units of an item to stock (goods arrived)."""
         item = self.get_item(sku)
         item.qty += qty
+        record_actor(item, actor)
         return item
 
-    def ship(self, sku: str, qty: int) -> Item:
+    def ship(self, sku: str, qty: int, actor: str | None = None) -> Item:
         """Remove ``qty`` units of an item from stock (goods sent out).
 
         The shelf cannot go negative: shipping more than we have on hand
@@ -144,6 +149,7 @@ class Store:
                 f"cannot ship {qty} x {sku}: only {item.qty} on hand"
             )
         item.qty -= qty
+        record_actor(item, actor)
         return item
 
     # ------------------------------------------------------------------
@@ -180,7 +186,8 @@ class Store:
             return 1
         return max(order.id for order in self.orders) + 1
 
-    def place_order(self, sku: str, qty: int, date: str) -> Order:
+    def place_order(self, sku: str, qty: int, date: str,
+                    actor: str | None = None) -> Order:
         """Record a new pending purchase order for an existing item.
 
         ``date`` is stored as given; the CLI defaults it to today when
@@ -188,6 +195,7 @@ class Store:
         """
         item = self.get_item(sku)  # validates the SKU
         order = Order(id=self.next_order_id(), sku=item.sku, qty=qty, date=date)
+        record_actor(order, actor)
         self.orders.append(order)
         return order
 
@@ -198,21 +206,24 @@ class Store:
                 return order
         raise ValueError(f"unknown order {order_id}")
 
-    def receive_order(self, order_id: int) -> Order:
+    def receive_order(self, order_id: int, actor: str | None = None) -> Order:
         """Mark a pending order received and put its quantity into stock.
 
         Only a pending order can be received; receiving an already
         received or cancelled one raises ``ValueError`` and adds nothing
-        to stock.
+        to stock.  Both the order and the restocked item record the
+        actor, since both change.
         """
         order = self.get_order(order_id)
         self._require_pending(order, "receive")
         order.status = STATUS_RECEIVED
+        record_actor(order, actor)
         item = self.get_item(order.sku)
         item.qty += order.qty
+        record_actor(item, actor)
         return order
 
-    def cancel_order(self, order_id: int) -> Order:
+    def cancel_order(self, order_id: int, actor: str | None = None) -> Order:
         """Mark a pending order cancelled.  Stock is not affected.
 
         Only a pending order can be cancelled; cancelling an already
@@ -222,6 +233,7 @@ class Store:
         order = self.get_order(order_id)
         self._require_pending(order, "cancel")
         order.status = STATUS_CANCELLED
+        record_actor(order, actor)
         return order
 
     @staticmethod

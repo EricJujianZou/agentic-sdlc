@@ -16,7 +16,7 @@ side has to accept files we did not write ourselves.
 
 import csv
 
-from .models import DEFAULT_CATEGORY, Item, normalize_sku
+from .models import DEFAULT_CATEGORY, Item, normalize_sku, record_actor
 from .store import Store
 
 FIELDNAMES = ["sku", "name", "qty", "unit_price", "supplier_id", "category"]
@@ -48,13 +48,14 @@ def export_items(store: Store, path: str) -> int:
     return count
 
 
-def import_items(store: Store, path: str) -> int:
+def import_items(store: Store, path: str, actor: str | None = None) -> int:
     """Read items from a CSV file into the store.
 
     Rows whose SKU already exists update that item; other rows create
     new items.  SKUs are matched without regard to case, so a supplier
     file that lower cases (or mixes) the spelling updates the item we
-    already have rather than adding a near-duplicate.  The caller is
+    already have rather than adding a near-duplicate.  ``actor``, when
+    given, is recorded on every item the file touches.  The caller is
     responsible for saving the store afterwards.
 
     Returns:
@@ -79,7 +80,7 @@ def import_items(store: Store, path: str) -> int:
                 item.category = category
             else:
                 # New SKU: add it to the catalogue.
-                store.items[sku] = Item(
+                item = Item(
                     sku=sku,
                     name=row["name"],
                     qty=qty,
@@ -87,5 +88,7 @@ def import_items(store: Store, path: str) -> int:
                     supplier_id=supplier_id,
                     category=category,
                 )
+                store.items[sku] = item
+            record_actor(item, actor)
             count += 1
     return count
