@@ -60,8 +60,11 @@ def match(pred, gold):
 
 def query(model, prompt, workdir):
     r = subprocess.run(
-        ["claude", "-p", "--model", model, "--max-turns", "1"],
+        ["claude", "-p", "--model", model, "--max-turns", "2",
+         "--disallowedTools",
+         "Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,Task,TodoWrite,NotebookEdit"],
         input=prompt, capture_output=True, text=True, timeout=600,
+        encoding="utf-8", errors="replace",
         cwd=workdir, shell=True if os.name == "nt" else False,
     )
     return r.stdout.strip()
@@ -92,6 +95,12 @@ def main():
         ids = ids[: args.limit]
 
     results = json.load(open(OUT)) if os.path.exists(OUT) else {}
+    # drop failed queries (turn-limit errors) so they re-run
+    failed = [k for k, v in results.items() if v["raw_output"].startswith("Error:")]
+    for k in failed:
+        del results[k]
+    if failed:
+        print(f"re-running {len(failed)} failed queries")
     workdir = tempfile.mkdtemp(prefix="bench5_probe_")
 
     for i, iid in enumerate(ids):

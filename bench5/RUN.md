@@ -64,6 +64,31 @@ per decile, same 10 instances for both models. Chosen by rule (not by
 inspection) so the pilot spans the difficulty range instead of only the
 extreme head. Pilot runs are discarded, not graded into results (PLAN.md).
 
+## 2026-07-31 — Memorization probe (gate 4): COMPLETE
+
+200 queries (100 frozen instances x 2 models) via local `claude -p` from an
+empty directory, tools disallowed. 8 first-pass queries died on a
+turn-limit error (model attempted a tool call); re-run with tools
+disabled — a query failure is not evidence of no memorization, so failures
+were re-queried, never scored as zero.
+
+| model | scorable | high-probe (recall >= 0.5) | mean recall |
+|---|---|---|---|
+| claude-sonnet-5 | 100 | 23 | 0.290 |
+| claude-opus-5 | 100 | 47 | 0.497 |
+
+Union high-probe: **47/100** instances (dominated by Opus 5). This is a
+strong contamination signal on the frozen battery: Opus 5 can name half the
+gold-patch file sets from issue text alone. Consequences, per the
+pre-registration: pass rates are reported alongside probe results, and the
+primary analysis is REPEATED excluding the 47 high-probe instances (n=53
+low-probe subset). The asymmetry (Opus memorizes far more than Sonnet)
+itself biases the interaction estimate in a knowable direction: it should
+inflate Opus pass rates in both arms equally, which weakens neither the
+within-model scaffolding contrasts (H2, H3) nor McNemar pairing, but the
+cross-model comparisons (H1, H5) lean on the low-probe subset. Raw
+results: `probe/probe_results.json`.
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are
