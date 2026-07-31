@@ -12,12 +12,18 @@ from .store import Store
 DEFAULT_THRESHOLD = 5
 
 
-def stock_report(store: Store, by_category: bool = False) -> dict:
+def stock_report(store: Store,
+                 by_category: bool = False,
+                 warehouse: str | None = None) -> dict:
     """Full stock listing plus total inventory value.
 
     Args:
         by_category: group the rows by shelf area instead of returning
             one flat list.
+        warehouse: report on one warehouse alone - quantities, line
+            values and the total cover only the units held there, and
+            items with nothing in it are left out.  Left off (the
+            default), the report covers every warehouse together.
 
     Returns:
         A dict with two keys.  ``total_value`` is the value of the whole
@@ -31,12 +37,15 @@ def stock_report(store: Store, by_category: bool = False) -> dict:
     total_value = 0.0
     categories: dict[str, list[dict]] = {}
     for item in store.list_items():
-        value = item.qty * item.unit_price
+        qty = item.qty if warehouse is None else item.qty_in(warehouse)
+        if warehouse is not None and qty == 0:
+            continue
+        value = qty * item.unit_price
         total_value += value
         row = {
             "sku": item.sku,
             "name": item.name,
-            "qty": item.qty,
+            "qty": qty,
             "unit_price": item.unit_price,
             "value": value,
         }

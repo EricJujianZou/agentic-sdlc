@@ -121,8 +121,10 @@ def _print_stock_rows(rows: list[dict]) -> None:
 
 def cmd_report_stock(store: Store, args) -> int:
     """Handle ``report stock``: print the full stock listing, optionally
-    grouped under one heading per shelf area."""
-    report = reports.stock_report(store, by_category=args.by_category)
+    grouped under one heading per shelf area or narrowed to one
+    warehouse."""
+    report = reports.stock_report(store, by_category=args.by_category,
+                                  warehouse=args.warehouse)
     if args.by_category:
         for category in sorted(report["categories"]):
             print(f"[{category}]")
@@ -341,6 +343,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = report_sub.add_parser("stock", help="full stock listing with values")
     p.add_argument("--by-category", action="store_true",
                    help="group the listing by shelf area")
+    p.add_argument("--warehouse", default=None,
+                   help="report on one warehouse alone (default: all of them)")
     p.set_defaults(func=cmd_report_stock)
 
     p = report_sub.add_parser("low", help="items running low")
