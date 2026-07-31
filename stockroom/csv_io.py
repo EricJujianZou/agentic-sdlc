@@ -15,7 +15,7 @@ side has to accept files we did not write ourselves.
 
 import csv
 
-from .models import DEFAULT_CATEGORY, Item
+from .models import DEFAULT_CATEGORY, Item, canonical_sku
 from .store import Store
 
 FIELDNAMES = ["sku", "name", "qty", "unit_price", "supplier_id", "category"]
@@ -47,7 +47,7 @@ def export_items(store: Store, path: str) -> int:
     return count
 
 
-def import_items(store: Store, path: str) -> int:
+def import_items(store: Store, path: str, actor: str | None = None) -> int:
     """Read items from a CSV file into the store.
 
     Rows whose SKU already exists update that item; other rows create
@@ -61,7 +61,9 @@ def import_items(store: Store, path: str) -> int:
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            sku = row["sku"]
+            # Supplier files spell SKUs in whatever case they like, and
+            # some mix both spellings of one SKU in the same file.
+            sku = canonical_sku(row["sku"])
             qty = int(row["qty"])
             unit_price = float(row["unit_price"])
             supplier_id = row.get("supplier_id") or None
@@ -76,6 +78,8 @@ def import_items(store: Store, path: str) -> int:
                 item.supplier_id = supplier_id
                 if category:
                     item.category = category
+                if actor:
+                    item.last_actor = actor
             else:
                 # New SKU: add it to the catalogue.
                 store.items[sku] = Item(
@@ -85,6 +89,7 @@ def import_items(store: Store, path: str) -> int:
                     unit_price=unit_price,
                     supplier_id=supplier_id,
                     category=category or DEFAULT_CATEGORY,
+                    last_actor=actor,
                 )
             count += 1
     return count

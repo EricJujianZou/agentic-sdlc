@@ -23,6 +23,11 @@ STATUS_CANCELLED = "cancelled"
 DEFAULT_CATEGORY = "uncategorized"
 
 
+def canonical_sku(sku: str) -> str:
+    """SKUs are not case sensitive; we write and store them uppercase."""
+    return str(sku).strip().upper()
+
+
 @dataclass
 class Item:
     """A single stocked item.
@@ -35,6 +40,7 @@ class Item:
         supplier_id: id of the Supplier we buy this from, or None for
             items we do not reorder.
         category: shelf area the item lives in.
+        last_actor: who last created or changed this item, if recorded.
     """
 
     sku: str
@@ -43,6 +49,7 @@ class Item:
     unit_price: float = 0.0
     supplier_id: str | None = None
     category: str = DEFAULT_CATEGORY
+    last_actor: str | None = None
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this item."""
@@ -53,6 +60,7 @@ class Item:
             "unit_price": self.unit_price,
             "supplier_id": self.supplier_id,
             "category": self.category,
+            "last_actor": self.last_actor,
         }
 
     @classmethod
@@ -65,6 +73,7 @@ class Item:
             unit_price=data.get("unit_price", 0.0),
             supplier_id=data.get("supplier_id"),
             category=data.get("category") or DEFAULT_CATEGORY,
+            last_actor=data.get("last_actor"),
         )
 
 
@@ -115,6 +124,7 @@ class Order:
         date: the date the order was placed, as a string (whatever the
             user typed, normally YYYY-MM-DD).
         status: one of "pending", "received" or "cancelled".
+        last_actor: who last created or changed this order, if recorded.
     """
 
     id: int
@@ -122,6 +132,7 @@ class Order:
     qty: int
     date: str
     status: str = STATUS_PENDING
+    last_actor: str | None = None
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this order."""
@@ -131,6 +142,7 @@ class Order:
             "qty": self.qty,
             "date": self.date,
             "status": self.status,
+            "last_actor": self.last_actor,
         }
 
     @classmethod
@@ -142,4 +154,5 @@ class Order:
             qty=data["qty"],
             date=data["date"],
             status=data.get("status", STATUS_PENDING),
+            last_actor=data.get("last_actor"),
         )

@@ -24,11 +24,26 @@ import os
 from .models import (
     DEFAULT_CATEGORY,
     Item,
+    STATUS_PENDING,
+    canonical_sku,
     Order,
     STATUS_CANCELLED,
     STATUS_RECEIVED,
     Supplier,
 )
+
+
+def _record_actor(record, actor: str | None) -> None:
+    """Stamp *record* with who changed it, when we were told."""
+    if actor:
+        record.last_actor = actor
+
+
+def _require_pending(order: Order, what: str) -> None:
+    """Guard the order lifecycle: only pending orders may move on."""
+    if order.status != STATUS_PENDING:
+        raise ValueError(
+            f"cannot {what} order {order.id}: it is {order.status}")
 
 
 class Store:
@@ -62,9 +77,11 @@ class Store:
             return
         with open(self.path, encoding="utf-8") as f:
             raw = json.load(f)
-        self.items = {
-            sku: Item.from_dict(data) for sku, data in raw.get("items", {}).items()
-        }
+        self.items = {}
+        for sku, data in raw.get("items", {}).items():
+            item = Item.from_dict({**data, "sku": data.get("sku", sku)})
+            item.sku = canonical_sku(item.sku)
+            self.items[item.sku] = item
         self.suppliers = {
             sid: Supplier.from_dict(data)
             for sid, data in raw.get("suppliers", {}).items()
@@ -94,39 +111,44 @@ class Store:
         unit_price: float = 0.0,
         supplier_id: str | None = None,
         category: str | None = None,
+        actor: str | None = None,
     ) -> Item:
         """Create a new item.
 
-        The SKU must not already exist, and if a supplier is given it
-        must be one we know about.
+        The SKU must not already exist (case does not distinguish two
+        SKUs), and if a supplier is given it must be one we know about.
         """
+        sku = canonical_sku(sku)
         if sku in self.items:
             raise ValueError(f"item {sku} already exists")
         if supplier_id is not None and supplier_id not in self.suppliers:
             raise ValueError(f"unknown supplier {supplier_id}")
         item = Item(sku=sku, name=name, qty=qty, unit_price=unit_price,
                     supplier_id=supplier_id,
-                    category=category or DEFAULT_CATEGORY)
+                    category=category or DEFAULT_CATEGORY,
+                    last_actor=actor)
         self.items[sku] = item
         return item
 
     def get_item(self, sku: str) -> Item:
-        """Look up an item by SKU or raise ValueError."""
-        if sku not in self.items:
+        """Look up an item by SKU (any case) or raise ValueError."""
+        key = canonical_sku(sku)
+        if key not in self.items:
             raise ValueError(f"unknown item {sku}")
-        return self.items[sku]
+        return self.items[key]
 
     def list_items(self) -> list[Item]:
         """All items, sorted by SKU for stable output."""
         return [self.items[sku] for sku in sorted(self.items)]
 
-    def receive(self, sku: str, qty: int) -> Item:
+    def receive(self, sku: str, qty: int, actor: str | None = None) -> Item:
         """Add ``qty`` units of an item to stock (goods arrived)."""
         item = self.get_item(sku)
         item.qty += qty
+        _record_actor(item, actor)
         return item
 
-    def ship(self, sku: str, qty: int) -> Item:
+    def ship(self, sku: str, qty: int, actor: str | None = None) -> Item:
         """Remove ``qty`` units of an item from stock (goods sent out).
 
         The shelf cannot go negative: shipping more than we hold is
@@ -137,6 +159,7 @@ class Store:
             raise ValueError(
                 f"cannot ship {qty} x {sku}: only {item.qty} on hand")
         item.qty -= qty
+        _record_actor(item, actor)
         return item
 
     # ------------------------------------------------------------------
@@ -173,14 +196,16 @@ class Store:
             return 1
         return max(order.id for order in self.orders) + 1
 
-    def place_order(self, sku: str, qty: int, date: str) -> Order:
+    def place_order(self, sku: str, qty: int, date: str,
+                    actor: str | None = None) -> Order:
         """Record a new pending purchase order for an existing item.
 
         ``date`` is stored as given; the CLI defaults it to today when
         the user does not pass one.
         """
-        self.get_item(sku)  # validates the SKU
-        order = Order(id=self.next_order_id(), sku=sku, qty=qty, date=date)
+        item = self.get_item(sku)  # validates the SKU
+        order = Order(id=self.next_order_id(), sku=item.sku, qty=qty,
+                      date=date, last_actor=actor)
         self.orders.append(order)
         return order
 
@@ -191,16 +216,25 @@ class Store:
                 return order
         raise ValueError(f"unknown order {order_id}")
 
-    def receive_order(self, order_id: int) -> Order:
-        """Mark an order received and put its quantity into stock."""
+    def receive_order(self, order_id: int, actor: str | None = None) -> Order:
+        """Mark an order received and put its quantity into stock.
+
+        Only a pending order can be received, so goods never get booked
+        in twice.
+        """
         order = self.get_order(order_id)
+        _require_pending(order, "receive")
         order.status = STATUS_RECEIVED
         item = self.get_item(order.sku)
         item.qty += order.qty
+        _record_actor(order, actor)
+        _record_actor(item, actor)
         return order
 
-    def cancel_order(self, order_id: int) -> Order:
-        """Mark an order cancelled.  Stock is not affected."""
+    def cancel_order(self, order_id: int, actor: str | None = None) -> Order:
+        """Mark a pending order cancelled.  Stock is not affected."""
         order = self.get_order(order_id)
+        _require_pending(order, "cancel")
         order.status = STATUS_CANCELLED
+        _record_actor(order, actor)
         return order

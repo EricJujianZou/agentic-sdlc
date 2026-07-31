@@ -74,6 +74,37 @@ def low_stock(store: Store, threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
     return rows
 
 
+def low_stock_by_category(store: Store,
+                          threshold: int = DEFAULT_THRESHOLD) -> dict:
+    """Low-stock rows grouped by shelf area, for walking the room.
+
+    Returns:
+        A dict of category name -> the same rows the flat low-stock
+        report produces, sorted by SKU.  Categories with nothing running
+        low are left out entirely.
+    """
+    grouped: dict[str, list[dict]] = {}
+    for row in low_stock(store, threshold=threshold):
+        category = store.get_item(row["sku"]).category
+        grouped.setdefault(category, []).append(row)
+    return grouped
+
+
+def search_items(store: Store, query: str) -> list[dict]:
+    """Items whose name or SKU contains *query*, case-insensitively.
+
+    Returns:
+        A list of dicts (sku, name, qty), sorted by SKU.  Empty when
+        nothing matches.
+    """
+    needle = query.lower()
+    return [
+        {"sku": item.sku, "name": item.name, "qty": item.qty}
+        for item in store.list_items()
+        if needle in item.name.lower() or needle in item.sku.lower()
+    ]
+
+
 def monthly_orders(store: Store, month: str) -> list[dict]:
     """All orders placed in the given month.
 

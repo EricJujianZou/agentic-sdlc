@@ -33,6 +33,7 @@ def cmd_add_item(store: Store, args) -> int:
         unit_price=args.price,
         supplier_id=args.supplier,
         category=args.category,
+        actor=args.actor,
     )
     store.save()
     print(f"added item {item.sku} ({item.name})")
@@ -50,7 +51,7 @@ def cmd_add_supplier(store: Store, args) -> int:
 
 def cmd_receive(store: Store, args) -> int:
     """Handle ``receive``: goods arrived outside of an order."""
-    item = store.receive(args.sku, args.qty)
+    item = store.receive(args.sku, args.qty, actor=args.actor)
     store.save()
     print(f"received {args.qty} x {item.sku}, now {item.qty} on hand")
     return 0
@@ -58,7 +59,7 @@ def cmd_receive(store: Store, args) -> int:
 
 def cmd_ship(store: Store, args) -> int:
     """Handle ``ship``: send units out of the stockroom."""
-    item = store.ship(args.sku, args.qty)
+    item = store.ship(args.sku, args.qty, actor=args.actor)
     store.save()
     print(f"shipped {args.qty} x {item.sku}, now {item.qty} on hand")
     return 0
@@ -69,7 +70,7 @@ def cmd_place_order(store: Store, args) -> int:
     date = args.date
     if date is None:
         date = datetime.date.today().isoformat()
-    order = store.place_order(args.sku, args.qty, date)
+    order = store.place_order(args.sku, args.qty, date, actor=args.actor)
     store.save()
     print(f"placed order {order.id}: {order.qty} x {order.sku} on {order.date}")
     return 0
@@ -77,7 +78,7 @@ def cmd_place_order(store: Store, args) -> int:
 
 def cmd_receive_order(store: Store, args) -> int:
     """Handle ``receive-order``: an order arrived; stock it."""
-    order = store.receive_order(args.id)
+    order = store.receive_order(args.id, actor=args.actor)
     store.save()
     print(f"order {order.id} received, {order.qty} x {order.sku} added to stock")
     return 0
@@ -85,7 +86,7 @@ def cmd_receive_order(store: Store, args) -> int:
 
 def cmd_cancel_order(store: Store, args) -> int:
     """Handle ``cancel-order``: mark an order cancelled."""
-    order = store.cancel_order(args.id)
+    order = store.cancel_order(args.id, actor=args.actor)
     store.save()
     print(f"order {order.id} cancelled")
     return 0
@@ -116,15 +117,30 @@ def cmd_report_stock(store: Store, args) -> int:
     return 0
 
 
+def _print_low_rows(rows) -> None:
+    """Print the body of a low-stock listing."""
+    for row in rows:
+        print(f"{row['sku']:<12} {row['name']:<24} {row['qty']:>6}")
+
+
 def cmd_report_low(store: Store, args) -> int:
     """Handle ``report low``: print items running low, plus
     reorder suggestions for the ones we can actually reorder."""
+    if args.by_category:
+        grouped = reports.low_stock_by_category(store, threshold=args.threshold)
+        if not grouped:
+            print("no items at or below threshold")
+            return 0
+        for category in sorted(grouped):
+            print(category)
+            _print_low_rows(grouped[category])
+            print()
+        return 0
     rows = reports.low_stock(store, threshold=args.threshold)
     if not rows:
         print("no items at or below threshold")
         return 0
-    for row in rows:
-        print(f"{row['sku']:<12} {row['name']:<24} {row['qty']:>6}")
+    _print_low_rows(rows)
     suggestions = reports.reorder_suggestions(store, threshold=args.threshold)
     if suggestions:
         print()
@@ -161,6 +177,13 @@ def cmd_report_history(store: Store, args) -> int:
     return 0
 
 
+def cmd_search(store: Store, args) -> int:
+    """Handle ``search``: print items matching a query."""
+    for row in reports.search_items(store, args.query):
+        print(f"{row['sku']:<12} {row['name']}")
+    return 0
+
+
 def cmd_export_csv(store: Store, args) -> int:
     """Handle ``export-csv``: write the item list to a file."""
     count = csv_io.export_items(store, args.path)
@@ -172,7 +195,7 @@ def cmd_import_csv(store: Store, args) -> int:
     """Handle ``import-csv``: merge items from a CSV file."""
     if not os.path.exists(args.path):
         raise ValueError(f"no such file: {args.path}")
-    count = csv_io.import_items(store, args.path)
+    count = csv_io.import_items(store, args.path, actor=args.actor)
     store.save()
     print(f"imported {count} rows from {args.path}")
     return 0
@@ -193,6 +216,13 @@ examples:
   stockroom --data ./data report monthly 2026-07
   stockroom --data ./data export-csv items.csv
 """
+
+
+# Commands that change state; each of these takes --actor.
+MUTATING_COMMANDS = [
+    "add-item", "add-supplier", "receive", "ship", "place-order",
+    "receive-order", "cancel-order", "import-csv",
+]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -262,6 +292,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = report_sub.add_parser("low", help="items running low")
     p.add_argument("--threshold", type=int, default=reports.DEFAULT_THRESHOLD)
+    p.add_argument("--by-category", action="store_true",
+                   help="group the listing by shelf area")
     p.set_defaults(func=cmd_report_low)
 
     p = report_sub.add_parser("monthly", help="orders placed in a month")
@@ -272,6 +304,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("sku")
     p.set_defaults(func=cmd_report_history)
 
+    p = sub.add_parser("search", help="find items by name or SKU")
+    p.add_argument("query")
+    p.set_defaults(func=cmd_search)
+
     p = sub.add_parser("export-csv", help="write items to a CSV file")
     p.add_argument("path")
     p.set_defaults(func=cmd_export_csv)
@@ -279,6 +315,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("import-csv", help="read items from a CSV file")
     p.add_argument("path")
     p.set_defaults(func=cmd_import_csv)
+
+    # Every command that changes state can say who ran it.
+    for name in MUTATING_COMMANDS:
+        sub.choices[name].add_argument("--actor", default=None,
+                                       help="who is running this command")
 
     return parser
 
