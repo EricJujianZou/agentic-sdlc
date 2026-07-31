@@ -39,10 +39,22 @@
 - T44 - v7 split storage: `state.json` is now meta alone (version/suppliers/items *sans* qty/shipments/discounts/tax_rate), per-warehouse counts live in `items.<wh>.json` (sku -> qty, via `Store.data_dir`/`items_path`/`orders_path`) and orders in `orders.json`, events sidecar unchanged; every write goes through `_write_atomic` (tmp file + `os.replace`, tmp removed on failure), incl. events/lock/backup/restore. `save()` = `_meta()` + one file per warehouse (stale warehouse files deleted) + orders + events; `_write(path)` still writes a self-contained file, so backups/restore keep working. `load()` reads orders and qty from the side files unless the state file has them embedded (`_has_embedded_quantities`), so v1-v6 files and backups load and the next save upgrades the directory in place. API/CLI unchanged.
 - T45 - `reports.fsck(store)` -> one message per inconsistency (no prefix), in a stable order: negative per-warehouse quantities and items pointing at an unknown supplier, then orders (unknown SKU / unknown supplier), shipments, audit events whose `args["sku"]` we do not stock - `reports.CATALOG_OPS` ("catalog-add") is skipped, since a supplier's catalogue may list SKUs we never bought. Reads only. CLI `fsck` (`read_only_ok=True`, never saves): prints `problem: <msg>` per finding and exits 2, else `fsck: ok` and exits 0.
 - T46 - `Store.plan_batch(rows)` -> one line per row (`receive N x SKU into WH` / `ship ... from WH` / `transfer ... from SRC to DST`), validating exactly as `apply_batch` does (same `batch failed at row N: <reason>` ValueError) by applying the rows and rolling back in a `finally`; `_parse_batch_row` is shared by `_apply_batch_row`/`_describe_batch_row`, both rollbacks go through `_batch_snapshot`/`_batch_restore` (items/shipments/events + `revision`). CLI `batch PATH --dry-run` prints `would <line>` each, then `dry-run: N operations, nothing changed`, and never calls `save()` (no file rewritten, mtimes hold); still mutating under `--read-only`.
-
 - T47 - `reports.summary(store, threshold=DEFAULT_THRESHOLD)` -> `{"valuation"` (dollars, from `stock_report`), `"threshold"`, `"low_stock"` (the `low_stock` SKUs, sorted), `"pending_orders"`, `"top_category"` (most units shipped over all time, summing `turnover`'s months, ties by name, `None` when nothing ever shipped), `"events"` (trail length)`}` - built from the existing reports so the dashboard cannot drift from them. Kind "summary" in `cache.KINDS`; CLI `report summary [--threshold N]` (`read_only_ok=True`) prints the five lines, money via `format_money`, `(none)` for an empty top category; never saves.
-
 - T48 - `undo(steps=1)`/`redo(steps=1)` return the events worked, in the order worked, all-or-nothing: `_history_window(history, steps, action, table)` refuses (`nothing to undo|redo`, `cannot ACTION N changes: only M to ACTION`, `cannot ACTION OP`) before anything moves. `undo` takes the trail's newest end first, pushing each event onto `Store.redo_stack`; `redo` pops that stack (forward, original order), applies `_REDO[op](args, actor)` (mirroring `_UNDO`'s eight ops) and puts the event back on the trail. `log_event` clears `redo_stack`; the stack rides in the events sidecar (`{"events", "redo"}`, `_load_redo`) and joins `_batch_snapshot`. CLI `undo --steps N` + `redo [--steps N]`, an `undid|redid OP` line each.
 - T49 - single-file archive: `Store.archive()` -> `{"archive_version"` (=1)`, "state"` (`_state_payload()`, split out of `_write` - the whole state, quantities and orders embedded)`, "events", "redo"}`; `export_archive(path)` writes it, `import_archive(path)` refuses (ValueError, before writing) when `data_files()` finds any store file - state/orders/events/lock/warehouse/backup - else `_apply_state()` (split out of `load`, so an archive reads in through the load path) + the trail verbatim, then `save()`. Logs nothing and bumps `revision`: the trail must round-trip exactly, since `report summary` counts it. The lock marker stays out. CLI `export-archive PATH` (`read_only_ok=True`) / `import-archive PATH` (mutating).
 
-## current - none (T49 done)
+- T50 - `stockroom/api.py`: the whole surface as flat functions taking `store`
+  first (`open_store(data_dir)`/`save`/`set_read_only`/`backup`/`restore`/
+  `list_backups`, catalogue+stock+orders, `scheduled_reorders`, money
+  (`order_total` -> total dollars, `invoice_text`), every report,
+  `cached_report`, csv/archive, `events`/`undo`/`redo`, `batch_apply`,
+  `fsck`), each a thin delegate to the owning module - which is untouched and
+  still importable. `search_items` returns Items (not rows), `add_item` takes
+  `price=`/`supplier=`/`warehouse=`, `category=None` -> "uncategorized".
+  `_writable(store)` refuses every mutator while the lock marker is set,
+  before anything moves, and each one calls `store.save()` itself. New:
+  `store.STATE_NAME`, `reports.per_warehouse_report` (warehouse ->
+  `stock_report` for it) + cache kind "per-warehouse"; `cmd_scheduled_reorders`
+  now delegates to `api.scheduled_reorders` (one implementation).
+
+## current - none (T50 done)

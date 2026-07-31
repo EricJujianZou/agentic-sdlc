@@ -19,11 +19,11 @@ import json
 import os
 import sys
 
-from . import __version__, csv_io, dates, reports
+from . import __version__, api, csv_io, dates, reports
 from .cache import cached_report
 from .models import DEFAULT_CATEGORY, DEFAULT_WAREHOUSE, normalize_sku
 from .money import format_money
-from .store import Store
+from .store import STATE_NAME, Store
 
 
 # ----------------------------------------------------------------------
@@ -207,19 +207,11 @@ def cmd_scheduled_reorders(store: Store, args) -> int:
     nothing.  Later days look after themselves: the orders placed here
     are pending, so they net out of the next round of suggestions.
     """
-    as_of = dates.normalize_date(args.as_of)
-    ordered_today = {order.sku for order in store.orders if order.date == as_of}
-    placed = []
-    for row in reports.reorder_suggestions(store, threshold=args.threshold):
-        if row["suggested_qty"] <= 0 or row["sku"] in ordered_today:
-            continue
-        placed.append(store.place_order(row["sku"], row["suggested_qty"], as_of,
-                                        supplier_id=row["supplier_id"],
-                                        actor=args.actor))
+    placed = api.scheduled_reorders(store, args.as_of,
+                                    threshold=args.threshold, actor=args.actor)
     if not placed:
-        print(f"nothing to reorder on {as_of}")
+        print(f"nothing to reorder on {dates.normalize_date(args.as_of)}")
         return 0
-    store.save()
     for order in placed:
         print(f"placed order {order.id}: {order.qty} x {order.sku} "
               f"from {order.supplier_id} on {order.date}")
@@ -973,7 +965,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    state_path = os.path.join(args.data, "state.json")
+    state_path = os.path.join(args.data, STATE_NAME)
     store = Store(state_path)
     try:
         store.load()

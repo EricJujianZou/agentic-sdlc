@@ -74,6 +74,9 @@ from .models import (
 #: the original unversioned layout, which carries no ``"version"`` key.
 SCHEMA_VERSION = 7
 
+#: What the state file inside a data directory is called.
+STATE_NAME = "state.json"
+
 #: What separates the state file's name from a backup's timestamp.
 BACKUP_SUFFIX = ".bak-"
 

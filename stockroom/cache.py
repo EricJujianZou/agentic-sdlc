@@ -22,6 +22,7 @@ from . import reports
 #: Which report each kind runs, named as the ``report`` command names it.
 KINDS = {
     "stock": reports.stock_report,
+    "per-warehouse": reports.per_warehouse_report,
     "low": reports.low_stock,
     "low-by-category": reports.low_stock_by_category,
     "reorder": reports.reorder_suggestions,

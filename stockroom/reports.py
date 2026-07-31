@@ -67,6 +67,21 @@ def stock_report(store: Store,
     return {"rows": rows, "total_value": to_dollars(total_cents)}
 
 
+def per_warehouse_report(store: Store) -> dict[str, dict]:
+    """The stock report one room at a time.
+
+    Returns:
+        A dict mapping each warehouse we hold stock in (sorted by name)
+        to that warehouse's own :func:`stock_report` - its rows and the
+        value of what sits there.  Every warehouse the data knows about
+        is present, including one that has been emptied out; the values
+        add up to the whole stockroom's.
+    """
+    names = sorted({warehouse for item in store.list_items()
+                    for warehouse in item.quantities})
+    return {name: stock_report(store, warehouse=name) for name in names}
+
+
 def low_stock(store: Store, threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
     """Items whose stock has dropped to the threshold or below.
 
