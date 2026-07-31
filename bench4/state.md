@@ -22,6 +22,12 @@
   exactly zero still allowed. CLI unchanged — `main()` already maps ValueError
   to stderr "error: ..." + exit 1, and `cmd_ship` saves only after success.
 
+- T05 — mixed-layout CSV import: no code change needed. `import_items`
+  already reads `category` with `row.get(...) or DEFAULT_CATEGORY`, so
+  old (5-column) files import as "uncategorized" and new files keep their
+  category; `export_items`/`FIELDNAMES` unchanged. Only the module
+  docstring was updated to state that `category` is optional on import.
+
 ## current
 
-(none — T04 done)
+(none — T05 done)

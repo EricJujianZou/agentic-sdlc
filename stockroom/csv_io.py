@@ -4,8 +4,9 @@ The CSV format is one row per item with a header::
 
     sku,name,qty,unit_price,supplier_id,category
 
-Export writes the current items; import reads a file in the same format
-and merges it into the store (existing SKUs are updated in place, new
+Export always writes that header.  Import also accepts the older layout
+without a ``category`` column - those rows get ``DEFAULT_CATEGORY``.
+Import merges into the store (existing SKUs are updated in place, new
 SKUs are added).  Suppliers named in the file are not created - the
 supplier_id column is stored as-is, and an empty cell means no supplier.
 
