@@ -266,8 +266,12 @@ def order_history(store: Store, sku: str) -> list[dict]:
     """Every order ever placed for one SKU.
 
     Returns:
-        A list of dicts (id, qty, date, status), oldest first.  Empty
-        when the SKU has never been ordered.
+        A list of dicts (id, qty, date, status), oldest first.  ``date``
+        is the date as recorded; the sort zero-pads it first, so an
+        order dated "2026-1-15" lands ahead of one dated "2026-01-20"
+        rather than after it, the way plain text would have it.  Two
+        orders placed on the same day keep the order they were placed
+        in.  Empty when the SKU has never been ordered.
     """
     rows = []
     for order in store.orders:
@@ -278,7 +282,7 @@ def order_history(store: Store, sku: str) -> list[dict]:
                 "date": order.date,
                 "status": order.status,
             })
-    rows.sort(key=lambda row: row["date"])
+    rows.sort(key=lambda row: _normalize_date(row["date"]))
     return rows
 
 

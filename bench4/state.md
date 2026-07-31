@@ -35,19 +35,17 @@
   `reports.supplier_on_time(store)` -> `[{supplier_id, total, on_time, pct}]` sorted by id, over received orders *with* a date, grouped by the **item's** supplier, on time when arrival <= placed + lead time (`_as_date` parses via `_normalize_date`); no countable orders -> supplier omitted. CLI `report on-time`.
 - T32 — every stored date is ISO `YYYY-MM-DD` (v5): `stockroom.dates` = `parse_date` (accepts `YYYY-M-D`, ValueError -> exit 1 on anything not a real day), `normalize_date` -> ISO str, `normalize_stored` (tolerant, unparseable/None kept) used by `Order`/`Shipment`/price-history `from_dict` so legacy dates normalize on load and save back padded; `place_order`/`ship`/`set_price`/`receive_order` normalize before mutating.
   `reports._in_month(date, month)` (parsed, not prefix) drives `monthly_orders`/`monthly_revenue`; `_normalize_date`/`_as_date` delegate to `dates`.
-- T33 — `reports.AGING_BUCKETS` = `("0-7", "8-30", "31+")` and `order_aging(store, as_of)` (ISO str or `date`):
-  pending orders only, age = whole days from order date to as-of -> `<=7`/`<=30`/rest; every bucket key always present,
-  rows (id/sku/qty/date) oldest first. CLI `report aging [--as-of YYYY-MM-DD]` (default today) prints all three headings, "(none)" under an empty one; bad date -> exit 1.
-- T34 — audit trail: `store.events` (`"events"`, missing -> []) = dicts `{"op", "args", "actor", "timestamp"}` oldest
-  first, appended by `store.log_event(op, args, actor)`. Every `Store` mutator calls it once, last (refused op logs
-  nothing; library calls log too), `op` spelled as the CLI command; `csv_io.import_items` logs one "import-csv" per file.
-  `add_supplier`/`set_discount`/`remove_discount`/`set_tax_rate`/`add_supplier_sku` gained `actor=` + `--actor`. Reports/exports/backup/restore log nothing.
-- T35 — `Store.undo()` reverses the newest change and pops it off `store.events` (the trail *is* the undo
-  history, so undo repeats step by step). `Store._UNDO` maps op -> inverse from the logged args + current
-  state: add-item/add-supplier delete, receive/ship/transfer adjust back (ship drops its shipment), place-order
-  removes the order, cancel-order -> pending, set-price pops the last `price_history` entry. Logs nothing,
-  leaves `last_actor` alone, raises before mutating ("nothing to undo" / "cannot undo OP"
-  outside `_UNDO`: set-discount/set-tax-rate/receive-order/import-csv/catalog-add). CLI `undo`.
+- T33 — `reports.AGING_BUCKETS` = `("0-7", "8-30", "31+")`, `order_aging(store, as_of)` (ISO str or `date`): pending only, age = whole days order date -> as-of, `<=7`/`<=30`/rest; every bucket key always present, rows (id/sku/qty/date) oldest first.
+  CLI `report aging [--as-of YYYY-MM-DD]` (default today) prints all three headings, "(none)" under an empty one; bad date -> exit 1.
+- T34 — audit trail: `store.events` (`"events"`, missing -> []) = `{"op", "args", "actor", "timestamp"}` oldest first via
+  `store.log_event(op, args, actor)`; every `Store` mutator calls it once, last (refused op logs nothing, library calls do),
+  `op` spelled as the CLI command; `import_items` logs one "import-csv"/file. `add_supplier`/`set_discount`/`remove_discount`/
+  `set_tax_rate`/`add_supplier_sku` gained `actor=` + `--actor`. Reports/exports/backup/restore log nothing.
+- T35 — `Store.undo()` reverses the newest change and pops it off `store.events` (the trail *is* the undo history, so undo
+  repeats step by step). `Store._UNDO` maps op -> inverse from the logged args + current state: add-item/add-supplier delete,
+  receive/ship/transfer adjust back (ship drops its shipment), place-order removes the order, cancel-order -> pending,
+  set-price pops the last `price_history` entry. Logs nothing, leaves `last_actor` alone, raises before mutating ("nothing to
+  undo" / "cannot undo OP" outside `_UNDO`: set-discount/set-tax-rate/receive-order/import-csv/catalog-add). CLI `undo`.
 - T36 — CLI `scheduled-reorders --as-of YYYY-MM-DD [--threshold N] [--actor A]` (`cli.cmd_scheduled_reorders`,
   no new store/report API): each `reports.reorder_suggestions(threshold)` row with `suggested_qty > 0` becomes one
   `place_order(sku, suggested_qty, as_of, supplier_id=row's)`, skipping a SKU already ordered on as-of (later days
@@ -55,5 +53,7 @@
 - T37 — `reports.weekly_shipments(store)` -> `{"YYYY-Www": units}` over `store.shipments`, keyed by
   `date.isocalendar()` (ISO week-numbering year, week zero-padded), oldest week first, empty weeks and
   unparseable dates left out. CLI `report weekly` prints one line per week, "nothing shipped yet" when none.
+- T38 — `reports.order_history` sorts on `_normalize_date(row["date"])`, not the raw string, so a legacy "2026-1-15"
+  is chronological rather than text-order; the sort is stable, so same-day orders keep placement order. Shape/CLI unchanged.
 
-## current — none (T37 done)
+## current — none (T38 done)
