@@ -13,6 +13,7 @@ dict shape is exactly what ends up on disk, so keep the keys stable.
 
 from dataclasses import dataclass, field
 
+from .dates import normalize_stored_date
 from .money import to_cents, to_dollars
 
 # Order lifecycle: an order starts out pending, then is either received
@@ -36,10 +37,10 @@ def canonical_sku(sku: str) -> str:
 def _price_entry(entry: dict) -> dict:
     """Normalize a stored price-history entry to whole cents."""
     if "old_cents" in entry or "new_cents" in entry:
-        return {"date": entry["date"],
+        return {"date": normalize_stored_date(entry["date"]),
                 "old_cents": int(entry.get("old_cents", 0)),
                 "new_cents": int(entry.get("new_cents", 0))}
-    return {"date": entry["date"],
+    return {"date": normalize_stored_date(entry["date"]),
             "old_cents": to_cents(entry.get("old", 0.0)),
             "new_cents": to_cents(entry.get("new", 0.0))}
 
@@ -227,6 +228,7 @@ class Order:
         shipped_qty: units delivered so far; suppliers deliver an order
             in parts, and the order flips to received once this reaches
             the ordered quantity.
+        received_date: the day the goods actually arrived, or None.
         supplier_id: who the order was placed with, or None.
         last_actor: who last created or changed this order, if recorded.
     """
@@ -237,6 +239,7 @@ class Order:
     date: str
     status: str = STATUS_PENDING
     shipped_qty: int = 0
+    received_date: str | None = None
     supplier_id: str | None = None
     last_actor: str | None = None
 
@@ -254,6 +257,7 @@ class Order:
             "date": self.date,
             "status": self.status,
             "shipped_qty": self.shipped_qty,
+            "received_date": self.received_date,
             "supplier_id": self.supplier_id,
             "last_actor": self.last_actor,
         }
@@ -265,9 +269,10 @@ class Order:
             id=data["id"],
             sku=data["sku"],
             qty=data["qty"],
-            date=data["date"],
+            date=normalize_stored_date(data["date"]),
             status=data.get("status", STATUS_PENDING),
             shipped_qty=data.get("shipped_qty", 0),
+            received_date=normalize_stored_date(data.get("received_date")),
             supplier_id=data.get("supplier_id"),
             last_actor=data.get("last_actor"),
         )

@@ -5,6 +5,7 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
+import datetime
 from decimal import ROUND_HALF_UP, Decimal
 
 from .dates import parse_date, sort_key
@@ -288,6 +289,82 @@ def price_changes(store: Store) -> list[dict]:
             rows.append({"sku": item.sku, **entry})
     rows.sort(key=lambda row: sort_key(row["date"]))
     return rows
+
+
+def supplier_on_time(store: Store) -> list[dict]:
+    """How often each supplier delivered inside its lead time.
+
+    An order is on time when it arrived at most ``lead_time_days`` after
+    the day it was placed; arriving exactly on the last day of that
+    window still counts.  Only received orders with a recorded arrival
+    date count at all.
+
+    Returns:
+        A list of dicts (supplier_id, total, on_time, pct), sorted by
+        supplier id.  Suppliers with nothing to count are left out.
+    """
+    tally: dict[str, list[int]] = {}
+    for order in store.orders:
+        if order.status != STATUS_RECEIVED or not order.received_date:
+            continue
+        item = store.items.get(order.sku)
+        supplier_id = item.supplier_id if item else None
+        if supplier_id is None:
+            continue
+        placed = parse_date(order.date)
+        arrived = parse_date(order.received_date)
+        if placed is None or arrived is None:
+            continue
+        supplier = store.suppliers.get(supplier_id)
+        lead = supplier.lead_time_days if supplier else 0
+        counts = tally.setdefault(supplier_id, [0, 0])
+        counts[0] += 1
+        if (arrived - placed).days <= lead:
+            counts[1] += 1
+    return [{"supplier_id": sid,
+             "total": total,
+             "on_time": on_time,
+             "pct": 100.0 * on_time / total}
+            for sid, (total, on_time) in sorted(tally.items())]
+
+
+AGING_BUCKETS = ("0-7", "8-30", "31+")
+
+
+def order_aging(store: Store, as_of=None) -> dict:
+    """Pending orders bucketed by how long they have been open.
+
+    Args:
+        as_of: an ISO date string or a ``datetime.date``; defaults to
+            today.
+
+    Returns:
+        A dict with exactly the keys "0-7", "8-30" and "31+", each a
+        list of order dicts (id, sku, qty, date).
+    """
+    if as_of is None:
+        as_of = datetime.date.today()
+    reference = parse_date(as_of)
+    if reference is None:
+        raise ValueError(f"invalid date: {as_of}")
+    buckets: dict[str, list[dict]] = {name: [] for name in AGING_BUCKETS}
+    for order in store.orders:
+        if order.status != STATUS_PENDING:
+            continue
+        placed = parse_date(order.date)
+        if placed is None:
+            continue
+        age = (reference - placed).days
+        if age <= 7:
+            name = "0-7"
+        elif age <= 30:
+            name = "8-30"
+        else:
+            name = "31+"
+        buckets[name].append({"id": order.id, "sku": order.sku,
+                              "qty": order.qty, "date": order.date,
+                              "age_days": age})
+    return buckets
 
 
 def turnover(store: Store) -> dict:

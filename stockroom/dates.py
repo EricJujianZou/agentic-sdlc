@@ -34,6 +34,19 @@ def normalize_date(value: str) -> str:
     return parsed.isoformat()
 
 
+def normalize_stored_date(value):
+    """Normalize a date read from an old data file.
+
+    Legacy files hold whatever someone typed ("2026-1-5"); anything we
+    can read as a date comes back zero-padded.  Values we cannot parse
+    (and None) are handed back untouched rather than losing the data.
+    """
+    if not value:
+        return value
+    parsed = parse_date(value)
+    return parsed.isoformat() if parsed else value
+
+
 def sort_key(value: str) -> tuple:
     """Sort key that orders parseable dates chronologically.
 

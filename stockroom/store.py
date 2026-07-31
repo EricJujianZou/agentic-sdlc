@@ -23,6 +23,7 @@ import glob
 import json
 import os
 
+from .dates import normalize_date, normalize_stored_date
 from .money import to_cents
 from .models import (
     DEFAULT_CATEGORY,
@@ -38,8 +39,9 @@ from .models import (
 
 # Schema version written to the state file.  Version 1 is the original
 # unversioned layout; 2 added the version stamp; 3 broke item quantities
-# down per warehouse; 4 moved money to whole cents.
-SCHEMA_VERSION = 4
+# down per warehouse; 4 moved money to whole cents; 5 stores every
+# date as a zero-padded ISO date.
+SCHEMA_VERSION = 5
 
 
 def _record_actor(record, actor: str | None) -> None:
@@ -111,7 +113,9 @@ class Store:
             sid: sorted(canonical_sku(sku) for sku in skus)
             for sid, skus in raw.get("catalogs", {}).items()
         }
-        self.shipments = [dict(entry) for entry in raw.get("shipments", [])]
+        self.shipments = [{**entry,
+                           "date": normalize_stored_date(entry.get("date"))}
+                          for entry in raw.get("shipments", [])]
         self.discounts = {c: float(p) for c, p in raw.get("discounts", {}).items()}
         self.settings = dict(raw.get("settings", {}))
 
@@ -239,7 +243,7 @@ class Store:
             "sku": item.sku,
             "qty": qty,
             "warehouse": warehouse,
-            "date": date or datetime.date.today().isoformat(),
+            "date": normalize_date(date or datetime.date.today().isoformat()),
         })
         _record_actor(item, actor)
         return item
@@ -266,8 +270,9 @@ class Store:
                   actor: str | None = None) -> Item:
         """Set an item's unit price, remembering the old one."""
         item = self.get_item(sku)
-        item.record_price(to_cents(price),
-                          date or datetime.date.today().isoformat())
+        item.record_price(
+            to_cents(price),
+            normalize_date(date or datetime.date.today().isoformat()))
         _record_actor(item, actor)
         return item
 
@@ -371,7 +376,8 @@ class Store:
         item = self.get_item(sku)  # validates the SKU
         supplier_id = self._order_supplier(item, supplier_id)
         order = Order(id=self.next_order_id(), sku=item.sku, qty=qty,
-                      date=date, supplier_id=supplier_id, last_actor=actor)
+                      date=normalize_date(date), supplier_id=supplier_id,
+                      last_actor=actor)
         self.orders.append(order)
         return order
 
@@ -396,7 +402,8 @@ class Store:
                 return order
         raise ValueError(f"unknown order {order_id}")
 
-    def receive_order(self, order_id: int, actor: str | None = None) -> Order:
+    def receive_order(self, order_id: int, date: str | None = None,
+                      actor: str | None = None) -> Order:
         """Mark an order received and put its quantity into stock.
 
         Only a pending order can be received, so goods never get booked
@@ -408,6 +415,8 @@ class Store:
         item.add_qty(MAIN_WAREHOUSE, order.outstanding)
         order.shipped_qty = order.qty
         order.status = STATUS_RECEIVED
+        order.received_date = normalize_date(
+            date or datetime.date.today().isoformat())
         _record_actor(order, actor)
         _record_actor(item, actor)
         return order

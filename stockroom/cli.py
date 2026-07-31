@@ -104,7 +104,7 @@ def cmd_place_order(store: Store, args) -> int:
 
 def cmd_receive_order(store: Store, args) -> int:
     """Handle ``receive-order``: an order arrived; stock it."""
-    order = store.receive_order(args.id, actor=args.actor)
+    order = store.receive_order(args.id, date=args.date, actor=args.actor)
     store.save()
     print(f"order {order.id} received, {order.qty} x {order.sku} added to stock")
     return 0
@@ -275,6 +275,25 @@ def cmd_report_price_changes(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_on_time(store: Store, args) -> int:
+    """Handle ``report on-time``: per-supplier delivery performance."""
+    for row in reports.supplier_on_time(store):
+        print(f"{row['supplier_id']:<16} {row['on_time']}/{row['total']} "
+              f"on time ({row['pct']:.1f}%)")
+    return 0
+
+
+def cmd_report_aging(store: Store, args) -> int:
+    """Handle ``report aging``: how long open orders have been waiting."""
+    buckets = reports.order_aging(store, args.as_of)
+    for name in reports.AGING_BUCKETS:
+        print(f"{name} days")
+        for row in buckets[name]:
+            print(f"  order {row['id']:>4}  {row['qty']:>4} x "
+                  f"{row['sku']:<12} placed {row['date']}")
+    return 0
+
+
 def cmd_report_revenue(store: Store, args) -> int:
     """Handle ``report revenue``: what a month's received orders were worth."""
     revenue = reports.monthly_revenue(store, args.month)
@@ -442,6 +461,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("receive-order",
                        help="mark an order received and stock the goods")
     p.add_argument("id", type=int)
+    p.add_argument("--date", default=None,
+                   help="the day the goods arrived (default: today)")
     p.set_defaults(func=cmd_receive_order)
 
     p = sub.add_parser("cancel-order", help="cancel an order")
@@ -510,6 +531,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by-category", action="store_true",
                    help="group the listing by shelf area")
     p.set_defaults(func=cmd_report_low)
+
+    p = report_sub.add_parser("on-time", help="supplier delivery performance")
+    p.set_defaults(func=cmd_report_on_time)
+
+    p = report_sub.add_parser("aging", help="how long open orders have waited")
+    p.add_argument("--as-of", default=None,
+                   help="date to age the orders against (default: today)")
+    p.set_defaults(func=cmd_report_aging)
 
     p = report_sub.add_parser("revenue", help="revenue for one month")
     p.add_argument("month", help="month prefix, e.g. 2026-07")
