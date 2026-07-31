@@ -65,19 +65,37 @@ def low_stock(store: Store, threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
     return rows
 
 
+def _normalize_date(date: str) -> str:
+    """Zero-pad a YYYY-M-D date so it matches and sorts as YYYY-MM-DD.
+
+    Order dates are stored exactly as typed and people routinely leave
+    the leading zeros off ("2026-1-5").  Anything that is not three
+    numeric parts is returned unchanged, so an odd date still shows up
+    in reports rather than breaking them.
+    """
+    parts = date.split("-")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return date
+    year, month, day = parts
+    return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+
+
 def monthly_orders(store: Store, month: str) -> list[dict]:
     """All orders placed in the given month.
 
     Args:
         month: a prefix like "2026-01"; any order dated within that
-            month is included, regardless of status.
+            month is included, regardless of status.  Order dates are
+            zero-padded before matching, so one dated "2026-1-5" counts
+            toward January just like "2026-01-05".
 
     Returns:
         A list of dicts (id, sku, qty, date, status), oldest first.
+        ``date`` is the date as originally recorded.
     """
     rows = []
     for order in store.orders:
-        if order.date.startswith(month):
+        if _normalize_date(order.date).startswith(month):
             rows.append({
                 "id": order.id,
                 "sku": order.sku,
@@ -85,7 +103,7 @@ def monthly_orders(store: Store, month: str) -> list[dict]:
                 "date": order.date,
                 "status": order.status,
             })
-    rows.sort(key=lambda row: row["date"])
+    rows.sort(key=lambda row: _normalize_date(row["date"]))
     return rows
 
 

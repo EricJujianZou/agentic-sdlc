@@ -12,7 +12,11 @@
   in legacy state -> 0), `Store.add_supplier(..., lead_time_days=0)`,
   `reports.reorder_suggestions` rows gain `lead_time_days` (0 if supplier
   missing), CLI `add-supplier --lead-time DAYS` + `report low` prints it.
+- T03 — date padding: new `reports._normalize_date("2026-1-5")` ->
+  "2026-01-05" (non-YYYY-M-D strings pass through); `monthly_orders` matches
+  the month and sorts on it, so unpadded dates count and stay in day order.
+  Dates are still stored as typed; `order_history` still sorts raw.
 
 ## current
 
-(none — T02 done)
+(none — T03 done)
