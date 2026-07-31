@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_protonmail__webclients-369fd37de29c14c690cb3b1c09a949189734026f",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-07-31T20:15:00Z",
+  "finished_at": "2026-07-31T21:09:00Z",
+  "turns_estimate": 90,
+  "self_assessment": "Moderate confidence: implemented the exact setupHolidaysCalendarHelper interface specified and wired it into HolidaysCalendarModal and a new CalendarSetupContainer auto-suggest flow, plus threaded holidaysDirectory as a prop through CalendarSettingsRouter/CalendarContainerView/CalendarSidebar/CalendarSubpageHeaderSection and added a HolidaysCalendarsSpotlight around the sidebar's Add public holidays entry; the base commit already had substantial holidays-calendar scaffolding (sidebar menu item, settings sections) so the diff is a plausible but not certain match for the hidden gold patch's exact file/behavior choices, especially around the CalendarSetupContainer auto-suggestion heuristics and spotlight component naming/placement, which were inferred from analogous patterns elsewhere in the codebase rather than confirmed against the real PR."
+}
