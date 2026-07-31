@@ -80,8 +80,9 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
     so its several rows for one SKU all apply; one without the column
     speaks for the item's whole stock, which lands in the default
     warehouse.  ``actor``, when given, is recorded on every item the
-    file touches.  The caller is responsible for saving the store
-    afterwards.
+    file touches.  The whole file is one change as far as the audit
+    trail is concerned, so it logs a single event rather than one per
+    row.  The caller is responsible for saving the store afterwards.
 
     Returns:
         The number of rows processed.
@@ -121,4 +122,5 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
                 store.items[sku] = item
             record_actor(item, actor)
             count += 1
+    store.log_event("import-csv", {"path": path, "rows": count}, actor)
     return count

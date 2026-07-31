@@ -45,11 +45,12 @@ def cmd_add_item(store: Store, args) -> int:
 def cmd_add_supplier(store: Store, args) -> int:
     """Handle ``add-supplier``: register a new supplier.
 
-    ``--actor`` is accepted for consistency with the other
-    state-changing commands, but only items and orders carry an actor.
+    Only items and orders carry an actor of their own, but ``--actor``
+    still says who made the change on the audit trail.
     """
     supplier = store.add_supplier(args.id, args.name, args.email,
-                                  lead_time_days=args.lead_time)
+                                  lead_time_days=args.lead_time,
+                                  actor=args.actor)
     store.save()
     print(f"added supplier {supplier.id} ({supplier.name})")
     return 0
@@ -107,7 +108,8 @@ def _format_percent(percent: float) -> str:
 
 def cmd_set_discount(store: Store, args) -> int:
     """Handle ``set-discount``: agree a rate for one category."""
-    percent = store.set_discount(args.category, args.percent)
+    percent = store.set_discount(args.category, args.percent,
+                                 actor=args.actor)
     store.save()
     print(f"{args.category} discount {_format_percent(percent)}")
     return 0
@@ -122,7 +124,7 @@ def cmd_list_discounts(store: Store, args) -> int:
 
 def cmd_remove_discount(store: Store, args) -> int:
     """Handle ``remove-discount``: drop one category's rule."""
-    store.remove_discount(args.category)
+    store.remove_discount(args.category, actor=args.actor)
     store.save()
     print(f"removed {args.category} discount")
     return 0
@@ -130,7 +132,7 @@ def cmd_remove_discount(store: Store, args) -> int:
 
 def cmd_set_tax_rate(store: Store, args) -> int:
     """Handle ``set-tax-rate``: set the flat tax charged on orders."""
-    percent = store.set_tax_rate(args.percent)
+    percent = store.set_tax_rate(args.percent, actor=args.actor)
     store.save()
     print(f"tax rate {_format_percent(percent)}")
     return 0
@@ -192,7 +194,8 @@ def cmd_place_order(store: Store, args) -> int:
 
 def cmd_catalog_add(store: Store, args) -> int:
     """Handle ``catalog-add``: note that a supplier can supply a SKU."""
-    supplier = store.add_supplier_sku(args.supplier, args.sku)
+    supplier = store.add_supplier_sku(args.supplier, args.sku,
+                                      actor=args.actor)
     store.save()
     print(f"{supplier.id} supplies {normalize_sku(args.sku)}")
     return 0
@@ -568,6 +571,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="set a category's discount rate")
     p.add_argument("category")
     p.add_argument("percent", type=float, help="0 to 100, decimals allowed")
+    _add_actor(p)
     p.set_defaults(func=cmd_set_discount)
 
     p = sub.add_parser("list-discounts", help="print the discount rules")
@@ -575,10 +579,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("remove-discount", help="drop a category's discount")
     p.add_argument("category")
+    _add_actor(p)
     p.set_defaults(func=cmd_remove_discount)
 
     p = sub.add_parser("set-tax-rate", help="set the flat tax rate on orders")
     p.add_argument("percent", type=float, help="a percent, decimals allowed")
+    _add_actor(p)
     p.set_defaults(func=cmd_set_tax_rate)
 
     p = sub.add_parser("invoice", help="print an order's cost breakdown")
@@ -602,6 +608,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="record that a supplier can supply a SKU")
     p.add_argument("supplier")
     p.add_argument("sku")
+    _add_actor(p)
     p.set_defaults(func=cmd_catalog_add)
 
     p = sub.add_parser("catalog-list", help="print a supplier's catalogue")

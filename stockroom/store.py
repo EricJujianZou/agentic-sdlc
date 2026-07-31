@@ -10,7 +10,8 @@ schema version it was written by::
         "orders":    [{...}, ...],
         "shipments": [{...}, ...],
         "discounts": {category: percent, ...},
-        "tax_rate":  percent
+        "tax_rate":  percent,
+        "events":    [{...}, ...]
     }
 
 Version 5 writes every date zero-padded as ``YYYY-MM-DD``; earlier
@@ -81,6 +82,7 @@ class Store:
         shipments: list of Shipment, in the order they went out.
         discounts: mapping of category -> discount percent.
         tax_rate: the flat sales tax percent charged on an order.
+        events: the audit trail - one dict per change, oldest first.
     """
 
     def __init__(self, path: str):
@@ -91,6 +93,38 @@ class Store:
         self.shipments: list[Shipment] = []
         self.discounts: dict[str, float] = {}
         self.tax_rate: float = 0.0
+        self.events: list[dict] = []
+
+    # ------------------------------------------------------------------
+    # audit trail
+    # ------------------------------------------------------------------
+
+    def log_event(self, op: str, args: dict | None = None,
+                  actor: str | None = None) -> dict:
+        """Append one entry to the audit trail and return it.
+
+        Every operation that changes the state logs exactly one entry, so
+        the trail read back in order is the story of how the state got
+        this way.  ``op`` is the operation named as the CLI spells it
+        ("receive", "place-order", ...) whether the change came in
+        through the CLI or through a script calling the method itself;
+        ``actor`` is whoever ``--actor`` named, and nobody (``None``)
+        when the change came from a script or a command that took no
+        name.
+
+        The methods below call this themselves - after their own
+        validation, so a refused operation logs nothing - which is what
+        makes a library change land in the trail too.  Reading the state
+        (reports, exports, backups) changes nothing and logs nothing.
+        """
+        event = {
+            "op": op,
+            "args": dict(args or {}),
+            "actor": actor,
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        }
+        self.events.append(event)
+        return event
 
     # ------------------------------------------------------------------
     # persistence
@@ -106,7 +140,8 @@ class Store:
         records themselves know how to read an older quantity.  A file
         written before shipments were logged has none, which is simply
         an empty log, and one written before discounts were negotiated
-        has no rules and no tax.
+        has no rules and no tax.  A file written before changes were
+        audited carries no events, which is likewise an empty trail.
         """
         if not os.path.exists(self.path):
             return
@@ -128,6 +163,7 @@ class Store:
             for category, percent in raw.get("discounts", {}).items()
         }
         self.tax_rate = float(raw.get("tax_rate", 0.0))
+        self.events = [dict(event) for event in raw.get("events", [])]
 
     def save(self) -> None:
         """Write the current state back to the JSON file.
@@ -146,6 +182,7 @@ class Store:
             "shipments": [s.to_dict() for s in self.shipments],
             "discounts": dict(self.discounts),
             "tax_rate": self.tax_rate,
+            "events": [dict(event) for event in self.events],
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(raw, f, indent=2)
@@ -232,6 +269,10 @@ class Store:
                     category=category or DEFAULT_CATEGORY)
         record_actor(item, actor)
         self.items[sku] = item
+        self.log_event("add-item", {
+            "sku": sku, "name": name, "qty": qty, "unit_price": unit_price,
+            "supplier_id": supplier_id, "category": item.category,
+        }, actor)
         return item
 
     def get_item(self, sku: str) -> Item:
@@ -251,6 +292,9 @@ class Store:
         item = self.get_item(sku)
         item.adjust(qty, warehouse)
         record_actor(item, actor)
+        self.log_event("receive",
+                       {"sku": item.sku, "qty": qty, "warehouse": warehouse},
+                       actor)
         return item
 
     def ship(self, sku: str, qty: int, warehouse: str = DEFAULT_WAREHOUSE,
@@ -281,6 +325,8 @@ class Store:
         self.shipments.append(
             Shipment(sku=item.sku, qty=qty, warehouse=warehouse, date=date)
         )
+        self.log_event("ship", {"sku": item.sku, "qty": qty,
+                                "warehouse": warehouse, "date": date}, actor)
         return item
 
     def set_price(self, sku: str, price: float, date: str | None = None,
@@ -306,6 +352,9 @@ class Store:
             "new": item.unit_price,
         })
         record_actor(item, actor)
+        self.log_event("set-price",
+                       {"sku": item.sku, "price": item.unit_price,
+                        "date": date}, actor)
         return item
 
     def transfer(self, sku: str, qty: int, src: str, dst: str,
@@ -327,13 +376,17 @@ class Store:
         item.adjust(-qty, src)
         item.adjust(qty, dst)
         record_actor(item, actor)
+        self.log_event("transfer",
+                       {"sku": item.sku, "qty": qty, "src": src, "dst": dst},
+                       actor)
         return item
 
     # ------------------------------------------------------------------
     # discounts
     # ------------------------------------------------------------------
 
-    def set_discount(self, category: str, percent: float) -> float:
+    def set_discount(self, category: str, percent: float,
+                     actor: str | None = None) -> float:
         """Set (or replace) the discount rule for a category.
 
         A percent is anything from 0 to 100, fractions included; a rate
@@ -347,6 +400,8 @@ class Store:
                 f"not {percent}"
             )
         self.discounts[category] = float(percent)
+        self.log_event("set-discount",
+                       {"category": category, "percent": percent}, actor)
         return self.discounts[category]
 
     def get_discount(self, category: str) -> float:
@@ -358,7 +413,8 @@ class Store:
         return [(category, self.discounts[category])
                 for category in sorted(self.discounts)]
 
-    def remove_discount(self, category: str) -> float:
+    def remove_discount(self, category: str,
+                        actor: str | None = None) -> float:
         """Drop a category's discount rule and return what it was.
 
         Removing a category that has no rule raises ``ValueError``: it
@@ -366,9 +422,12 @@ class Store:
         """
         if category not in self.discounts:
             raise ValueError(f"no discount rule for {category}")
-        return self.discounts.pop(category)
+        percent = self.discounts.pop(category)
+        self.log_event("remove-discount", {"category": category}, actor)
+        return percent
 
-    def set_tax_rate(self, percent: float) -> float:
+    def set_tax_rate(self, percent: float,
+                     actor: str | None = None) -> float:
         """Set the flat tax percent charged on an order.
 
         Every order is taxed at the same rate, so this is one setting
@@ -379,6 +438,7 @@ class Store:
         if percent < 0:
             raise ValueError(f"tax rate must not be negative, not {percent}")
         self.tax_rate = float(percent)
+        self.log_event("set-tax-rate", {"percent": percent}, actor)
         return self.tax_rate
 
     # ------------------------------------------------------------------
@@ -386,13 +446,22 @@ class Store:
     # ------------------------------------------------------------------
 
     def add_supplier(self, supplier_id: str, name: str, email: str,
-                     lead_time_days: int = 0) -> Supplier:
-        """Create a new supplier.  The id must not already exist."""
+                     lead_time_days: int = 0,
+                     actor: str | None = None) -> Supplier:
+        """Create a new supplier.  The id must not already exist.
+
+        A supplier record carries no last actor of its own, but adding
+        one is still a change, so ``actor`` is noted on the audit trail.
+        """
         if supplier_id in self.suppliers:
             raise ValueError(f"supplier {supplier_id} already exists")
         supplier = Supplier(id=supplier_id, name=name, email=email,
                             lead_time_days=lead_time_days)
         self.suppliers[supplier_id] = supplier
+        self.log_event("add-supplier", {
+            "id": supplier_id, "name": name, "email": email,
+            "lead_time_days": lead_time_days,
+        }, actor)
         return supplier
 
     def get_supplier(self, supplier_id: str) -> Supplier:
@@ -405,7 +474,8 @@ class Store:
         """All suppliers, sorted by id for stable output."""
         return [self.suppliers[sid] for sid in sorted(self.suppliers)]
 
-    def add_supplier_sku(self, supplier_id: str, sku: str) -> Supplier:
+    def add_supplier_sku(self, supplier_id: str, sku: str,
+                         actor: str | None = None) -> Supplier:
         """Note that a supplier can supply a SKU.
 
         The supplier must be one we know about; the SKU need not be an
@@ -416,6 +486,8 @@ class Store:
         sku = normalize_sku(sku)
         if sku not in supplier.skus:
             supplier.skus.append(sku)
+        self.log_event("catalog-add",
+                       {"supplier": supplier_id, "sku": sku}, actor)
         return supplier
 
     def catalog_skus(self, supplier_id: str) -> list[str]:
@@ -460,6 +532,10 @@ class Store:
                       supplier_id=supplier_id)
         record_actor(order, actor)
         self.orders.append(order)
+        self.log_event("place-order", {
+            "id": order.id, "sku": order.sku, "qty": qty, "date": date,
+            "supplier_id": order.supplier_id,
+        }, actor)
         return order
 
     def _order_supplier(self, item: Item) -> str | None:
@@ -510,6 +586,7 @@ class Store:
                 f"{order.id}: {order.outstanding} outstanding"
             )
         self._book_delivery(order, qty, actor)
+        self.log_event("ship-order", {"id": order.id, "qty": qty}, actor)
         return order
 
     def receive_order(self, order_id: int, actor: str | None = None,
@@ -535,6 +612,8 @@ class Store:
         order = self.get_order(order_id)
         self._require_pending(order, "receive")
         self._book_delivery(order, order.outstanding, actor, date)
+        self.log_event("receive-order",
+                       {"id": order.id, "date": order.received_date}, actor)
         return order
 
     def _book_delivery(self, order: Order, qty: int, actor: str | None,
@@ -569,6 +648,7 @@ class Store:
         self._require_pending(order, "cancel")
         order.status = STATUS_CANCELLED
         record_actor(order, actor)
+        self.log_event("cancel-order", {"id": order.id}, actor)
         return order
 
     @staticmethod

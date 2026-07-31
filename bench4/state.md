@@ -43,4 +43,11 @@
   present, rows (id/sku/qty/date) oldest first. CLI `report aging [--as-of YYYY-MM-DD]` (default today) prints
   all three headings, "(none)" under an empty one; bad date -> exit 1.
 
-## current — none (T33 done)
+- T34 — audit trail: `store.events` (`"events"`, missing -> []) is a list of dicts
+  `{"op", "args", "actor", "timestamp"}`, oldest first, appended by `store.log_event(op, args, actor)`.
+  Every `Store` mutator calls it once, last (so a refused op logs nothing and library calls log too), with
+  `op` spelled as the CLI command ("add-item", "place-order", ...); `csv_io.import_items` logs one
+  "import-csv" per file. `add_supplier`/`set_discount`/`remove_discount`/`set_tax_rate`/`add_supplier_sku`
+  gained `actor=` (audit only) + `--actor` on their CLI commands. Reports/exports/backup/restore log nothing.
+
+## current — none (T34 done)
