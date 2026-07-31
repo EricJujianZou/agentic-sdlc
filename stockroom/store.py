@@ -8,7 +8,8 @@ schema version it was written by::
         "items":     {sku: {...}, ...},
         "suppliers": {supplier_id: {...}, ...},
         "orders":    [{...}, ...],
-        "shipments": [{...}, ...]
+        "shipments": [{...}, ...],
+        "discounts": {category: percent, ...}
     }
 
 Version 4 keeps every price as a whole number of cents; version 3 and
@@ -74,6 +75,7 @@ class Store:
         suppliers: mapping of supplier id -> Supplier.
         orders: list of Order, in the order they were placed.
         shipments: list of Shipment, in the order they went out.
+        discounts: mapping of category -> discount percent.
     """
 
     def __init__(self, path: str):
@@ -82,6 +84,7 @@ class Store:
         self.suppliers: dict[str, Supplier] = {}
         self.orders: list[Order] = []
         self.shipments: list[Shipment] = []
+        self.discounts: dict[str, float] = {}
 
     # ------------------------------------------------------------------
     # persistence
@@ -96,7 +99,8 @@ class Store:
         carries no ``"version"`` key) are read the same way; the item
         records themselves know how to read an older quantity.  A file
         written before shipments were logged has none, which is simply
-        an empty log.
+        an empty log, and one written before discounts were negotiated
+        has no rules.
         """
         if not os.path.exists(self.path):
             return
@@ -113,6 +117,10 @@ class Store:
         self.shipments = [
             Shipment.from_dict(data) for data in raw.get("shipments", [])
         ]
+        self.discounts = {
+            category: float(percent)
+            for category, percent in raw.get("discounts", {}).items()
+        }
 
     def save(self) -> None:
         """Write the current state back to the JSON file.
@@ -129,6 +137,7 @@ class Store:
             "suppliers": {sid: s.to_dict() for sid, s in self.suppliers.items()},
             "orders": [order.to_dict() for order in self.orders],
             "shipments": [s.to_dict() for s in self.shipments],
+            "discounts": dict(self.discounts),
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(raw, f, indent=2)
@@ -307,6 +316,45 @@ class Store:
         item.adjust(qty, dst)
         record_actor(item, actor)
         return item
+
+    # ------------------------------------------------------------------
+    # discounts
+    # ------------------------------------------------------------------
+
+    def set_discount(self, category: str, percent: float) -> float:
+        """Set (or replace) the discount rule for a category.
+
+        A percent is anything from 0 to 100, fractions included; a rate
+        outside that raises ``ValueError`` and leaves the old rule - if
+        any - alone.  Categories the store has no items in are fine: a
+        rule can be negotiated before the first delivery.
+        """
+        if not 0 <= percent <= 100:
+            raise ValueError(
+                f"discount for {category} must be between 0 and 100, "
+                f"not {percent}"
+            )
+        self.discounts[category] = float(percent)
+        return self.discounts[category]
+
+    def get_discount(self, category: str) -> float:
+        """The discount percent for a category - 0 when there is no rule."""
+        return self.discounts.get(category, 0.0)
+
+    def list_discounts(self) -> list[tuple[str, float]]:
+        """Every rule as (category, percent) pairs, sorted by category."""
+        return [(category, self.discounts[category])
+                for category in sorted(self.discounts)]
+
+    def remove_discount(self, category: str) -> float:
+        """Drop a category's discount rule and return what it was.
+
+        Removing a category that has no rule raises ``ValueError``: it
+        is more likely a typo than a no-op worth being quiet about.
+        """
+        if category not in self.discounts:
+            raise ValueError(f"no discount rule for {category}")
+        return self.discounts.pop(category)
 
     # ------------------------------------------------------------------
     # suppliers

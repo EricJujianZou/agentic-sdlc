@@ -100,6 +100,34 @@ def cmd_transfer(store: Store, args) -> int:
     return 0
 
 
+def _format_percent(percent: float) -> str:
+    """A discount rate as typed: no trailing zeros, no bare ``.0``."""
+    return f"{percent:g}%"
+
+
+def cmd_set_discount(store: Store, args) -> int:
+    """Handle ``set-discount``: agree a rate for one category."""
+    percent = store.set_discount(args.category, args.percent)
+    store.save()
+    print(f"{args.category} discount {_format_percent(percent)}")
+    return 0
+
+
+def cmd_list_discounts(store: Store, args) -> int:
+    """Handle ``list-discounts``: print every rule, one per line."""
+    for category, percent in store.list_discounts():
+        print(f"{category:<16} {_format_percent(percent)}")
+    return 0
+
+
+def cmd_remove_discount(store: Store, args) -> int:
+    """Handle ``remove-discount``: drop one category's rule."""
+    store.remove_discount(args.category)
+    store.save()
+    print(f"removed {args.category} discount")
+    return 0
+
+
 def cmd_place_order(store: Store, args) -> int:
     """Handle ``place-order``: record a pending purchase order."""
     date = args.date
@@ -337,6 +365,9 @@ examples:
   stockroom --data ./data receive WID-1 5 --warehouse east
   stockroom --data ./data transfer WID-1 2 main east
   stockroom --data ./data set-price WID-1 24.50 --date 2026-07-05
+  stockroom --data ./data set-discount widgets 12.5
+  stockroom --data ./data list-discounts
+  stockroom --data ./data remove-discount widgets
   stockroom --data ./data catalog-add acme WID-1
   stockroom --data ./data catalog-list acme
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01 --supplier acme
@@ -432,6 +463,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("dst", help="warehouse the stock arrives in")
     _add_actor(p)
     p.set_defaults(func=cmd_transfer)
+
+    p = sub.add_parser("set-discount",
+                       help="set a category's discount rate")
+    p.add_argument("category")
+    p.add_argument("percent", type=float, help="0 to 100, decimals allowed")
+    p.set_defaults(func=cmd_set_discount)
+
+    p = sub.add_parser("list-discounts", help="print the discount rules")
+    p.set_defaults(func=cmd_list_discounts)
+
+    p = sub.add_parser("remove-discount", help="drop a category's discount")
+    p.add_argument("category")
+    p.set_defaults(func=cmd_remove_discount)
 
     p = sub.add_parser("place-order", help="record a purchase order")
     p.add_argument("sku")
