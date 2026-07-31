@@ -1,13 +1,18 @@
 """Persistence and business operations for the stockroom.
 
-The whole application state lives in one JSON file with three top-level
-keys::
+The whole application state lives in one JSON file, stamped with the
+schema version it was written by::
 
     {
+        "version":   2,
         "items":     {sku: {...}, ...},
         "suppliers": {supplier_id: {...}, ...},
         "orders":    [{...}, ...]
     }
+
+Files written before versioning existed have no ``"version"`` key; they
+are version 1 and still load, and are rewritten with a version the next
+time state is saved.
 
 ``Store`` loads that file into dataclasses, lets callers mutate the state
 through simple methods, and writes it back out with ``save()``.  All the
@@ -32,6 +37,10 @@ from .models import (
     normalize_sku,
     record_actor,
 )
+
+#: Schema version stamped into every state file we write.  Version 1 is
+#: the original unversioned layout, which carries no ``"version"`` key.
+SCHEMA_VERSION = 2
 
 
 class Store:
@@ -59,7 +68,8 @@ class Store:
 
         A missing file just means a fresh, empty store.  A file that is
         not valid JSON raises ``json.JSONDecodeError`` for the caller to
-        deal with.
+        deal with.  A missing ``"version"`` key means the original
+        (version 1) layout, which is read exactly the same way.
         """
         if not os.path.exists(self.path):
             return
@@ -75,8 +85,12 @@ class Store:
         self.orders = [Order.from_dict(data) for data in raw.get("orders", [])]
 
     def save(self) -> None:
-        """Write the current state back to the JSON file."""
+        """Write the current state back to the JSON file.
+
+        The file always declares the schema version it was written by.
+        """
         raw = {
+            "version": SCHEMA_VERSION,
             "items": {sku: item.to_dict() for sku, item in self.items.items()},
             "suppliers": {sid: s.to_dict() for sid, s in self.suppliers.items()},
             "orders": [order.to_dict() for order in self.orders],

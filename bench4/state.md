@@ -33,27 +33,27 @@
   from `receive_order`/`cancel_order` before any mutation, so a refused
   move never double-adds stock. CLI unchanged (ValueError -> exit 1).
 - T08 — case-insensitive SKUs: new `models.normalize_sku(sku)` -> `sku.upper()`
-  is the canonical spelling, applied at the SKU entry points —
-  `Store.add_item` (stores/keys uppercase), `Store.get_item` (accepts any
-  case, so receive/ship/orders do too), `Store.place_order` (records the
-  canonical sku) and `csv_io.import_items`. A supplier file spelling `wid-1`
-  now updates `WID-1` instead of a second row. Export/CLI/reports unchanged;
-  keys written to disk before T08 stay as they are.
+  is canonical, applied at the SKU entry points — `Store.add_item` (keys
+  uppercase), `Store.get_item` (accepts any case, so receive/ship/orders do
+  too), `Store.place_order` and `csv_io.import_items`. Export/CLI/reports
+  unchanged; keys written to disk before T08 stay as they are.
 - T09 — search: new `reports.search_items(store, query)` -> sku/name/qty rows
   (SKU-sorted, empty list when nothing matches) for items whose name OR sku
   contains `query` case-insensitively; CLI `search QUERY` prints one row per
   match (or "no items match QUERY") and always exits 0.
-
 - T10 — actor tracking: `Item.last_actor` / `Order.last_actor: str | None =
-  None` (persisted; absent in legacy state -> None) + new
-  `models.record_actor(record, actor)` (writes only when actor is not None, so
-  each named change overwrites). `actor=None` kwarg added to `Store.add_item`,
-  `receive`, `ship`, `place_order`, `receive_order` (stamps order AND restocked
-  item), `cancel_order`, and `csv_io.import_items` (stamps every row it
+  None` (persisted; absent -> None) + `models.record_actor(record, actor)`
+  (writes only when actor is not None). `actor=None` kwarg on
+  `Store.add_item`/`receive`/`ship`/`place_order`/`receive_order` (stamps order
+  AND restocked item)/`cancel_order` and `csv_io.import_items` (every row it
   touches). CLI `--actor NAME` on all 8 state-changing commands via
-  `cli._add_actor(parser)`; `add-supplier` accepts it but suppliers carry no
-  actor. CSV `FIELDNAMES` unchanged.
+  `cli._add_actor(parser)`; suppliers carry no actor. CSV FIELDNAMES unchanged.
+- T11 — state schema version: new `store.SCHEMA_VERSION = 2` (the original
+  unversioned layout is v1); `Store.save()` writes it as a top-level
+  `"version"` key (first in the dict, siblings unchanged) and `Store.load()`
+  ignores it, so legacy files load as before and are stamped on the next
+  save. No CLI/report/CSV change.
 
 ## current
 
-(none — T10 done)
+(none — T11 done)
