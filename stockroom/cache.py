@@ -33,6 +33,7 @@ KINDS = {
     "weekly": reports.weekly_shipments,
     "price-changes": reports.price_changes,
     "history": reports.order_history,
+    "summary": reports.summary,
 }
 
 #: What has been worked out, per store: store -> (revision, {key: result}).

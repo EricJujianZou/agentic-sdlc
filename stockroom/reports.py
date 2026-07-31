@@ -502,6 +502,37 @@ def reorder_suggestions(store: Store,
 
 
 #: Audit-trail operations whose ``sku`` is not a claim that we stock the
+def summary(store: Store, threshold: int = DEFAULT_THRESHOLD) -> dict:
+    """The day's numbers, gathered from the reports that already know them.
+
+    This is the one-screen view: rather than working anything out afresh
+    it calls the reports management would otherwise run one at a time,
+    so the figures here and the figures there cannot drift apart.
+
+    Returns:
+        A dict with ``valuation`` (dollars, the whole stockroom),
+        ``threshold`` and the ``low_stock`` SKUs at or below it (sorted
+        by SKU), ``pending_orders``, ``top_category`` - the category
+        with the most units shipped over all time, ``None`` when nothing
+        has ever shipped - and ``events``, the length of the audit
+        trail.
+    """
+    shipped = {category: sum(months.values())
+               for category, months in turnover(store).items()}
+    # Most units first; a tie goes to the name that sorts first, so the
+    # same state always names the same category.
+    top = min(shipped, key=lambda name: (-shipped[name], name), default=None)
+    return {
+        "valuation": stock_report(store)["total_value"],
+        "threshold": threshold,
+        "low_stock": [row["sku"] for row in low_stock(store, threshold)],
+        "pending_orders": sum(1 for order in store.orders
+                              if order.status == STATUS_PENDING),
+        "top_category": top,
+        "events": len(store.events),
+    }
+
+
 #: item: a supplier's catalogue is their list of what they can sell us,
 #: so a SKU on it we have never bought is ordinary, not dangling.
 CATALOG_OPS = ("catalog-add",)

@@ -2,16 +2,10 @@
 
 ## completed
 
-- T01 — `Item.category` (`DEFAULT_CATEGORY`="uncategorized"), `add_item(category=)`, `stock_report(by_category=True)` -> `{"categories", "total_value"}`; CLI `--category`/`--by-category`.
-- T02 — `Supplier.lead_time_days: int = 0` (missing -> 0), on `add_supplier`/`reorder_suggestions` rows; CLI `add-supplier --lead-time`.
-- T03 — `reports._normalize_date` pads "2026-1-5" -> "2026-01-05"; `monthly_orders` matches/sorts on it, dates stored as typed.
-- T04 — `ship` raises ValueError "cannot ship N x SKU: only M on hand" before mutating; `main()` maps ValueError -> stderr "error: ..." + exit 1.
-- T06 — `reports.low_stock_by_category(store, threshold=5)` -> `{category: sku/name/qty rows}`, empty omitted; CLI `report low --by-category`.
-- T07 — `Store._require_pending(order, action)` -> ValueError "cannot ACTION order N: it is already STATUS"; receive/cancel/ship_order, pre-mutation.
-- T08 — SKUs case-insensitive: `models.normalize_sku` (upper) in `add_item`, `get_item` (so receive/ship/orders too), `place_order`, `csv_io.import_items`.
-- T09 — `reports.search_items(store, query)` -> sku/name/qty rows matching name OR sku (case-insensitive substring); CLI `search QUERY`.
-- T10 — `Item.last_actor`/`Order.last_actor` + `models.record_actor(rec, actor)` (writes only when not None); `actor=None` on mutators; CLI `--actor`.
-- T11 — `store.SCHEMA_VERSION` -> top-level `"version"` key (first) by `save()`.
+- T01/T06 — `Item.category` (`DEFAULT_CATEGORY`="uncategorized"), `add_item(category=)`, `stock_report(by_category=True)` -> `{"categories", "total_value"}`, `reports.low_stock_by_category(store, threshold=5)` -> `{category: sku/name/qty rows}` (empty omitted); CLI `--category`/`--by-category`.
+- T02/T03 — `Supplier.lead_time_days: int = 0` (missing -> 0) on `add_supplier`/`reorder_suggestions` rows, CLI `add-supplier --lead-time`; `reports._normalize_date` pads "2026-1-5" -> "2026-01-05" and `monthly_orders` matches/sorts on it.
+- T04/T07 — refusals raise ValueError before mutating: `ship` "cannot ship N x SKU: only M on hand", `Store._require_pending(order, action)` "cannot ACTION order N: it is already STATUS" (receive/cancel/ship_order); `main()` maps ValueError -> stderr "error: ..." + exit 1.
+- T08/T09/T10/T11 — SKUs case-insensitive (`models.normalize_sku`, upper, in `add_item`/`get_item`/`place_order`/`csv_io.import_items`); `reports.search_items(store, query)` -> sku/name/qty rows matching name OR sku (CLI `search QUERY`); `Item.last_actor`/`Order.last_actor` + `models.record_actor(rec, actor)` (writes only when not None), `actor=None` on mutators, CLI `--actor`; `store.SCHEMA_VERSION` -> top-level `"version"` key (first) by `save()`.
 - T12 — warehouses (`DEFAULT_WAREHOUSE`="main"): `Item.quantities` is the truth, `qty` its total; `qty_in`/`adjust`/`set_stock`/`receive`/`ship` take one room.
 - T13 — `Store.transfer(sku, qty, src, dst, actor=None)`: ValueError "cannot transfer N x SKU out of SRC: only M on hand" first; CLI `transfer`.
 - T14 — `stock_report(store, by_category=False, warehouse=None)`: a warehouse prices on `qty_in(wh)` alone, dropping 0s (`None` unchanged); CLI `--warehouse`.
@@ -44,15 +38,8 @@
 - T43 — `Store.revision`: an in-memory int (deliberately not saved), bumped by `log_event` - so every mutator, which logs exactly once - plus `undo` and `restore`, the two changes that log nothing; reads/reports leave it alone. `stockroom.cache.cached_report(store, kind, **kwargs)` returns the matching report's own result (`cache.KINDS` maps kind -> function: stock/low/low-by-category/reorder/monthly/revenue/on-time/aging/turnover/weekly/price-changes/history, unknown kind -> ValueError), cached per store in a `WeakKeyDictionary` on (revision, kind, sorted kwargs): the identical object back until `revision` moves, when that store's whole entry is dropped. Every `cmd_report_*` goes through it; nothing there writes.
 - T44 - v7 split storage: `state.json` is now meta alone (version/suppliers/items *sans* qty/shipments/discounts/tax_rate), per-warehouse counts live in `items.<wh>.json` (sku -> qty, via `Store.data_dir`/`items_path`/`orders_path`) and orders in `orders.json`, events sidecar unchanged; every write goes through `_write_atomic` (tmp file + `os.replace`, tmp removed on failure), incl. events/lock/backup/restore. `save()` = `_meta()` + one file per warehouse (stale warehouse files deleted) + orders + events; `_write(path)` still writes a self-contained file, so backups/restore keep working. `load()` reads orders and qty from the side files unless the state file has them embedded (`_has_embedded_quantities`), so v1-v6 files and backups load and the next save upgrades the directory in place. API/CLI unchanged.
 - T45 - `reports.fsck(store)` -> one message per inconsistency (no prefix), in a stable order: negative per-warehouse quantities and items pointing at an unknown supplier, then orders (unknown SKU / unknown supplier), shipments, audit events whose `args["sku"]` we do not stock - `reports.CATALOG_OPS` ("catalog-add") is skipped, since a supplier's catalogue may list SKUs we never bought. Reads only. CLI `fsck` (`read_only_ok=True`, never saves): prints `problem: <msg>` per finding and exits 2, else `fsck: ok` and exits 0.
-- T46 - `Store.plan_batch(rows)` -> one line per row (`receive N x SKU into WH` /
-  `ship ... from WH` / `transfer ... from SRC to DST`), validating exactly as
-  `apply_batch` does (same `batch failed at row N: <reason>` ValueError) by
-  applying the rows and rolling back in a `finally`; `_parse_batch_row` (op/sku/
-  qty/warehouse/destination, all the pre-stock complaints) is now shared by
-  `_apply_batch_row` and `_describe_batch_row`, and both rollbacks go through
-  `_batch_snapshot`/`_batch_restore` (items/shipments/events + `revision`). CLI
-  `batch PATH --dry-run` prints `would <line>` each, then `dry-run: N operations,
-  nothing changed`, and never calls `save()` - so no file is rewritten and mtimes
-  hold. Still a mutating command under `--read-only`.
+- T46 - `Store.plan_batch(rows)` -> one line per row (`receive N x SKU into WH` / `ship ... from WH` / `transfer ... from SRC to DST`), validating exactly as `apply_batch` does (same `batch failed at row N: <reason>` ValueError) by applying the rows and rolling back in a `finally`; `_parse_batch_row` is shared by `_apply_batch_row`/`_describe_batch_row`, both rollbacks go through `_batch_snapshot`/`_batch_restore` (items/shipments/events + `revision`). CLI `batch PATH --dry-run` prints `would <line>` each, then `dry-run: N operations, nothing changed`, and never calls `save()` (no file rewritten, mtimes hold); still mutating under `--read-only`.
 
-## current - none (T46 done)
+- T47 - `reports.summary(store, threshold=DEFAULT_THRESHOLD)` -> `{"valuation"` (dollars, from `stock_report`), `"threshold"`, `"low_stock"` (the `low_stock` SKUs, sorted), `"pending_orders"`, `"top_category"` (most units shipped over all time, summing `turnover`'s months, ties by name, `None` when nothing ever shipped), `"events"` (trail length)`}` - built from the existing reports so the dashboard cannot drift from them. Kind "summary" in `cache.KINDS`; CLI `report summary [--threshold N]` (`read_only_ok=True`) prints the five lines, money via `format_money`, `(none)` for an empty top category; never saves.
+
+## current - none (T47 done)
