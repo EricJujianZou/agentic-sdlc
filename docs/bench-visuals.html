@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Does agent scaffolding still matter? A controlled pilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #333;
+    --pass: #69b578;
+    --fail: #e07a5f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: #ffffff;
+    color: var(--ink);
+    font-family: "Patrick Hand", cursive;
+    font-size: 19px;
+    margin: 0;
+    padding: 28px 12px 48px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .card {
+    border: 2px solid var(--ink);
+    border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    padding: 26px 30px;
+    margin: 0 0 34px;
+    background: #fff;
+  }
+  .r1 { transform: rotate(-0.4deg); }
+  .r2 { transform: rotate(0.5deg); }
+  .r3 { transform: rotate(-0.6deg); }
+  .r4 { transform: rotate(0.3deg); }
+  .r5 { transform: rotate(-0.2deg); }
+  h1, h2 {
+    font-family: "Caveat", cursive;
+    font-weight: 700;
+    margin: 0 0 8px;
+    line-height: 1.15;
+  }
+  h1 { font-size: 44px; text-align: center; }
+  h2 {
+    font-size: 32px;
+    display: inline-block;
+    background: linear-gradient(transparent 62%, #fff3a1 62%, #fff3a1 94%, transparent 94%);
+    padding: 0 6px;
+  }
+  #title-card { background: #fffbe6; }
+  #heatmaps-card { background: #f5f9fe; }
+  #scorecard-card { background: #fdf3f6; }
+  #methodology-card { background: #f3faf2; }
+  #footer-card { background: #fffbe6; }
+  .subtitle {
+    text-align: center;
+    font-size: 21px;
+    margin: 6px 0 0;
+  }
+  .annot {
+    font-family: "Caveat", cursive;
+    font-weight: 700;
+    font-size: 24px;
+    text-align: center;
+    margin: 18px 0 0;
+  }
+  /* ---- heatmaps ---- */
+  .arm-label {
+    font-family: "Caveat", cursive;
+    font-weight: 700;
+    font-size: 26px;
+    margin: 14px 0 6px;
+  }
+  .hm-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    justify-items: center;
+    align-items: start;
+  }
+  .hm {
+    border: 2px solid var(--ink);
+    border-radius: 125px 12px 155px 12px / 12px 145px 12px 165px;
+    padding: 14px 16px 10px;
+    transform: rotate(-0.3deg);
+    background: #fff;
+  }
+  .hm:nth-child(even) { transform: rotate(0.4deg); }
+  .hm-title { font-size: 20px; margin: 0 0 8px; text-align: center; }
+  .grid { display: grid; gap: 4px; }
+  .rowlab {
+    font-size: 15px;
+    text-align: right;
+    padding-right: 7px;
+    line-height: 22px;
+  }
+  .collab {
+    font-size: 13px;
+    text-align: center;
+    line-height: 16px;
+  }
+  .cell {
+    width: 22px;
+    height: 22px;
+    border: 1.5px solid var(--ink);
+  }
+  .cell.p { background: var(--pass); }
+  .cell.f { background: var(--fail); }
+  .cell.n { background: #ececec; border-color: #999; }
+  .chip.n { background: #ececec; border-color: #999; }
+  .legend { text-align: center; font-size: 17px; margin-top: 16px; }
+  .chip {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--ink);
+    border-radius: 6px 3px 7px 3px / 3px 7px 3px 6px;
+    vertical-align: -3px;
+    margin: 0 4px 0 12px;
+  }
+  .chip.p { background: var(--pass); }
+  .chip.f { background: var(--fail); }
+  /* ---- scorecard ---- */
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 6px 6px;
+    margin-top: 10px;
+  }
+  th, td {
+    border: 2px solid var(--ink);
+    padding: 8px 14px;
+    text-align: left;
+    font-weight: normal;
+    background: #fff;
+  }
+  th { font-family: "Caveat", cursive; font-size: 24px; background: #eaf2fc; }
+  td:nth-child(1), th:nth-child(1) { border-radius: 155px 10px 145px 10px / 10px 135px 10px 155px; }
+  td:nth-child(2), th:nth-child(2) { border-radius: 10px 145px 10px 165px / 145px 10px 155px 10px; }
+  td:nth-child(3), th:nth-child(3) { border-radius: 135px 12px 155px 10px / 12px 155px 10px 145px; }
+  tr.verdict td {
+    font-family: "Caveat", cursive;
+    font-weight: 700;
+    font-size: 26px;
+    text-align: center;
+    background: #f2f7f0;
+    border-radius: 225px 15px 255px 15px / 15px 255px 15px 225px;
+  }
+  /* ---- methodology diagram ---- */
+  .diagram { position: relative; width: 100%; max-width: 1020px; height: 640px; margin: 10px auto 0; }
+  .dbox {
+    position: absolute;
+    border: 2px solid var(--ink);
+    border-radius: 155px 12px 145px 12px / 12px 145px 12px 155px;
+    padding: 10px 16px;
+    background: #fff;
+    font-size: 17px;
+    line-height: 1.35;
+    text-align: center;
+  }
+  .diagram svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  /* ---- footer ---- */
+  .footer { font-size: 16px; text-align: center; padding: 16px 26px; }
+  @media (max-width: 900px) {
+    .hm-row { grid-template-columns: 1fr; }
+    .diagram { transform: scale(0.8); transform-origin: top left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 1. Title card -->
+  <section class="card r1" id="title-card">
+    <h1>Does agent scaffolding still matter? A controlled pilot (n=2 per arm)</h1>
+    <p class="subtitle">Same model, same 10 interlocking tasks - only variable: scaffolding. Independently graded.</p>
+  </section>
+
+  <!-- 2. Line chart card (hero) -->
+  <section class="card r2" id="linechart-card">
+    <h2>Tasks passing, commit by commit</h2>
+    <svg viewBox="0 0 900 430" style="width:100%; height:auto; display:block;" font-family="Patrick Hand, cursive">
+      <!-- axes -->
+      <path d="M70,382 C72,260 68,140 70,28" fill="none" stroke="#333" stroke-width="2.5"/>
+      <path d="M58,370 C280,372 640,368 862,370" fill="none" stroke="#333" stroke-width="2.5"/>
+      <!-- top gridline: all 11 -->
+      <path d="M70,40 L845,40" stroke="#ccc" stroke-width="1.5" stroke-dasharray="3 7"/>
+      <text x="76" y="34" font-size="15" fill="#888">11 = all tests passing</text>
+      <text x="30" y="345" font-size="15" fill="#888">1</text>
+      <text x="22" y="46" font-size="15" fill="#888">11</text>
+      <text x="450" y="415" font-size="17" fill="#333" text-anchor="middle">commits over time</text>
+      <text x="24" y="205" font-size="17" fill="#333" transform="rotate(-90 24 205)" text-anchor="middle">tasks passing</text>
+      <!-- hypothetical context rot, incremental shape (dashed grey) -->
+      <path d="M70,340 L210,295 L350,252 L490,228 L560,248 L630,230 L700,268 L770,252 L840,278"
+            fill="none" stroke="#aaa" stroke-width="2.5" stroke-dasharray="8 7"/>
+      <text x="620" y="300" font-size="16" fill="#999">rot in an incremental run: climbs, then sags</text>
+      <text x="620" y="318" font-size="16" fill="#999">(hypothetical - did not happen)</text>
+      <!-- hypothetical context rot, one-shot shape (dashed light blue, leap stops short) -->
+      <path d="M70,340 L200,164" fill="none" stroke="#9db9d8" stroke-width="3" stroke-dasharray="8 7" stroke-linecap="round"/>
+      <path d="M192,156 L208,172 M208,156 L192,172" stroke="#9db9d8" stroke-width="3" stroke-linecap="round"/>
+      <text x="218" y="152" font-size="16" fill="#8aa5c4">rot in a one-shot run:</text>
+      <text x="218" y="170" font-size="16" fill="#8aa5c4">the leap stops short</text>
+      <text x="218" y="188" font-size="16" fill="#8aa5c4">(hypothetical)</text>
+      <!-- Arm A (both runs identical): steady staircase -->
+      <path d="M70,340 L140,308 L210,281 L280,249 L350,221 L420,189 L490,161 L560,129 L630,101 L700,69 L770,41 L840,40"
+            fill="none" stroke="#69b578" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="840" cy="40" r="6" fill="#69b578" stroke="#333" stroke-width="1.5"/>
+      <text x="620" y="150" font-size="19" fill="#3e7a4c">Arm A - scaffolded (both runs):</text>
+      <text x="620" y="170" font-size="19" fill="#3e7a4c">one task per commit, steady climb</text>
+      <!-- Arm B: one big leap -->
+      <path d="M70,340 L138,42" fill="none" stroke="#4a7fb5" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="138" cy="42" r="6" fill="#4a7fb5" stroke="#333" stroke-width="1.5"/>
+      <text x="158" y="66" font-size="19" fill="#38618c">Arm B - unscaffolded (both runs):</text>
+      <text x="158" y="86" font-size="19" fill="#38618c">everything lands in one commit</text>
+      <!-- start point -->
+      <circle cx="70" cy="340" r="6" fill="#fff" stroke="#333" stroke-width="2"/>
+      <text x="84" y="352" font-size="15" fill="#666">start: only the base app works</text>
+    </svg>
+    <p class="annot">Both arms reached 11/11. The dip the benchmark was built to catch never happened.</p>
+  </section>
+
+  <!-- 2b. Heatmaps card -->
+  <section class="card r2" id="heatmaps-card">
+    <h2>Per-commit replay: which tests pass at every commit?</h2>
+    <div class="arm-label">Arm A - scaffolded (one commit per task)</div>
+    <div class="hm-row" id="rowA"></div>
+    <div class="arm-label">Arm B - unscaffolded (one big commit)</div>
+    <div class="hm-row" id="rowB"></div>
+    <div class="legend">
+      <span class="chip n"></span>not built yet <span class="chip p"></span>passing <span class="chip f"></span>regression (worked, then broke)
+      &nbsp;&nbsp;rows = test suites (base, T01..T10); columns = commits, oldest first
+    </div>
+    <p class="annot">Red would mean later work broke earlier work. Count the red cells: zero.</p>
+  </section>
+
+  <!-- 3. Scorecard card -->
+  <section class="card r3" id="scorecard-card">
+    <h2>Scorecard</h2>
+    <table>
+      <thead>
+        <tr><th>Metric</th><th>Arm A (scaffolded)</th><th>Arm B (unscaffolded)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Final tests passing</td><td>11/11 and 11/11 (both runs)</td><td>11/11 and 11/11 (both runs)</td></tr>
+        <tr><td>Regressions (later work breaking earlier tasks)</td><td>0</td><td>0</td></tr>
+        <tr><td>Test tampering (SHA-256 checked)</td><td>none</td><td>none</td></tr>
+        <tr><td>Commits</td><td>10 (one per task)</td><td>1 big commit</td></tr>
+        <tr><td>Code written (lines added; base app is ~140 lines)</td><td>+269 and +238 (per run)</td><td>+241 and +215 (per run)</td></tr>
+        <tr><td>Wall time</td><td>~7 min</td><td>~5 min</td></tr>
+        <tr class="verdict"><td colspan="3">Verdict: a tie at this scale - the run never saturated the context window.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 4. Methodology diagram card -->
+  <section class="card r4" id="methodology-card">
+    <h2>How it was run</h2>
+    <div class="diagram" id="diagram">
+      <svg viewBox="0 0 1020 640" preserveAspectRatio="none">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M1,1 L8,4.5 L1,8 L3,4.5 Z" fill="#333"/>
+          </marker>
+        </defs>
+        <path d="M430,105 C360,140 320,160 285,185" fill="none" stroke="#333" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <path d="M590,105 C660,140 700,160 735,185" fill="none" stroke="#333" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <path d="M250,300 C245,325 255,340 250,362" fill="none" stroke="#333" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <path d="M770,300 C775,325 765,340 770,362" fill="none" stroke="#333" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <path d="M290,435 C360,480 420,505 480,525" fill="none" stroke="#333" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <path d="M730,435 C660,480 600,505 540,525" fill="none" stroke="#333" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <text x="290" y="140" font-family="Caveat, cursive" font-size="24" font-weight="700" fill="#555" text-anchor="end">fork into</text>
+        <text x="730" y="140" font-family="Caveat, cursive" font-size="24" font-weight="700" fill="#555">fork into</text>
+        <text x="268" y="338" font-family="Caveat, cursive" font-size="24" font-weight="700" fill="#555">spawn</text>
+        <text x="752" y="338" font-family="Caveat, cursive" font-size="24" font-weight="700" fill="#555" text-anchor="end">spawn</text>
+        <text x="352" y="500" font-family="Caveat, cursive" font-size="24" font-weight="700" fill="#555" text-anchor="end">graded by</text>
+        <text x="668" y="500" font-family="Caveat, cursive" font-size="24" font-weight="700" fill="#555">graded by</text>
+      </svg>
+      <div class="dbox" style="left:290px; top:20px; width:440px; transform:rotate(-0.5deg); background:#fff6c9;">
+        <b>one repo, 10 prod task specs</b><br>(hidden bug, storage format migration, money math rewrite)
+      </div>
+      <div class="dbox" style="left:40px; top:195px; width:400px; transform:rotate(0.4deg); background:#e4f3e4;">
+        <b>branch: scaffold present</b><br>protocol: 1 task at a time, state file, regression gate
+      </div>
+      <div class="dbox" style="left:580px; top:195px; width:400px; transform:rotate(-0.4deg); background:#e2eefc;">
+        <b>branch: scaffold DELETED</b><br>all 10 tasks in one prompt
+      </div>
+      <div class="dbox" style="left:150px; top:372px; width:200px; transform:rotate(-0.6deg); background:#fde9f0;">2 cloud sessions</div>
+      <div class="dbox" style="left:670px; top:372px; width:200px; transform:rotate(0.5deg); background:#fde9f0;">2 cloud sessions</div>
+      <div class="dbox" style="left:260px; top:530px; width:500px; transform:rotate(0.3deg); background:#fff6c9;">
+        <b>independent grader:</b> SHA-256 test manifest + per-commit replay<br>(every commit re-tested in a clean worktree)
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Footer card -->
+  <section class="card r5 footer" id="footer-card">
+    Pilot: n=2/arm, one agent stack (Devin cloud, not Opus 5). Result bounds the claim, doesn't settle it. Round 2: batteries long enough to saturate context.
+  </section>
+
+</div>
+
+<script>
+const DATA = {"armA-1":[{"s":"T01: entry categories across model, storage, and CLI","p":"11000000000"},{"s":"T02: monthly per-category summary","p":"11100000000"},{"s":"T03: normalize entry dates to zero-padded ISO form","p":"11110000000"},{"s":"T04: per-category monthly budgets and over-budget warnings","p":"11111000000"},{"s":"T05: CSV export","p":"11111100000"},{"s":"T06: multiple named ledgers per file","p":"11111110000"},{"s":"T07: recurring monthly entries","p":"11111111000"},{"s":"T08: exact money via integer cents","p":"11111111100"},{"s":"T09: query/filter API on Ledger","p":"11111111110"},{"s":"T10: undo of mutating operations","p":"11111111111"},{"s":"grade: self report","p":"11111111111"}],"armA-2":[{"s":"T01: categories on Entry, totals_by_category, storage roundtrip, CLI --category","p":"11000000000"},{"s":"T02: report.monthly_summary per-category month breakdown","p":"11100000000"},{"s":"T03: normalize entry dates to zero-padded ISO","p":"11110000000"},{"s":"T04: per-category budgets and budget_warnings","p":"11111000000"},{"s":"T05: CSV export","p":"11111100000"},{"s":"T06: multi-ledger files with legacy compatibility","p":"11111110000"},{"s":"T07: recurring entries","p":"11111111000"},{"s":"T08: exact money via integer cents","p":"11111111100"},{"s":"T09: query/filter API","p":"11111111110"},{"s":"T10: undo of mutating operations","p":"11111111111"},{"s":"grade: self report","p":"11111111111"}],"armB-1":[{"s":"bench: implement T01-T10 in ledgerlite (categories, reports, budgets, csv, multi-ledger, recurring, cents, query, undo)","p":"11111111111"},{"s":"bench: record Arm B self-report (11/11 tests passing)","p":"11111111111"}],"armB-2":[{"s":"bench armB-2: implement T01-T10 in ledgerlite","p":"11111111111"}]};
+
+const ROWS = ["base","T01","T02","T03","T04","T05","T06","T07","T08","T09","T10"];
+
+// deterministic pseudo-random wobble for cell corners
+function wobble(seed) {
+  const r = n => 3 + ((seed * n * 2654435761) % 5);
+  return `${r(3)}px ${r(7)}px ${r(11)}px ${r(5)}px / ${r(13)}px ${r(2)}px ${r(17)}px ${r(9)}px`;
+}
+
+function buildHeatmap(name, timeline) {
+  const box = document.createElement("div");
+  box.className = "hm";
+  const t = document.createElement("div");
+  t.className = "hm-title";
+  t.textContent = name;
+  box.appendChild(t);
+
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  grid.style.gridTemplateColumns = `auto repeat(${timeline.length}, 22px)`;
+
+  ROWS.forEach((rowName, ri) => {
+    const lab = document.createElement("div");
+    lab.className = "rowlab";
+    lab.textContent = rowName;
+    grid.appendChild(lab);
+    let hasPassed = false;
+    timeline.forEach((commit, ci) => {
+      const cell = document.createElement("div");
+      const pass = commit.p[ri] === "1";
+      let cls, label;
+      if (pass) { hasPassed = true; cls = "p"; label = "passing"; }
+      else if (hasPassed) { cls = "f"; label = "REGRESSION (worked, then broke)"; }
+      else { cls = "n"; label = "not built yet"; }
+      cell.className = "cell " + cls;
+      cell.style.borderRadius = wobble(ri * 31 + ci * 7 + 5);
+      cell.title = `c${ci + 1}: ${commit.s} - ${rowName}: ${label}`;
+      grid.appendChild(cell);
+    });
+  });
+
+  // column labels
+  const corner = document.createElement("div");
+  grid.appendChild(corner);
+  timeline.forEach((commit, ci) => {
+    const cl = document.createElement("div");
+    cl.className = "collab";
+    cl.textContent = "c" + (ci + 1);
+    cl.title = commit.s;
+    grid.appendChild(cl);
+  });
+
+  box.appendChild(grid);
+  return box;
+}
+
+document.getElementById("rowA").appendChild(buildHeatmap("armA-1", DATA["armA-1"]));
+document.getElementById("rowA").appendChild(buildHeatmap("armA-2", DATA["armA-2"]));
+document.getElementById("rowB").appendChild(buildHeatmap("armB-1", DATA["armB-1"]));
+document.getElementById("rowB").appendChild(buildHeatmap("armB-2", DATA["armB-2"]));
+</script>
+</body>
+</html>
