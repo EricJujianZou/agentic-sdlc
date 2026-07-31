@@ -186,9 +186,10 @@ def reorder_suggestions(store: Store,
     """Suggest order quantities for items running low.
 
     For each item below the threshold, suggest topping back up to the
-    threshold, minus whatever is already on the way on that item's
-    pending orders - orders that were received or cancelled count for
-    nothing.  An item whose pending orders already cover the top-up is
+    threshold, minus whatever is still on the way on that item's pending
+    orders - orders that were received or cancelled count for nothing,
+    and neither does the part of a pending order already delivered,
+    since those units are on the shelf being counted already.  An item whose pending orders already cover the top-up is
     left out rather than suggested at 0.  Only items with a supplier are
     included, since there is nobody to order the rest from.
 
@@ -200,7 +201,7 @@ def reorder_suggestions(store: Store,
     pending: dict[str, int] = {}
     for order in store.orders:
         if order.status == STATUS_PENDING:
-            pending[order.sku] = pending.get(order.sku, 0) + order.qty
+            pending[order.sku] = pending.get(order.sku, 0) + order.outstanding
     rows = []
     for item in store.list_items():
         if item.qty < threshold and item.supplier_id is not None:

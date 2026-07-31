@@ -196,6 +196,10 @@ class Order:
         status: one of "pending", "received" or "cancelled".
         last_actor: name of whoever last changed this order, or None if
             no change has been made with an actor named.
+        shipped_qty: units of the order delivered so far.  Suppliers
+            deliver in parts, so this climbs from 0 to ``qty`` over one
+            or more deliveries; the order is received once it gets
+            there.
     """
 
     id: int
@@ -204,6 +208,12 @@ class Order:
     date: str
     status: str = STATUS_PENDING
     last_actor: str | None = None
+    shipped_qty: int = 0
+
+    @property
+    def outstanding(self) -> int:
+        """Units of this order still to be delivered."""
+        return self.qty - self.shipped_qty
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this order."""
@@ -214,16 +224,25 @@ class Order:
             "date": self.date,
             "status": self.status,
             "last_actor": self.last_actor,
+            "shipped_qty": self.shipped_qty,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Order":
-        """Build an Order from a dict previously produced by to_dict."""
+        """Build an Order from a dict previously produced by to_dict.
+
+        Orders written before deliveries could be split carry no
+        ``shipped_qty``; a pending one of those has had nothing
+        delivered, and a received one arrived whole.
+        """
+        status = data.get("status", STATUS_PENDING)
+        default_shipped = data["qty"] if status == STATUS_RECEIVED else 0
         return cls(
             id=data["id"],
             sku=data["sku"],
             qty=data["qty"],
             date=data["date"],
-            status=data.get("status", STATUS_PENDING),
+            status=status,
             last_actor=data.get("last_actor"),
+            shipped_qty=data.get("shipped_qty", default_shipped),
         )

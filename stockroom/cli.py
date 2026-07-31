@@ -93,11 +93,21 @@ def cmd_place_order(store: Store, args) -> int:
     return 0
 
 
+def cmd_ship_order(store: Store, args) -> int:
+    """Handle ``ship-order``: part of an order arrived; stock it."""
+    order = store.ship_order(args.id, args.qty, actor=args.actor)
+    store.save()
+    print(f"order {order.id}: {args.qty} x {order.sku} delivered, "
+          f"{order.shipped_qty} of {order.qty} in ({order.status})")
+    return 0
+
+
 def cmd_receive_order(store: Store, args) -> int:
-    """Handle ``receive-order``: an order arrived; stock it."""
+    """Handle ``receive-order``: the rest of an order arrived; stock it."""
+    remainder = store.get_order(args.id).outstanding
     order = store.receive_order(args.id, actor=args.actor)
     store.save()
-    print(f"order {order.id} received, {order.qty} x {order.sku} added to stock")
+    print(f"order {order.id} received, {remainder} x {order.sku} added to stock")
     return 0
 
 
@@ -265,6 +275,7 @@ examples:
   stockroom --data ./data receive WID-1 5 --warehouse east
   stockroom --data ./data transfer WID-1 2 main east
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01
+  stockroom --data ./data ship-order 1 --qty 5
   stockroom --data ./data receive-order 1
   stockroom --data ./data report stock
   stockroom --data ./data report monthly 2026-07
@@ -353,8 +364,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_actor(p)
     p.set_defaults(func=cmd_place_order)
 
+    p = sub.add_parser("ship-order",
+                       help="stock part of an order the supplier delivered")
+    p.add_argument("id", type=int)
+    p.add_argument("--qty", type=int, required=True,
+                   help="units delivered (at most what is outstanding)")
+    _add_actor(p)
+    p.set_defaults(func=cmd_ship_order)
+
     p = sub.add_parser("receive-order",
-                       help="mark an order received and stock the goods")
+                       help="stock the rest of an order and mark it received")
     p.add_argument("id", type=int)
     _add_actor(p)
     p.set_defaults(func=cmd_receive_order)

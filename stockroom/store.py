@@ -318,23 +318,62 @@ class Store:
                 return order
         raise ValueError(f"unknown order {order_id}")
 
+    def ship_order(self, order_id: int, qty: int,
+                   actor: str | None = None) -> Order:
+        """Book ``qty`` units of a pending order arriving.
+
+        Suppliers deliver an order in parts, so this puts one delivery
+        into stock and adds it to the order's running ``shipped_qty``.
+        The order stays pending while any of it is outstanding and
+        becomes received the moment the last unit lands.
+
+        A delivery has to be at least one unit and cannot be for more
+        than is still outstanding, and only a pending order can take one
+        at all; either way ``ValueError`` is raised before anything is
+        booked.
+        """
+        order = self.get_order(order_id)
+        self._require_pending(order, "deliver")
+        if qty < 1 or qty > order.outstanding:
+            raise ValueError(
+                f"cannot deliver {qty} x {order.sku} against order "
+                f"{order.id}: {order.outstanding} outstanding"
+            )
+        self._book_delivery(order, qty, actor)
+        return order
+
     def receive_order(self, order_id: int, actor: str | None = None) -> Order:
-        """Mark a pending order received and put its quantity into stock.
+        """Mark a pending order received: the rest of it just arrived.
+
+        Only what is still outstanding goes into stock, so receiving an
+        order that has already had part of it delivered tops the item up
+        rather than counting the delivered units twice.
 
         Only a pending order can be received; receiving an already
         received or cancelled one raises ``ValueError`` and adds nothing
-        to stock.  Deliveries are booked into the default warehouse.
-        Both the order and the restocked item record the actor, since
-        both change.
+        to stock.
         """
         order = self.get_order(order_id)
         self._require_pending(order, "receive")
-        order.status = STATUS_RECEIVED
+        self._book_delivery(order, order.outstanding, actor)
+        return order
+
+    def _book_delivery(self, order: Order, qty: int,
+                       actor: str | None) -> None:
+        """Put ``qty`` of an order's goods on the shelf and note it down.
+
+        Deliveries are booked into the default warehouse, and the order
+        is received once every unit ordered has turned up.  Both the
+        order and the restocked item record the actor, since both
+        change.
+        """
+        order.shipped_qty += qty
+        if order.outstanding <= 0:
+            order.status = STATUS_RECEIVED
         record_actor(order, actor)
         item = self.get_item(order.sku)
-        item.adjust(order.qty)
+        item.adjust(qty)
         record_actor(item, actor)
-        return order
 
     def cancel_order(self, order_id: int, actor: str | None = None) -> Order:
         """Mark a pending order cancelled.  Stock is not affected.
