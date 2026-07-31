@@ -16,7 +16,7 @@ import json
 import os
 import sys
 
-from . import __version__, csv_io, reports
+from . import __version__, cache, csv_io, reports
 from .models import MAIN_WAREHOUSE
 from .money import format_money
 from .store import Store
@@ -192,6 +192,49 @@ def cmd_invoice(store: Store, args) -> int:
     return 0
 
 
+def cmd_lock(store: Store, args) -> int:
+    """Handle ``lock``: mark the data itself read-only."""
+    store.set_read_only(True)
+    store.save()
+    print("data locked (read-only)")
+    return 0
+
+
+def cmd_unlock(store: Store, args) -> int:
+    """Handle ``unlock``: clear the read-only mark.  Always allowed."""
+    store.set_read_only(False)
+    store.save()
+    print("data unlocked")
+    return 0
+
+
+def cmd_batch(store: Store, args) -> int:
+    """Handle ``batch``: apply a sheet of stock movements, all or nothing."""
+    if not os.path.exists(args.path):
+        raise ValueError(f"no such file: {args.path}")
+    described = store.batch_apply(args.path, dry_run=args.dry_run,
+                                  actor=args.actor)
+    for line in described:
+        print(line)
+    if args.dry_run:
+        print(f"dry-run: {len(described)} operations, nothing changed")
+        return 0
+    store.save()
+    print(f"applied {len(described)} operations")
+    return 0
+
+
+def cmd_fsck(store: Store, args) -> int:
+    """Handle ``fsck``: cross-check the data without touching it."""
+    problems = store.fsck()
+    for problem in problems:
+        print(problem)
+    if problems:
+        return 2
+    print("fsck: ok")
+    return 0
+
+
 def cmd_scheduled_reorders(store: Store, args) -> int:
     """Handle ``scheduled-reorders``: place today's suggested orders."""
     placed = store.scheduled_reorders(as_of=args.as_of,
@@ -251,15 +294,16 @@ def cmd_report_stock(store: Store, args) -> int:
     if args.warehouse:
         print(f"warehouse: {args.warehouse}")
     if args.by_category:
-        report = reports.stock_report(store, by_category=True,
-                                      warehouse=args.warehouse)
+        report = cache.cached_report(store, "stock", by_category=True,
+                                     warehouse=args.warehouse)
         for category in sorted(report["categories"]):
             print(category)
             print(header)
             _print_stock_rows(report["categories"][category])
             print()
     else:
-        report = reports.stock_report(store, warehouse=args.warehouse)
+        report = cache.cached_report(store, "stock",
+                                     warehouse=args.warehouse)
         print(header)
         _print_stock_rows(report["rows"])
     print(f"Total value: {format_money(report['total_value'])}")
@@ -276,7 +320,8 @@ def cmd_report_low(store: Store, args) -> int:
     """Handle ``report low``: print items running low, plus
     reorder suggestions for the ones we can actually reorder."""
     if args.by_category:
-        grouped = reports.low_stock_by_category(store, threshold=args.threshold)
+        grouped = cache.cached_report(store, "low-by-category",
+                                      threshold=args.threshold)
         if not grouped:
             print("no items at or below threshold")
             return 0
@@ -285,12 +330,13 @@ def cmd_report_low(store: Store, args) -> int:
             _print_low_rows(grouped[category])
             print()
         return 0
-    rows = reports.low_stock(store, threshold=args.threshold)
+    rows = cache.cached_report(store, "low", threshold=args.threshold)
     if not rows:
         print("no items at or below threshold")
         return 0
     _print_low_rows(rows)
-    suggestions = reports.reorder_suggestions(store, threshold=args.threshold)
+    suggestions = cache.cached_report(store, "reorder",
+                                      threshold=args.threshold)
     if suggestions:
         print()
         print("reorder suggestions:")
@@ -355,7 +401,7 @@ def cmd_report_turnover(store: Store, args) -> int:
 
 def cmd_report_monthly(store: Store, args) -> int:
     """Handle ``report monthly``: print orders for one month."""
-    rows = reports.monthly_orders(store, args.month)
+    rows = cache.cached_report(store, "monthly", month=args.month)
     if not rows:
         print(f"no orders in {args.month}")
         return 0
@@ -369,7 +415,7 @@ def cmd_report_monthly(store: Store, args) -> int:
 def cmd_report_history(store: Store, args) -> int:
     """Handle ``report history``: print all orders for a SKU."""
     store.get_item(args.sku)  # complain early about unknown SKUs
-    rows = reports.order_history(store, args.sku)
+    rows = cache.cached_report(store, "history", sku=args.sku)
     if not rows:
         print(f"no orders for {args.sku}")
         return 0
@@ -425,9 +471,12 @@ MUTATING_COMMANDS = [
     "add-item", "add-supplier", "receive", "ship", "place-order",
     "receive-order", "cancel-order", "import-csv", "transfer", "ship-order",
     "catalog-add", "restore", "set-price", "set-discount", "undo",
-    "scheduled-reorders",
-    "remove-discount", "set-tax-rate",
+    "scheduled-reorders", "remove-discount", "set-tax-rate", "batch",
 ]
+
+# Everything above plus the commands that write other files in the data
+# directory; all of these are refused while the data is read-only.
+WRITES_DATA = set(MUTATING_COMMANDS) | {"backup"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -441,6 +490,8 @@ def build_parser() -> argparse.ArgumentParser:
                         version=f"stockroom {__version__}")
     parser.add_argument("--data", required=True,
                         help="directory holding state.json")
+    parser.add_argument("--read-only", action="store_true",
+                        help="refuse any command that would change the data")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("add-item", help="create a new item")
@@ -546,6 +597,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output", default=None,
                    help="also write the invoice to this file")
     p.set_defaults(func=cmd_invoice)
+
+    p = sub.add_parser("lock", help="mark the data read-only")
+    p.set_defaults(func=cmd_lock)
+
+    p = sub.add_parser("unlock", help="clear the read-only mark")
+    p.set_defaults(func=cmd_unlock)
+
+    p = sub.add_parser("batch", help="apply a CSV of stock movements")
+    p.add_argument("path")
+    p.add_argument("--dry-run", action="store_true",
+                   help="show what would happen and change nothing")
+    p.set_defaults(func=cmd_batch)
+
+    p = sub.add_parser("fsck", help="check the data for inconsistencies")
+    p.set_defaults(func=cmd_fsck)
 
     p = sub.add_parser("scheduled-reorders",
                        help="place the suggested purchase orders")
@@ -653,6 +719,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: state file {state_path} is corrupt: {exc}",
               file=sys.stderr)
         return 2
+
+    if args.command in WRITES_DATA and (args.read_only or store.read_only):
+        print(f"error: read-only mode: refusing to run {args.command}",
+              file=sys.stderr)
+        return 1
 
     try:
         return args.func(store, args)

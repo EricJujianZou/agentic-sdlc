@@ -18,6 +18,7 @@ Errors are reported by raising ``ValueError`` with a human readable
 message; the CLI turns those into exit code 1.
 """
 
+import csv
 import datetime
 import glob
 import json
@@ -41,8 +42,24 @@ from .models import (
 # unversioned layout; 2 added the version stamp; 3 broke item quantities
 # down per warehouse; 4 moved money to whole cents; 5 stores every
 # date as a zero-padded ISO date; 6 moved the activity history to a
-# sidecar file.
-SCHEMA_VERSION = 6
+# sidecar file; 7 split the data directory into a small meta file,
+# one file per warehouse and one for the orders.
+SCHEMA_VERSION = 7
+
+
+def _read_json(path: str):
+    """Read one JSON file."""
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_json(path: str, data) -> None:
+    """Write one JSON file atomically: temporary file, then rename."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
 
 
 def _record_actor(record, actor: str | None) -> None:
@@ -102,14 +119,29 @@ class Store:
         """
         if not os.path.exists(self.path):
             return
-        with open(self.path, encoding="utf-8") as f:
-            raw = json.load(f)
+        raw = _read_json(self.path)
+        # Since version 7 the quantities and orders live in their own
+        # files; everything older is a single self-contained state file.
+        if raw.get("version", 1) >= 7:
+            raw = self._expand_split_layout(raw)
         # Events used to be embedded in the state file; since version 6
         # they live in a sidecar next to it.
         if "events" not in raw and os.path.exists(self.events_path):
-            with open(self.events_path, encoding="utf-8") as f:
-                raw = {**raw, "events": json.load(f).get("events", [])}
+            raw = {**raw, "events": _read_json(self.events_path).get("events", [])}
         self._apply_raw(raw)
+
+    def _expand_split_layout(self, meta: dict) -> dict:
+        """Read the per-warehouse and order files back into one state dict."""
+        items = {sku: {**data, "qty": {}}
+                 for sku, data in meta.get("items", {}).items()}
+        for warehouse, path in self._warehouse_files().items():
+            for sku, qty in _read_json(path).items():
+                sku = canonical_sku(sku)
+                if sku in items:
+                    items[sku]["qty"][warehouse] = qty
+        orders = _read_json(self.orders_path) if os.path.exists(
+            self.orders_path) else []
+        return {**meta, "items": items, "orders": orders}
 
     def _apply_raw(self, raw: dict) -> None:
         """Replace the in-memory state with a state dict from disk."""
@@ -159,20 +191,56 @@ class Store:
             base = base[:-len(".json")]
         return base + ".events.json"
 
+    @property
+    def orders_path(self) -> str:
+        """The file holding the purchase orders."""
+        return os.path.join(self._data_dir(), "orders.json")
+
+    def _data_dir(self) -> str:
+        return os.path.dirname(self.path) or "."
+
+    def _warehouse_path(self, warehouse: str) -> str:
+        return os.path.join(self._data_dir(), f"items.{warehouse}.json")
+
+    def _warehouse_files(self) -> dict:
+        """Warehouse name -> its quantity file, for the files on disk."""
+        found = {}
+        for path in glob.glob(os.path.join(self._data_dir(), "items.*.json")):
+            name = os.path.basename(path)[len("items."):-len(".json")]
+            found[name] = path
+        return found
+
     def save(self) -> None:
         """Write the current state back to disk.
 
-        The activity history goes to its own sidecar file so the state
-        file stays small.
+        The data directory holds a small meta file (``state.json``), one
+        quantity file per warehouse, the orders, and the activity
+        history sidecar.  Every file is written to a temporary name and
+        renamed into place, so a crash mid-save cannot truncate one.
         """
         raw = self._raw_state()
         events = raw.pop("events")
-        with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(raw, f, indent=2)
-            f.write("\n")
-        with open(self.events_path, "w", encoding="utf-8") as f:
-            json.dump({"events": events}, f, indent=2)
-            f.write("\n")
+        orders = raw.pop("orders")
+        # The meta file carries everything about an item except where
+        # its stock sits.
+        warehouses: dict[str, dict] = {}
+        meta_items = {}
+        for sku, data in raw["items"].items():
+            data = dict(data)
+            for warehouse, qty in data.pop("qty").items():
+                warehouses.setdefault(warehouse, {})[sku] = qty
+            meta_items[sku] = data
+        raw["items"] = meta_items
+
+        _write_json(self.path, raw)
+        _write_json(self.orders_path, orders)
+        _write_json(self.events_path, {"events": events})
+        for warehouse, quantities in warehouses.items():
+            _write_json(self._warehouse_path(warehouse), quantities)
+        # Drop quantity files for warehouses that no longer exist.
+        for warehouse, path in self._warehouse_files().items():
+            if warehouse not in warehouses:
+                os.remove(path)
 
     # ------------------------------------------------------------------
     # activity history and undo
@@ -345,6 +413,10 @@ class Store:
     def _backup_prefix(self) -> str:
         return self.path + ".bak-"
 
+    def _backup_state(self) -> dict:
+        """The whole state, in the self-contained form backups use."""
+        return self._raw_state()
+
     def backup(self) -> str:
         """Snapshot the current state next to the state file.
 
@@ -354,15 +426,14 @@ class Store:
         """
         stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S%f")
         path = self._backup_prefix() + stamp
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self._raw_state(), f, indent=2)
-            f.write("\n")
+        _write_json(path, self._backup_state())
         return os.path.basename(path)
 
     def list_backups(self) -> list[str]:
         """Names of the backups taken so far, oldest first."""
         return sorted(os.path.basename(p)
-                      for p in glob.glob(self._backup_prefix() + "*"))
+                      for p in glob.glob(self._backup_prefix() + "*")
+                      if not p.endswith(".tmp"))
 
     def restore(self, name: str) -> None:
         """Bring the state back to what the named backup captured."""
@@ -370,9 +441,7 @@ class Store:
         if name not in self.list_backups():
             raise ValueError(f"unknown backup {name}")
         before = self._snapshot()
-        with open(os.path.join(os.path.dirname(self.path) or ".", name),
-                  encoding="utf-8") as f:
-            snapshot = json.load(f)
+        snapshot = _read_json(os.path.join(self._data_dir(), name))
         self._restore_snapshot(snapshot)
         self.log_event("restore", {"name": name}, None,
                        [{"kind": "snapshot", "before": before,
@@ -514,6 +583,114 @@ class Store:
                          "after_cents": item.unit_price_cents,
                          "entry": dict(item.price_history_cents[-1])}])
         return item
+
+    # ------------------------------------------------------------------
+    # read-only switch
+    # ------------------------------------------------------------------
+
+    @property
+    def read_only(self) -> bool:
+        """Whether the data itself is marked read-only."""
+        return bool(self.settings.get("read_only", False))
+
+    def set_read_only(self, flag: bool) -> None:
+        """Mark the data read-only (or not).  Always allowed."""
+        self.settings["read_only"] = bool(flag)
+        self.revision += 1
+
+    def batch_apply(self, csv_path: str, dry_run: bool = False,
+                    actor: str | None = None) -> list[str]:
+        """Apply a sheet of stock movements, all or nothing.
+
+        The file has a header ``op,sku,qty,warehouse,to_warehouse`` and
+        supports ``receive``, ``ship`` and ``transfer``.  If any row
+        fails, nothing at all is applied and ValueError names the row.
+
+        Returns:
+            One description per row, which is what a dry run prints.
+        """
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        before = self._snapshot()
+        marks = (len(self.events), len(self.undo_stack), len(self.redo_stack))
+        described = []
+        try:
+            for number, row in enumerate(rows, start=1):
+                try:
+                    described.append(self._apply_batch_row(row, actor))
+                except ValueError as exc:
+                    raise ValueError(
+                        f"batch failed at row {number}: {exc}") from exc
+        except ValueError:
+            self._rollback(before, marks)
+            raise
+        if dry_run:
+            self._rollback(before, marks)
+        return described
+
+    def _apply_batch_row(self, row: dict, actor: str | None) -> str:
+        """Apply one row of a batch sheet and describe what it did."""
+        op = (row.get("op") or "").strip()
+        sku = (row.get("sku") or "").strip()
+        warehouse = (row.get("warehouse") or "").strip() or MAIN_WAREHOUSE
+        destination = (row.get("to_warehouse") or "").strip() or MAIN_WAREHOUSE
+        try:
+            qty = int((row.get("qty") or "").strip())
+        except ValueError:
+            raise ValueError(f"bad quantity {row.get('qty')!r}") from None
+        if qty < 1:
+            raise ValueError(f"bad quantity {qty}")
+        if op == "receive":
+            self.receive(sku, qty, warehouse=warehouse, actor=actor)
+            return f"receive {qty} x {canonical_sku(sku)} into {warehouse}"
+        if op == "ship":
+            self.ship(sku, qty, warehouse=warehouse, actor=actor)
+            return f"ship {qty} x {canonical_sku(sku)} from {warehouse}"
+        if op == "transfer":
+            self.transfer(sku, qty, warehouse, destination, actor=actor)
+            return (f"transfer {qty} x {canonical_sku(sku)} from "
+                    f"{warehouse} to {destination}")
+        raise ValueError(f"unknown op {op!r}")
+
+    def _rollback(self, snapshot: dict, marks: tuple) -> None:
+        """Undo a partly applied batch, log entries included."""
+        self._restore_snapshot(snapshot)
+        del self.events[marks[0]:]
+        del self.undo_stack[marks[1]:]
+        del self.redo_stack[marks[2]:]
+
+    def fsck(self) -> list[str]:
+        """Cross-check the data and describe anything that looks wrong."""
+        problems = []
+        for order in self.orders:
+            if order.sku not in self.items:
+                problems.append(
+                    f"problem: order {order.id} references unknown SKU "
+                    f"{order.sku}")
+        for item in self.list_items():
+            for warehouse, qty in sorted(item.quantities.items()):
+                if qty < 0:
+                    problems.append(
+                        f"problem: {item.sku} has negative quantity {qty} "
+                        f"in {warehouse}")
+        for entry in self.events:
+            sku = (entry.get("args") or {}).get("sku")
+            if sku and canonical_sku(sku) not in self.items:
+                problems.append(
+                    f"problem: activity entry {entry.get('op')} references "
+                    f"unknown SKU {sku}")
+        for shipment in self.shipments:
+            if shipment.get("sku") not in self.items:
+                problems.append(
+                    f"problem: shipment references unknown SKU "
+                    f"{shipment.get('sku')}")
+        for supplier_id, skus in sorted(self.catalogs.items()):
+            for sku in skus:
+                if sku not in self.items:
+                    problems.append(
+                        f"problem: catalogue of {supplier_id} references "
+                        f"unknown SKU {sku}")
+        return problems
 
     def scheduled_reorders(self, as_of: str | None = None,
                            threshold: int | None = None,
