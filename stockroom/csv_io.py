@@ -15,7 +15,7 @@ side has to accept files we did not write ourselves.
 
 import csv
 
-from .models import DEFAULT_CATEGORY, Item, canonical_sku
+from .models import DEFAULT_CATEGORY, MAIN_WAREHOUSE, Item, canonical_sku
 from .store import Store
 
 FIELDNAMES = ["sku", "name", "qty", "unit_price", "supplier_id", "category"]
@@ -73,7 +73,7 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
                 # Known SKU: refresh the row in place.
                 item = store.items[sku]
                 item.name = row["name"]
-                item.qty = qty
+                item.set_qty(MAIN_WAREHOUSE, qty)
                 item.unit_price = unit_price
                 item.supplier_id = supplier_id
                 if category:

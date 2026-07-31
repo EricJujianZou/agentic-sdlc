@@ -17,6 +17,7 @@ import os
 import sys
 
 from . import __version__, csv_io, reports
+from .models import MAIN_WAREHOUSE
 from .store import Store
 
 
@@ -51,17 +52,31 @@ def cmd_add_supplier(store: Store, args) -> int:
 
 def cmd_receive(store: Store, args) -> int:
     """Handle ``receive``: goods arrived outside of an order."""
-    item = store.receive(args.sku, args.qty, actor=args.actor)
+    item = store.receive(args.sku, args.qty, warehouse=args.warehouse,
+                         actor=args.actor)
     store.save()
-    print(f"received {args.qty} x {item.sku}, now {item.qty} on hand")
+    print(f"received {args.qty} x {item.sku} into {args.warehouse}, "
+          f"now {item.qty_in(args.warehouse)} there ({item.qty} in total)")
     return 0
 
 
 def cmd_ship(store: Store, args) -> int:
     """Handle ``ship``: send units out of the stockroom."""
-    item = store.ship(args.sku, args.qty, actor=args.actor)
+    item = store.ship(args.sku, args.qty, warehouse=args.warehouse,
+                      actor=args.actor)
     store.save()
-    print(f"shipped {args.qty} x {item.sku}, now {item.qty} on hand")
+    print(f"shipped {args.qty} x {item.sku} from {args.warehouse}, "
+          f"now {item.qty_in(args.warehouse)} there ({item.qty} in total)")
+    return 0
+
+
+def cmd_transfer(store: Store, args) -> int:
+    """Handle ``transfer``: walk stock from one warehouse to another."""
+    item = store.transfer(args.sku, args.qty, args.src, args.dst,
+                          actor=args.actor)
+    store.save()
+    print(f"transferred {args.qty} x {item.sku} from {args.src} "
+          f"to {args.dst}")
     return 0
 
 
@@ -102,15 +117,18 @@ def _print_stock_rows(rows) -> None:
 def cmd_report_stock(store: Store, args) -> int:
     """Handle ``report stock``: print the full stock listing."""
     header = f"{'SKU':<12} {'NAME':<24} {'QTY':>6} {'PRICE':>10} {'VALUE':>10}"
+    if args.warehouse:
+        print(f"warehouse: {args.warehouse}")
     if args.by_category:
-        report = reports.stock_report(store, by_category=True)
+        report = reports.stock_report(store, by_category=True,
+                                      warehouse=args.warehouse)
         for category in sorted(report["categories"]):
             print(category)
             print(header)
             _print_stock_rows(report["categories"][category])
             print()
     else:
-        report = reports.stock_report(store)
+        report = reports.stock_report(store, warehouse=args.warehouse)
         print(header)
         _print_stock_rows(report["rows"])
     print(f"Total value: {report['total_value']:.2f}")
@@ -221,7 +239,7 @@ examples:
 # Commands that change state; each of these takes --actor.
 MUTATING_COMMANDS = [
     "add-item", "add-supplier", "receive", "ship", "place-order",
-    "receive-order", "cancel-order", "import-csv",
+    "receive-order", "cancel-order", "import-csv", "transfer",
 ]
 
 
@@ -259,12 +277,21 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("receive", help="add units of an item to stock")
     p.add_argument("sku")
     p.add_argument("qty", type=int)
+    p.add_argument("--warehouse", default=MAIN_WAREHOUSE)
     p.set_defaults(func=cmd_receive)
 
     p = sub.add_parser("ship", help="remove units of an item from stock")
     p.add_argument("sku")
     p.add_argument("qty", type=int)
+    p.add_argument("--warehouse", default=MAIN_WAREHOUSE)
     p.set_defaults(func=cmd_ship)
+
+    p = sub.add_parser("transfer", help="move stock between warehouses")
+    p.add_argument("sku")
+    p.add_argument("qty", type=int)
+    p.add_argument("src", help="warehouse to take the stock from")
+    p.add_argument("dst", help="warehouse to move the stock to")
+    p.set_defaults(func=cmd_transfer)
 
     p = sub.add_parser("place-order", help="record a purchase order")
     p.add_argument("sku")
@@ -288,6 +315,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = report_sub.add_parser("stock", help="full stock listing with values")
     p.add_argument("--by-category", action="store_true",
                    help="group the listing by shelf area")
+    p.add_argument("--warehouse", default=None,
+                   help="show only what one warehouse holds")
     p.set_defaults(func=cmd_report_stock)
 
     p = report_sub.add_parser("low", help="items running low")

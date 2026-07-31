@@ -24,13 +24,19 @@ import os
 from .models import (
     DEFAULT_CATEGORY,
     Item,
-    STATUS_PENDING,
-    canonical_sku,
+    MAIN_WAREHOUSE,
     Order,
     STATUS_CANCELLED,
+    STATUS_PENDING,
     STATUS_RECEIVED,
     Supplier,
+    canonical_sku,
 )
+
+# Schema version written to the state file.  Version 1 is the original
+# unversioned layout; 2 added the version stamp; 3 broke item quantities
+# down per warehouse.
+SCHEMA_VERSION = 3
 
 
 def _record_actor(record, actor: str | None) -> None:
@@ -91,6 +97,7 @@ class Store:
     def save(self) -> None:
         """Write the current state back to the JSON file."""
         raw = {
+            "version": SCHEMA_VERSION,
             "items": {sku: item.to_dict() for sku, item in self.items.items()},
             "suppliers": {sid: s.to_dict() for sid, s in self.suppliers.items()},
             "orders": [order.to_dict() for order in self.orders],
@@ -141,24 +148,46 @@ class Store:
         """All items, sorted by SKU for stable output."""
         return [self.items[sku] for sku in sorted(self.items)]
 
-    def receive(self, sku: str, qty: int, actor: str | None = None) -> Item:
-        """Add ``qty`` units of an item to stock (goods arrived)."""
+    def receive(self, sku: str, qty: int, warehouse: str = MAIN_WAREHOUSE,
+                actor: str | None = None) -> Item:
+        """Add ``qty`` units of an item to one warehouse (goods arrived)."""
         item = self.get_item(sku)
-        item.qty += qty
+        item.add_qty(warehouse, qty)
         _record_actor(item, actor)
         return item
 
-    def ship(self, sku: str, qty: int, actor: str | None = None) -> Item:
-        """Remove ``qty`` units of an item from stock (goods sent out).
+    def ship(self, sku: str, qty: int, warehouse: str = MAIN_WAREHOUSE,
+             actor: str | None = None) -> Item:
+        """Remove ``qty`` units of an item from one warehouse.
 
-        The shelf cannot go negative: shipping more than we hold is
-        refused and leaves the item untouched.
+        The shelf cannot go negative: shipping more than that warehouse
+        holds is refused and leaves the item untouched.
         """
         item = self.get_item(sku)
-        if qty > item.qty:
+        on_hand = item.qty_in(warehouse)
+        if qty > on_hand:
             raise ValueError(
-                f"cannot ship {qty} x {sku}: only {item.qty} on hand")
-        item.qty -= qty
+                f"cannot ship {qty} x {item.sku} from {warehouse}: "
+                f"only {on_hand} on hand")
+        item.add_qty(warehouse, -qty)
+        _record_actor(item, actor)
+        return item
+
+    def transfer(self, sku: str, qty: int, src: str, dst: str,
+                 actor: str | None = None) -> Item:
+        """Walk ``qty`` units of an item from one warehouse to another.
+
+        Never moves more than the source actually holds; a refused
+        transfer leaves both warehouses untouched.
+        """
+        item = self.get_item(sku)
+        on_hand = item.qty_in(src)
+        if qty > on_hand:
+            raise ValueError(
+                f"cannot transfer {qty} x {item.sku} from {src}: "
+                f"only {on_hand} on hand")
+        item.add_qty(src, -qty)
+        item.add_qty(dst, qty)
         _record_actor(item, actor)
         return item
 
@@ -226,7 +255,7 @@ class Store:
         _require_pending(order, "receive")
         order.status = STATUS_RECEIVED
         item = self.get_item(order.sku)
-        item.qty += order.qty
+        item.add_qty(MAIN_WAREHOUSE, order.qty)
         _record_actor(order, actor)
         _record_actor(item, actor)
         return order

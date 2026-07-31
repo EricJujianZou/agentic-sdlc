@@ -22,20 +22,26 @@ STATUS_CANCELLED = "cancelled"
 # Items that were never filed under a shelf area land here.
 DEFAULT_CATEGORY = "uncategorized"
 
+# The original stockroom; stock with no warehouse of its own lives here.
+MAIN_WAREHOUSE = "main"
+
 
 def canonical_sku(sku: str) -> str:
     """SKUs are not case sensitive; we write and store them uppercase."""
     return str(sku).strip().upper()
 
 
-@dataclass
 class Item:
     """A single stocked item.
+
+    Stock is held per warehouse, but the item still answers ``qty`` with
+    the total across all of them, which is what reports and CSV exports
+    have always meant.
 
     Attributes:
         sku: the stock keeping unit, our unique identifier for the item.
         name: human readable description.
-        qty: number of units currently on hand.
+        quantities: mapping of warehouse name -> units held there.
         unit_price: what we pay per unit, in dollars.
         supplier_id: id of the Supplier we buy this from, or None for
             items we do not reorder.
@@ -43,20 +49,50 @@ class Item:
         last_actor: who last created or changed this item, if recorded.
     """
 
-    sku: str
-    name: str
-    qty: int = 0
-    unit_price: float = 0.0
-    supplier_id: str | None = None
-    category: str = DEFAULT_CATEGORY
-    last_actor: str | None = None
+    def __init__(self, sku: str, name: str, qty: int = 0,
+                 unit_price: float = 0.0, supplier_id: str | None = None,
+                 category: str = DEFAULT_CATEGORY,
+                 last_actor: str | None = None,
+                 quantities: dict | None = None):
+        self.sku = canonical_sku(sku)
+        self.name = name
+        self.quantities = {w: int(q) for w, q in (quantities or {}).items()}
+        # A starting quantity lands in the main room.
+        if qty or not self.quantities:
+            self.quantities[MAIN_WAREHOUSE] = (
+                self.quantities.get(MAIN_WAREHOUSE, 0) + int(qty))
+        self.unit_price = unit_price
+        self.supplier_id = supplier_id
+        self.category = category or DEFAULT_CATEGORY
+        self.last_actor = last_actor
+
+    def __repr__(self) -> str:
+        return (f"Item(sku={self.sku!r}, name={self.name!r}, "
+                f"quantities={self.quantities!r})")
+
+    @property
+    def qty(self) -> int:
+        """Units on hand across every warehouse."""
+        return sum(self.quantities.values())
+
+    def qty_in(self, warehouse: str) -> int:
+        """Units held in one warehouse (0 if it never held this item)."""
+        return self.quantities.get(warehouse, 0)
+
+    def set_qty(self, warehouse: str, qty: int) -> None:
+        """Set the units held in one warehouse."""
+        self.quantities[warehouse] = int(qty)
+
+    def add_qty(self, warehouse: str, qty: int) -> None:
+        """Add (or, with a negative qty, remove) units in one warehouse."""
+        self.quantities[warehouse] = self.qty_in(warehouse) + int(qty)
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this item."""
         return {
             "sku": self.sku,
             "name": self.name,
-            "qty": self.qty,
+            "qty": dict(self.quantities),
             "unit_price": self.unit_price,
             "supplier_id": self.supplier_id,
             "category": self.category,
@@ -65,15 +101,25 @@ class Item:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Item":
-        """Build an Item from a dict previously produced by to_dict."""
+        """Build an Item from a dict previously produced by to_dict.
+
+        Files written before warehouses existed carry a plain integer
+        quantity; all of that stock belongs to the main room.
+        """
+        stored_qty = data.get("qty", 0)
+        if isinstance(stored_qty, dict):
+            quantities, qty = stored_qty, 0
+        else:
+            quantities, qty = None, stored_qty
         return cls(
             sku=data["sku"],
             name=data["name"],
-            qty=data.get("qty", 0),
+            qty=qty,
             unit_price=data.get("unit_price", 0.0),
             supplier_id=data.get("supplier_id"),
             category=data.get("category") or DEFAULT_CATEGORY,
             last_actor=data.get("last_actor"),
+            quantities=quantities,
         )
 
 
