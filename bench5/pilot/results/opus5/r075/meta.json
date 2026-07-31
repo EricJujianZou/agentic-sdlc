@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_qutebrowser__qutebrowser-394bfaed6544c952c6b3463751abab3176ad4997-vafb3e8e01b31319c66c4e666b8a3b1d8ba55db24",
+  "model": "claude-opus-5",
+  "started_at": "2026-07-31T23:26:04Z",
+  "finished_at": "2026-08-01T00:05:00Z",
+  "turns_estimate": 50,
+  "self_assessment": "Fairly confident on behaviour, less so on exact strings: the new qutebrowser/misc/elf.py parses a real libQt5WebEngineCore.so.5 end-to-end (got QtWebEngine 5.15.19 / Chromium 87.0.4280.144) and survives hypothesis fuzzing with only ParseError escaping, and version.qtwebengine_versions() implements the ua -> elf -> pyqt -> unknown:<reason> chain feeding _backend()/_variant(); the full tests/unit suite shows no regressions vs the base commit (same ~90 pre-existing env failures), but the hidden tests may assert an exact WebEngineVersions.__str__ wording ('QtWebEngine X, based on Chromium Y (from src)') and a normalized version string ('5.14' rather than '5.14.0') that I had to reconstruct from the requirements rather than observe."
+}

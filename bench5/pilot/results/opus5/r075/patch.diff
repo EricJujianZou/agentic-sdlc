@@ -1,0 +1,1030 @@
+diff --git a/qutebrowser/browser/webengine/darkmode.py b/qutebrowser/browser/webengine/darkmode.py
+index ffc14c7e3..9b8e34a38 100644
+--- a/qutebrowser/browser/webengine/darkmode.py
++++ b/qutebrowser/browser/webengine/darkmode.py
+@@ -77,14 +77,8 @@ import os
+ import enum
+ from typing import Any, Iterable, Iterator, Mapping, Optional, Set, Tuple, Union
+ 
+-try:
+-    from PyQt5.QtWebEngine import PYQT_WEBENGINE_VERSION
+-except ImportError:  # pragma: no cover
+-    # Added in PyQt 5.13
+-    PYQT_WEBENGINE_VERSION = None  # type: ignore[assignment]
+-
+ from qutebrowser.config import config
+-from qutebrowser.utils import usertypes, qtutils, utils, log
++from qutebrowser.utils import usertypes, qtutils, utils, log, version
+ 
+ 
+ class Variant(enum.Enum):
+@@ -240,25 +234,22 @@ def _variant() -> Variant:
+         except KeyError:
+             log.init.warning(f"Ignoring invalid QUTE_DARKMODE_VARIANT={env_var}")
+ 
+-    if PYQT_WEBENGINE_VERSION is not None:
+-        # Available with Qt >= 5.13
+-        if PYQT_WEBENGINE_VERSION >= 0x050f02:
++    webengine_version = version.qtwebengine_versions(avoid_init=True).webengine
++    if webengine_version is not None:
++        if webengine_version >= utils.VersionNumber(5, 15, 2):
+             return Variant.qt_515_2
+-        elif PYQT_WEBENGINE_VERSION == 0x050f01:
++        elif webengine_version >= utils.VersionNumber(5, 15, 1):
+             return Variant.qt_515_1
+-        elif PYQT_WEBENGINE_VERSION == 0x050f00:
++        elif webengine_version >= utils.VersionNumber(5, 15):
+             return Variant.qt_515_0
+-        elif PYQT_WEBENGINE_VERSION >= 0x050e00:
++        elif webengine_version >= utils.VersionNumber(5, 14):
+             return Variant.qt_514
+-        elif PYQT_WEBENGINE_VERSION >= 0x050d00:
+-            return Variant.qt_511_to_513
+-        raise utils.Unreachable(hex(PYQT_WEBENGINE_VERSION))
+-
+-    # If we don't have PYQT_WEBENGINE_VERSION, we're on 5.12 (or older, but 5.12 is the
+-    # oldest supported version).
+-    assert not qtutils.version_check(  # type: ignore[unreachable]
+-        '5.13', compiled=False)
++        return Variant.qt_511_to_513
+ 
++    # If we don't know the QtWebEngine version, we're on Qt 5.12 to 5.14 (or older,
++    # but 5.12 is the oldest supported version): With Qt 5.15, we always either have
++    # a parsed user agent, the ELF file (Linux) or PYQT_WEBENGINE_VERSION_STR
++    # (PyQt >= 5.13) to get the version from.
+     return Variant.qt_511_to_513
+ 
+ 
+diff --git a/qutebrowser/config/websettings.py b/qutebrowser/config/websettings.py
+index 5599e2172..463e2f0c4 100644
+--- a/qutebrowser/config/websettings.py
++++ b/qutebrowser/config/websettings.py
+@@ -46,6 +46,7 @@ class UserAgent:
+     upstream_browser_key: str
+     upstream_browser_version: str
+     qt_key: str
++    qt_version: Optional[str]
+ 
+     @classmethod
+     def parse(cls, ua: str) -> 'UserAgent':
+@@ -75,7 +76,8 @@ class UserAgent:
+                    webkit_version=webkit_version,
+                    upstream_browser_key=upstream_browser_key,
+                    upstream_browser_version=upstream_browser_version,
+-                   qt_key=qt_key)
++                   qt_key=qt_key,
++                   qt_version=versions.get(qt_key))
+ 
+ 
+ class AttributeInfo:
+diff --git a/qutebrowser/misc/elf.py b/qutebrowser/misc/elf.py
+new file mode 100644
+index 000000000..4f8bd9623
+--- /dev/null
++++ b/qutebrowser/misc/elf.py
+@@ -0,0 +1,315 @@
++# vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
++
++# Copyright 2021 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
++#
++# This file is part of qutebrowser.
++#
++# qutebrowser is free software: you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation, either version 3 of the License, or
++# (at your option) any later version.
++#
++# qutebrowser is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with qutebrowser.  If not, see <https://www.gnu.org/licenses/>.
++
++"""Simplistic ELF parser to get the QtWebEngine/Chromium versions.
++
++I know what you must be thinking when reading this: "Why on earth does qutebrowser have
++an ELF parser?!". For one, because writing one was an interesting learning exercise. But
++there's actually a reason it's here: QtWebEngine 5.15.x versions come with different
++underlying Chromium versions, but there is no API to get the version of the underlying
++Chromium (or QtWebEngine, for that matter) without initializing QtWebEngine first.
++
++The PyQt PYQT_WEBENGINE_VERSION is not a reliable source either: It's only available
++with PyQt 5.13 or newer, and on Linux distributions, PyQtWebEngine and QtWebEngine are
++packaged separately - so the PyQt version doesn't necessarily match the QtWebEngine
++version at all.
++
++The versions we're after *are* in the QtWebEngine library, though: The user agent
++QtWebEngine uses is compiled into it as a string, and it contains both the QtWebEngine
++and the Chromium version. Thus, all we need to do is to find that string - which lives
++in the .rodata section of the ELF file.
++
++This is a best-effort parser: If anything goes wrong, we simply return None and fall
++back to other ways of getting the version.
++
++See qutebrowser/utils/version.py for the code using this.
++"""
++
++import re
++import enum
++import mmap
++import pathlib
++import dataclasses
++import struct
++from typing import Any, IO, ClassVar, Dict, Optional, cast
++
++from PyQt5.QtCore import QLibraryInfo
++
++from qutebrowser.utils import log, utils
++
++
++class ParseError(Exception):
++
++    """Raised when the ELF file can't be parsed."""
++
++
++class Bitness(enum.Enum):
++
++    """Whether the ELF file is 32- or 64-bit."""
++
++    x32 = 1
++    x64 = 2
++
++
++class Endianness(enum.Enum):
++
++    """Whether the ELF file is little- or big-endian."""
++
++    little = 1
++    big = 2
++
++
++def _unpack(fmt: str, fobj: IO[bytes]) -> Any:
++    """Unpack the given struct format from the given file."""
++    size = struct.calcsize(fmt)
++    data = _safe_read(fobj, size)
++
++    try:
++        return struct.unpack(fmt, data)
++    except struct.error as e:
++        raise ParseError(e)
++
++
++def _safe_read(fobj: IO[bytes], size: int) -> bytes:
++    """Read from a file, handling possible exceptions."""
++    try:
++        return fobj.read(size)
++    except (OSError, OverflowError) as e:
++        raise ParseError(e)
++
++
++def _safe_seek(fobj: IO[bytes], pos: int) -> None:
++    """Seek in a file, handling possible exceptions."""
++    try:
++        fobj.seek(pos)
++    except (OSError, OverflowError) as e:
++        raise ParseError(e)
++
++
++@dataclasses.dataclass
++class Ident:
++
++    """File identification for ELF.
++
++    See https://en.wikipedia.org/wiki/Executable_and_Linkable_Format#File_header
++    (first 16 bytes).
++    """
++
++    magic: bytes
++    klass: Bitness
++    data: Endianness
++    version: int
++    osabi: int
++    abiversion: int
++
++    _FORMAT: ClassVar[str] = '<4sBBBBB7x'
++
++    @classmethod
++    def parse(cls, fobj: IO[bytes]) -> 'Ident':
++        """Parse an ELF ident header from a file."""
++        magic, klass, data, elfversion, osabi, abiversion = _unpack(cls._FORMAT, fobj)
++
++        try:
++            bitness = Bitness(klass)
++        except ValueError:
++            raise ParseError(f"Invalid bitness {klass}")
++
++        try:
++            endianness = Endianness(data)
++        except ValueError:
++            raise ParseError(f"Invalid endianness {data}")
++
++        return cls(magic, bitness, endianness, elfversion, osabi, abiversion)
++
++
++@dataclasses.dataclass
++class Header:
++
++    """ELF header without file identification.
++
++    See https://en.wikipedia.org/wiki/Executable_and_Linkable_Format#File_header
++    (without the first 16 bytes).
++    """
++
++    typ: int
++    machine: int
++    version: int
++    entry: int
++    phoff: int
++    shoff: int
++    flags: int
++    ehsize: int
++    phentsize: int
++    phnum: int
++    shentsize: int
++    shnum: int
++    shstrndx: int
++
++    _FORMATS: ClassVar[Dict[Bitness, str]] = {
++        Bitness.x64: '<HHIQQQIHHHHHH',
++        Bitness.x32: '<HHIIIIIHHHHHH',
++    }
++
++    @classmethod
++    def parse(cls, fobj: IO[bytes], bitness: Bitness) -> 'Header':
++        """Parse an ELF header from a file."""
++        fmt = cls._FORMATS[bitness]
++        return cls(*_unpack(fmt, fobj))
++
++
++@dataclasses.dataclass
++class SectionHeader:
++
++    """ELF section header.
++
++    See https://en.wikipedia.org/wiki/Executable_and_Linkable_Format#Section_header
++    """
++
++    name: int
++    typ: int
++    flags: int
++    addr: int
++    offset: int
++    size: int
++    link: int
++    info: int
++    addralign: int
++    entsize: int
++
++    _FORMATS: ClassVar[Dict[Bitness, str]] = {
++        Bitness.x64: '<IIQQQQIIQQ',
++        Bitness.x32: '<IIIIIIIIII',
++    }
++
++    @classmethod
++    def parse(cls, fobj: IO[bytes], bitness: Bitness) -> 'SectionHeader':
++        """Parse an ELF section header from a file."""
++        fmt = cls._FORMATS[bitness]
++        return cls(*_unpack(fmt, fobj))
++
++
++def get_rodata_header(f: IO[bytes]) -> SectionHeader:
++    """Parse an ELF file and find the .rodata section header."""
++    ident = Ident.parse(f)
++    if ident.magic != b'\x7fELF':
++        raise ParseError(f"Invalid magic {ident.magic!r}")
++
++    if ident.data != Endianness.little:
++        raise ParseError("Big endian is unsupported")
++
++    header = Header.parse(f, bitness=ident.klass)
++
++    # Read string table
++    _safe_seek(f, header.shoff + header.shstrndx * header.shentsize)
++    shstr = SectionHeader.parse(f, bitness=ident.klass)
++
++    _safe_seek(f, shstr.offset)
++    string_table = _safe_read(f, shstr.size)
++
++    # Back to all sections
++    for i in range(header.shnum):
++        _safe_seek(f, header.shoff + i * header.shentsize)
++        sh = SectionHeader.parse(f, bitness=ident.klass)
++
++        name = string_table[sh.name:].split(b'\x00')[0]
++        if name == b'.rodata':
++            return sh
++
++    raise ParseError("No .rodata section found")
++
++
++def get_rodata(path: str) -> bytes:
++    """Get the contents of the .rodata section of the given ELF file."""
++    with open(path, 'rb') as f:
++        sh = get_rodata_header(f)
++        _safe_seek(f, sh.offset)
++        return _safe_read(f, sh.size)
++
++
++@dataclasses.dataclass
++class Versions:
++
++    """The versions found in the ELF file."""
++
++    webengine: str
++    chromium: str
++
++
++def _find_versions(data: bytes) -> Versions:
++    """Find the version numbers in the given data.
++
++    Note that 'data' can actually be a mmap.mmap, but typing doesn't handle that
++    correctly: https://github.com/python/typeshed/issues/1467
++    """
++    match = re.search(br'QtWebEngine/([0-9.]+)', data)
++    if match is None:
++        raise ParseError("No QtWebEngine version found")
++    webengine = _decode(match.group(1))
++
++    match = re.search(br'Chrome/([0-9.]+)', data)
++    if match is None:
++        raise ParseError("No Chromium version found")
++    chromium = _decode(match.group(1))
++
++    return Versions(webengine=webengine, chromium=chromium)
++
++
++def _decode(data: bytes) -> str:
++    """Decode a version string found in the ELF file."""
++    try:
++        return data.decode('ascii')
++    except UnicodeDecodeError as e:
++        raise ParseError(e)
++
++
++def parse_webenginecore() -> Optional[Versions]:
++    """Parse the QtWebEngineCore library file."""
++    if not utils.is_linux:
++        # There are no ELF files on other platforms.
++        return None
++
++    library_path = pathlib.Path(QLibraryInfo.location(QLibraryInfo.LibrariesPath))
++    lib_file = library_path / 'libQt5WebEngineCore.so.5'
++    if not lib_file.exists():
++        log.misc.debug(f"{lib_file} not found, not parsing ELF")
++        return None
++
++    try:
++        with lib_file.open('rb') as f:
++            sh = get_rodata_header(f)
++
++            rest = sh.offset % mmap.ALLOCATIONGRANULARITY
++            mmap_offset = sh.offset - rest
++            mmap_size = sh.size + rest
++
++            with mmap.mmap(
++                f.fileno(),
++                mmap_size,
++                offset=mmap_offset,
++                access=mmap.ACCESS_READ,
++            ) as mmap_data:
++                versions = _find_versions(cast(bytes, mmap_data))
++                log.misc.debug(f"Got versions from ELF: {versions}")
++                return versions
++    except ParseError as e:
++        log.misc.debug(f"Failed to parse ELF: {e}", exc_info=True)
++        return None
++    except (OSError, ValueError) as e:
++        log.misc.debug(f"Failed to read ELF: {e}", exc_info=True)
++        return None
+diff --git a/qutebrowser/utils/utils.py b/qutebrowser/utils/utils.py
+index 5c9b89cbe..2cc222b20 100644
+--- a/qutebrowser/utils/utils.py
++++ b/qutebrowser/utils/utils.py
+@@ -90,9 +90,14 @@ class SupportsLessThan(Protocol):
+ if TYPE_CHECKING:
+     class VersionNumber(SupportsLessThan, QVersionNumber):
+ 
+-        """WORKAROUND for incorrect PyQt stubs."""
++        """WORKAROUND for incorrect PyQt stubs.
++
++        The stubs don't declare the comparison operators QVersionNumber has, so we
++        mix in SupportsLessThan for mypy. We can't do that at runtime, as a class
++        can't inherit from both a Protocol and QVersionNumber.
++        """
+ else:
+-    class VersionNumber:
++    class VersionNumber(QVersionNumber):
+ 
+         """We can't inherit from Protocol and QVersionNumber at runtime."""
+ 
+diff --git a/qutebrowser/utils/version.py b/qutebrowser/utils/version.py
+index 5be088b15..810aba3c2 100644
+--- a/qutebrowser/utils/version.py
++++ b/qutebrowser/utils/version.py
+@@ -45,11 +45,17 @@ try:
+ except ImportError:  # pragma: no cover
+     qWebKitVersion = None  # type: ignore[assignment]  # noqa: N816
+ 
++try:
++    from PyQt5.QtWebEngine import PYQT_WEBENGINE_VERSION_STR
++except ImportError:  # pragma: no cover
++    # Added in PyQt 5.13
++    PYQT_WEBENGINE_VERSION_STR = None  # type: ignore[assignment]
++
+ import qutebrowser
+ from qutebrowser.utils import log, utils, standarddir, usertypes, message
+-from qutebrowser.misc import objects, earlyinit, sql, httpclient, pastebin
++from qutebrowser.misc import objects, earlyinit, sql, httpclient, pastebin, elf
+ from qutebrowser.browser import pdfjs
+-from qutebrowser.config import config
++from qutebrowser.config import config, websettings
+ 
+ try:
+     from qutebrowser.browser.webengine import webenginesettings
+@@ -454,10 +460,89 @@ def _pdfjs_version() -> str:
+         return '{} ({})'.format(pdfjs_version, file_path)
+ 
+ 
+-def _chromium_version() -> str:
+-    """Get the Chromium version for QtWebEngine.
++@dataclasses.dataclass
++class WebEngineVersions:
++
++    """Version numbers for QtWebEngine and the underlying Chromium.
++
++    Attributes:
++        webengine: The QtWebEngine version, or None if unknown.
++        chromium: The underlying Chromium version, or None if unknown.
++        source: Where the version information was obtained from. One of "ua"
++                (parsed user agent), "elf" (parsed QtWebEngineCore ELF file),
++                "pyqt" (PyQt's PYQT_WEBENGINE_VERSION_STR), or
++                "unknown:<reason>" if no version could be found.
++    """
++
++    webengine: Optional[utils.VersionNumber]
++    chromium: Optional[str]
++    source: str
+ 
+-    This can also be checked by looking at this file with the right Qt tag:
++    def __str__(self) -> str:
++        webengine = 'unknown' if self.webengine is None else self.webengine.toString()
++        chromium = 'unknown' if self.chromium is None else self.chromium
++        return (f'QtWebEngine {webengine}, based on Chromium {chromium} '
++                f'(from {self.source})')
++
++    @classmethod
++    def from_ua(cls, ua: websettings.UserAgent) -> 'WebEngineVersions':
++        """Get the versions from a parsed user agent.
++
++        This is the most reliable source, but it's only available after
++        QtWebEngine was initialized.
++        """
++        webengine = None if ua.qt_version is None else utils.parse_version(ua.qt_version)
++        return cls(
++            webengine=webengine,
++            chromium=ua.upstream_browser_version,
++            source='ua',
++        )
++
++    @classmethod
++    def from_elf(cls, versions: elf.Versions) -> 'WebEngineVersions':
++        """Get the versions from the ELF file of QtWebEngineCore."""
++        return cls(
++            webengine=utils.parse_version(versions.webengine),
++            chromium=versions.chromium,
++            source='elf',
++        )
++
++    @classmethod
++    def from_pyqt(cls, pyqt_webengine_version: str) -> 'WebEngineVersions':
++        """Get the versions from PyQt's PYQT_WEBENGINE_VERSION_STR.
++
++        Note that this is the version PyQtWebEngine was compiled against, which
++        doesn't necessarily match the QtWebEngine version in use - especially on
++        Linux distributions, where the two are packaged separately.
++        """
++        return cls(
++            webengine=utils.parse_version(pyqt_webengine_version),
++            chromium=None,
++            source='pyqt',
++        )
++
++    @classmethod
++    def unknown(cls, reason: str) -> 'WebEngineVersions':
++        """Get a version object for when no version could be found."""
++        return cls(webengine=None, chromium=None, source=f'unknown:{reason}')
++
++
++def qtwebengine_versions(avoid_init: bool = False) -> WebEngineVersions:
++    """Get the QtWebEngine and Chromium versions.
++
++    If a user agent was parsed already (i.e. QtWebEngine was initialized), we use
++    that - it's the only place where both versions are guaranteed to be correct.
++    Otherwise, we parse the QtWebEngineCore ELF file, which gives us the same
++    information without initializing QtWebEngine. If that fails as well (e.g. on
++    Windows/macOS), we fall back to PyQt's PYQT_WEBENGINE_VERSION_STR, which is
++    only the version PyQtWebEngine was compiled against.
++
++    With avoid_init=True, QtWebEngine is never initialized to get the user agent -
++    this is needed for code which runs before QtWebEngine is set up (e.g. dark mode
++    settings, which need to be passed to Chromium at startup).
++
++    The Chromium version for a given QtWebEngine version can also be checked by
++    looking at this file with the right Qt tag:
+     https://code.qt.io/cgit/qt/qtwebengine.git/tree/tools/scripts/version_resolver.py#n41
+ 
+     Quick reference:
+@@ -502,16 +587,24 @@ def _chromium_version() -> str:
+     - https://www.chromium.org/developers/calendar
+     - https://chromereleases.googleblog.com/
+     """
+-    if webenginesettings is None:
+-        return 'unavailable'  # type: ignore[unreachable]
++    if webenginesettings is not None:
++        if webenginesettings.parsed_user_agent is None and not avoid_init:
++            webenginesettings.init_user_agent()
++
++        if webenginesettings.parsed_user_agent is not None:
++            return WebEngineVersions.from_ua(webenginesettings.parsed_user_agent)
++
++    versions = elf.parse_webenginecore()
++    if versions is not None:
++        return WebEngineVersions.from_elf(versions)
++
++    if PYQT_WEBENGINE_VERSION_STR is not None:
++        return WebEngineVersions.from_pyqt(PYQT_WEBENGINE_VERSION_STR)
+ 
+-    if webenginesettings.parsed_user_agent is None:
+-        if 'avoid-chromium-init' in objects.debug_flags:
+-            return 'avoided'
+-        webenginesettings.init_user_agent()
+-        assert webenginesettings.parsed_user_agent is not None
++    if avoid_init:
++        return WebEngineVersions.unknown('avoid-init')
+ 
+-    return webenginesettings.parsed_user_agent.upstream_browser_version
++    return WebEngineVersions.unknown('no-source')
+ 
+ 
+ def _backend() -> str:
+@@ -521,7 +614,8 @@ def _backend() -> str:
+     elif objects.backend == usertypes.Backend.QtWebEngine:
+         webengine = usertypes.Backend.QtWebEngine
+         assert objects.backend == webengine, objects.backend
+-        return 'QtWebEngine (Chromium {})'.format(_chromium_version())
++        return str(qtwebengine_versions(
++            avoid_init='avoid-chromium-init' in objects.debug_flags))
+     raise utils.Unreachable(objects.backend)
+ 
+ 
+diff --git a/tests/unit/browser/webengine/test_darkmode.py b/tests/unit/browser/webengine/test_darkmode.py
+index 743f2ab1a..c1373b339 100644
+--- a/tests/unit/browser/webengine/test_darkmode.py
++++ b/tests/unit/browser/webengine/test_darkmode.py
+@@ -21,7 +21,7 @@ import logging
+ import pytest
+ 
+ from qutebrowser.config import configdata
+-from qutebrowser.utils import usertypes, version
++from qutebrowser.utils import usertypes, utils as qutils, version
+ from qutebrowser.browser.webengine import darkmode
+ from qutebrowser.misc import objects
+ from helpers import utils
+@@ -32,6 +32,19 @@ def patch_backend(monkeypatch):
+     monkeypatch.setattr(objects, 'backend', usertypes.Backend.QtWebEngine)
+ 
+ 
++def _patch_versions(monkeypatch, webengine_version):
++    """Make version.qtwebengine_versions() return the given version."""
++    if webengine_version is None:
++        versions = version.WebEngineVersions.unknown('faked')
++    else:
++        versions = version.WebEngineVersions(
++            webengine=qutils.parse_version(webengine_version),
++            chromium=None,
++            source='faked')
++    monkeypatch.setattr(version, 'qtwebengine_versions',
++                        lambda avoid_init=False: versions)
++
++
+ @pytest.mark.parametrize('qversion, enabled, expected', [
+     # Disabled or nothing set
+     ("5.14", False, []),
+@@ -123,11 +136,7 @@ QT_515_2_SETTINGS = [
+ def test_qt_version_differences(config_stub, monkeypatch, qversion, expected):
+     monkeypatch.setattr(darkmode.qtutils, 'qVersion', lambda: qversion)
+ 
+-    major, minor, patch = [int(part) for part in qversion.split('.')]
+-    hexversion = major << 16 | minor << 8 | patch
+-    if major > 5 or minor >= 13:
+-        # Added in Qt 5.13
+-        monkeypatch.setattr(darkmode, 'PYQT_WEBENGINE_VERSION', hexversion)
++    _patch_versions(monkeypatch, qversion)
+ 
+     settings = {
+         'enabled': True,
+@@ -171,21 +180,20 @@ def test_customization(config_stub, monkeypatch, setting, value, exp_key, exp_va
+     assert list(darkmode.settings()) == expected
+ 
+ 
+-@pytest.mark.parametrize('qversion, webengine_version, expected', [
+-    # Without PYQT_WEBENGINE_VERSION
+-    ('5.12.9', None, darkmode.Variant.qt_511_to_513),
++@pytest.mark.parametrize('webengine_version, expected', [
++    # Without a known QtWebEngine version
++    (None, darkmode.Variant.qt_511_to_513),
+ 
+-    # With PYQT_WEBENGINE_VERSION
+-    (None, 0x050d00, darkmode.Variant.qt_511_to_513),
+-    (None, 0x050e00, darkmode.Variant.qt_514),
+-    (None, 0x050f00, darkmode.Variant.qt_515_0),
+-    (None, 0x050f01, darkmode.Variant.qt_515_1),
+-    (None, 0x050f02, darkmode.Variant.qt_515_2),
+-    (None, 0x060000, darkmode.Variant.qt_515_2),  # Qt 6
++    ('5.12.9', darkmode.Variant.qt_511_to_513),
++    ('5.13.0', darkmode.Variant.qt_511_to_513),
++    ('5.14.0', darkmode.Variant.qt_514),
++    ('5.15.0', darkmode.Variant.qt_515_0),
++    ('5.15.1', darkmode.Variant.qt_515_1),
++    ('5.15.2', darkmode.Variant.qt_515_2),
++    ('6.0.0', darkmode.Variant.qt_515_2),  # Qt 6
+ ])
+-def test_variant(monkeypatch, qversion, webengine_version, expected):
+-    monkeypatch.setattr(darkmode.qtutils, 'qVersion', lambda: qversion)
+-    monkeypatch.setattr(darkmode, 'PYQT_WEBENGINE_VERSION', webengine_version)
++def test_variant(monkeypatch, webengine_version, expected):
++    _patch_versions(monkeypatch, webengine_version)
+     assert darkmode._variant() == expected
+ 
+ 
+@@ -194,8 +202,7 @@ def test_variant(monkeypatch, qversion, webengine_version, expected):
+     ('qt_515_2', True, darkmode.Variant.qt_515_2),
+ ])
+ def test_variant_override(monkeypatch, caplog, value, is_valid, expected):
+-    monkeypatch.setattr(darkmode.qtutils, 'qVersion', lambda: None)
+-    monkeypatch.setattr(darkmode, 'PYQT_WEBENGINE_VERSION', 0x050f00)
++    _patch_versions(monkeypatch, '5.15.0')
+     monkeypatch.setenv('QUTE_DARKMODE_VARIANT', value)
+ 
+     with caplog.at_level(logging.WARNING):
+@@ -208,7 +215,7 @@ def test_variant_override(monkeypatch, caplog, value, is_valid, expected):
+ def test_broken_smart_images_policy(config_stub, monkeypatch, caplog):
+     config_stub.val.colors.webpage.darkmode.enabled = True
+     config_stub.val.colors.webpage.darkmode.policy.images = 'smart'
+-    monkeypatch.setattr(darkmode, 'PYQT_WEBENGINE_VERSION', 0x050f00)
++    _patch_versions(monkeypatch, '5.15.0')
+ 
+     with caplog.at_level(logging.WARNING):
+         settings = list(darkmode.settings())
+@@ -233,8 +240,8 @@ def test_new_chromium():
+     Make this test fail deliberately with newer Chromium versions, so that
+     we can test whether dark mode still works manually, and adjust if not.
+     """
+-    assert version._chromium_version() in [
+-        'unavailable',  # QtWebKit
++    assert version.qtwebengine_versions().chromium in [
++        None,  # unknown, e.g. with QtWebKit
+         '61.0.3163.140',  # Qt 5.10
+         '65.0.3325.230',  # Qt 5.11
+         '69.0.3497.128',  # Qt 5.12
+diff --git a/tests/unit/config/test_websettings.py b/tests/unit/config/test_websettings.py
+index 7601c7c24..8dcbcd15b 100644
+--- a/tests/unit/config/test_websettings.py
++++ b/tests/unit/config/test_websettings.py
+@@ -26,7 +26,7 @@ from qutebrowser.utils import usertypes
+ 
+ @pytest.mark.parametrize([
+     'user_agent', 'os_info', 'webkit_version',
+-    'upstream_browser_key', 'upstream_browser_version', 'qt_key'
++    'upstream_browser_key', 'upstream_browser_version', 'qt_key', 'qt_version'
+ ], [
+     (
+         # QtWebEngine, Linux
+@@ -37,7 +37,7 @@ from qutebrowser.utils import usertypes
+         "X11; Linux x86_64",
+         "537.36",
+         "Chrome", "77.0.3865.98",
+-        "QtWebEngine",
++        "QtWebEngine", "5.14.0",
+     ), (
+         # QtWebKit, Linux
+         ("Mozilla/5.0 (X11; Linux x86_64) "
+@@ -47,7 +47,7 @@ from qutebrowser.utils import usertypes
+         "X11; Linux x86_64",
+         "602.1",
+         "Version", "10.0",
+-        "Qt",
++        "Qt", None,
+     ), (
+         # QtWebEngine, macOS
+         ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) "
+@@ -56,7 +56,7 @@ from qutebrowser.utils import usertypes
+         "Macintosh; Intel Mac OS X 10_12_6",
+         "537.36",
+         "Chrome", "73.0.3683.105",
+-        "QtWebEngine",
++        "QtWebEngine", "5.13.2",
+     ), (
+         # QtWebEngine, Windows
+         ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+@@ -65,18 +65,19 @@ from qutebrowser.utils import usertypes
+         "Windows NT 10.0; Win64; x64",
+         "537.36",
+         "Chrome", "69.0.3497.128",
+-        "QtWebEngine",
++        "QtWebEngine", "5.12.5",
+     )
+ ])
+ def test_parse_user_agent(user_agent, os_info, webkit_version,
+                           upstream_browser_key, upstream_browser_version,
+-                          qt_key):
++                          qt_key, qt_version):
+     parsed = websettings.UserAgent.parse(user_agent)
+     assert parsed.os_info == os_info
+     assert parsed.webkit_version == webkit_version
+     assert parsed.upstream_browser_key == upstream_browser_key
+     assert parsed.upstream_browser_version == upstream_browser_version
+     assert parsed.qt_key == qt_key
++    assert parsed.qt_version == qt_version
+ 
+ 
+ def test_user_agent(monkeypatch, config_stub, qapp):
+diff --git a/tests/unit/misc/test_elf.py b/tests/unit/misc/test_elf.py
+new file mode 100644
+index 000000000..653e3fc34
+--- /dev/null
++++ b/tests/unit/misc/test_elf.py
+@@ -0,0 +1,93 @@
++# vim: ft=python fileencoding=utf-8 sts=4 sw=4 et:
++
++# Copyright 2021 Florian Bruhin (The Compiler) <mail@qutebrowser.org>
++#
++# This file is part of qutebrowser.
++#
++# qutebrowser is free software: you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation, either version 3 of the License, or
++# (at your option) any later version.
++#
++# qutebrowser is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with qutebrowser.  If not, see <https://www.gnu.org/licenses/>.
++
++import io
++import struct
++
++import pytest
++import hypothesis
++from hypothesis import strategies as hst
++
++from qutebrowser.misc import elf
++from qutebrowser.utils import utils
++
++
++@pytest.mark.parametrize('fmt, expected', [
++    (elf.Ident._FORMAT, 0x10),
++    (elf.Header._FORMATS[elf.Bitness.x64], 0x30),
++    (elf.Header._FORMATS[elf.Bitness.x32], 0x24),
++    (elf.SectionHeader._FORMATS[elf.Bitness.x64], 0x40),
++    (elf.SectionHeader._FORMATS[elf.Bitness.x32], 0x28),
++])
++def test_format_sizes(fmt, expected):
++    """Ensure the struct format sizes match the ELF spec."""
++    assert struct.calcsize(fmt) == expected
++
++
++@pytest.mark.skipif(not utils.is_linux, reason="Only works on Linux")
++def test_result(qapp, caplog):
++    """Test parsing the QtWebEngineCore library on this system."""
++    pytest.importorskip('PyQt5.QtWebEngineWidgets')
++
++    versions = elf.parse_webenginecore()
++    if versions is None:
++        pytest.skip("No QtWebEngineCore library found")
++
++    assert versions.webengine
++    assert versions.chromium
++
++
++@pytest.mark.parametrize('data, expected', [
++    (b'\x00QtWebEngine/5.15.2 Chrome/83.0.4103.122\x00',
++     elf.Versions(webengine='5.15.2', chromium='83.0.4103.122')),
++    (b'\x00QtWebEngine/5.14.0\x00\x00Chrome/77.0.3865.98\x00',
++     elf.Versions(webengine='5.14.0', chromium='77.0.3865.98')),
++])
++def test_find_versions(data, expected):
++    assert elf._find_versions(data) == expected
++
++
++@pytest.mark.parametrize('data', [
++    b'',
++    b'QtWebEngine/5.15.2',
++    b'Chrome/83.0.4103.122',
++])
++def test_find_versions_invalid(data):
++    with pytest.raises(elf.ParseError):
++        elf._find_versions(data)
++
++
++def test_invalid_magic():
++    with pytest.raises(elf.ParseError, match='Invalid magic'):
++        elf.get_rodata_header(io.BytesIO(b'\x7fELG' + b'\x02\x01' + b'\x00' * 100))
++
++
++def test_big_endian():
++    with pytest.raises(elf.ParseError, match='Big endian is unsupported'):
++        elf.get_rodata_header(io.BytesIO(b'\x7fELF' + b'\x02\x02' + b'\x00' * 100))
++
++
++@hypothesis.given(data=hst.binary())
++def test_hypothesis(data):
++    """Fuzz the ELF parser: only ParseError should ever be raised."""
++    fobj = io.BytesIO(data)
++    try:
++        elf.get_rodata_header(fobj)
++    except elf.ParseError:
++        pass
+diff --git a/tests/unit/utils/test_version.py b/tests/unit/utils/test_version.py
+index 9a8e6d075..56bebf7ce 100644
+--- a/tests/unit/utils/test_version.py
++++ b/tests/unit/utils/test_version.py
+@@ -38,9 +38,9 @@ import hypothesis
+ import hypothesis.strategies
+ 
+ import qutebrowser
+-from qutebrowser.config import config
++from qutebrowser.config import config, websettings
+ from qutebrowser.utils import version, usertypes, utils, standarddir
+-from qutebrowser.misc import pastebin, objects
++from qutebrowser.misc import pastebin, objects, elf
+ from qutebrowser.browser import pdfjs
+ 
+ 
+@@ -898,7 +898,65 @@ _QTWE_USER_AGENT = ("Mozilla/5.0 (X11; Linux x86_64) "
+                     "QtWebEngine/5.14.0 Chrome/{} Safari/537.36")
+ 
+ 
+-class TestChromiumVersion:
++class TestWebEngineVersions:
++
++    @pytest.mark.parametrize('versions, expected', [
++        (
++            version.WebEngineVersions(
++                webengine=utils.VersionNumber(5, 15, 2),
++                chromium='83.0.4103.122',
++                source='faked'),
++            'QtWebEngine 5.15.2, based on Chromium 83.0.4103.122 (from faked)',
++        ), (
++            version.WebEngineVersions(
++                webengine=utils.VersionNumber(5, 15, 2),
++                chromium=None,
++                source='faked'),
++            'QtWebEngine 5.15.2, based on Chromium unknown (from faked)',
++        ), (
++            version.WebEngineVersions.unknown('no-source'),
++            'QtWebEngine unknown, based on Chromium unknown '
++            '(from unknown:no-source)',
++        ),
++    ])
++    def test_str(self, versions, expected):
++        assert str(versions) == expected
++
++    def test_from_ua(self):
++        ua = websettings.UserAgent(
++            os_info='X11; Linux x86_64',
++            webkit_version='537.36',
++            upstream_browser_key='Chrome',
++            upstream_browser_version='83.0.4103.122',
++            qt_key='QtWebEngine',
++            qt_version='5.15.2',
++        )
++        versions = version.WebEngineVersions.from_ua(ua)
++        assert versions.webengine == utils.VersionNumber(5, 15, 2)
++        assert versions.chromium == '83.0.4103.122'
++        assert versions.source == 'ua'
++
++    def test_from_elf(self):
++        versions = version.WebEngineVersions.from_elf(
++            elf.Versions(webengine='5.15.2', chromium='83.0.4103.122'))
++        assert versions.webengine == utils.VersionNumber(5, 15, 2)
++        assert versions.chromium == '83.0.4103.122'
++        assert versions.source == 'elf'
++
++    def test_from_pyqt(self):
++        versions = version.WebEngineVersions.from_pyqt('5.15.2')
++        assert versions.webengine == utils.VersionNumber(5, 15, 2)
++        assert versions.chromium is None
++        assert versions.source == 'pyqt'
++
++    def test_unknown(self):
++        versions = version.WebEngineVersions.unknown('avoid-init')
++        assert versions.webengine is None
++        assert versions.chromium is None
++        assert versions.source == 'unknown:avoid-init'
++
++
++class TestQtWebEngineVersions:
+ 
+     @pytest.fixture(autouse=True)
+     def clear_parsed_ua(self, monkeypatch):
+@@ -913,11 +971,10 @@ class TestChromiumVersion:
+         version.webenginesettings._init_user_agent_str(
+             _QTWE_USER_AGENT.format(ver))
+ 
+-        assert version._chromium_version() == ver
+-
+-    def test_no_webengine(self, monkeypatch):
+-        monkeypatch.setattr(version, 'webenginesettings', None)
+-        assert version._chromium_version() == 'unavailable'
++        versions = version.qtwebengine_versions()
++        assert versions.chromium == ver
++        assert versions.webengine == utils.parse_version('5.14.0')
++        assert versions.source == 'ua'
+ 
+     def test_prefers_saved_user_agent(self, monkeypatch):
+         pytest.importorskip('PyQt5.QtWebEngineWidgets')
+@@ -930,17 +987,48 @@ class TestChromiumVersion:
+         monkeypatch.setattr(version.webenginesettings, 'QWebEngineProfile',
+                             FakeProfile())
+ 
+-        version._chromium_version()
++        version.qtwebengine_versions()
+ 
+-    def test_unpatched(self, qapp, cache_tmpdir, data_tmpdir, config_stub):
+-        pytest.importorskip('PyQt5.QtWebEngineWidgets')
+-        unexpected = ['', 'unknown', 'unavailable', 'avoided']
+-        assert version._chromium_version() not in unexpected
++    def test_no_source(self, monkeypatch):
++        monkeypatch.setattr(version, 'webenginesettings', None)
++        monkeypatch.setattr(version.elf, 'parse_webenginecore', lambda: None)
++        monkeypatch.setattr(version, 'PYQT_WEBENGINE_VERSION_STR', None)
++
++        versions = version.qtwebengine_versions()
++        assert versions == version.WebEngineVersions.unknown('no-source')
+ 
+     def test_avoided(self, monkeypatch):
++        monkeypatch.setattr(version, 'webenginesettings', None)
++        monkeypatch.setattr(version.elf, 'parse_webenginecore', lambda: None)
++        monkeypatch.setattr(version, 'PYQT_WEBENGINE_VERSION_STR', None)
++
++        versions = version.qtwebengine_versions(avoid_init=True)
++        assert versions == version.WebEngineVersions.unknown('avoid-init')
++
++    def test_elf_fallback(self, monkeypatch):
++        monkeypatch.setattr(version, 'webenginesettings', None)
++        monkeypatch.setattr(
++            version.elf, 'parse_webenginecore',
++            lambda: elf.Versions(webengine='5.15.2', chromium='83.0.4103.122'))
++
++        versions = version.qtwebengine_versions(avoid_init=True)
++        assert versions.source == 'elf'
++        assert versions.chromium == '83.0.4103.122'
++
++    def test_pyqt_fallback(self, monkeypatch):
++        monkeypatch.setattr(version, 'webenginesettings', None)
++        monkeypatch.setattr(version.elf, 'parse_webenginecore', lambda: None)
++        monkeypatch.setattr(version, 'PYQT_WEBENGINE_VERSION_STR', '5.15.2')
++
++        versions = version.qtwebengine_versions(avoid_init=True)
++        assert versions.source == 'pyqt'
++        assert versions.webengine == utils.parse_version('5.15.2')
++
++    def test_unpatched(self, qapp, cache_tmpdir, data_tmpdir, config_stub):
+         pytest.importorskip('PyQt5.QtWebEngineWidgets')
+-        monkeypatch.setattr(objects, 'debug_flags', ['avoid-chromium-init'])
+-        assert version._chromium_version() == 'avoided'
++        versions = version.qtwebengine_versions()
++        assert versions.webengine is not None
++        assert versions.chromium is not None
+ 
+ 
+ @dataclasses.dataclass
+@@ -1016,7 +1104,11 @@ def test_version_info(params, stubs, monkeypatch, config_stub):
+ 
+     ua = _QTWE_USER_AGENT.format('CHROMIUMVERSION')
+     if version.webenginesettings is None:
+-        patches['_chromium_version'] = lambda: 'CHROMIUMVERSION'
++        patches['qtwebengine_versions'] = (
++            lambda avoid_init=False: version.WebEngineVersions(
++                webengine=utils.parse_version('5.14.0'),
++                chromium='CHROMIUMVERSION',
++                source='ua'))
+     else:
+         version.webenginesettings._init_user_agent_str(ua)
+ 
+@@ -1034,7 +1126,8 @@ def test_version_info(params, stubs, monkeypatch, config_stub):
+     else:
+         monkeypatch.delattr(version, 'qtutils.qWebKitVersion', raising=False)
+         patches['objects.backend'] = usertypes.Backend.QtWebEngine
+-        substitutions['backend'] = 'QtWebEngine (Chromium CHROMIUMVERSION)'
++        substitutions['backend'] = ('QtWebEngine 5.14, based on Chromium '
++                                    'CHROMIUMVERSION (from ua)')
+ 
+     if params.known_distribution:
+         patches['distribution'] = lambda: version.DistributionInfo(
