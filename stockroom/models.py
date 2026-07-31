@@ -11,7 +11,7 @@ the store can serialise state to JSON without any extra machinery.  The
 dict shape is exactly what ends up on disk, so keep the keys stable.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # Order lifecycle: an order starts out pending, then is either received
 # (goods arrived and were added to stock) or cancelled.
@@ -21,6 +21,11 @@ STATUS_CANCELLED = "cancelled"
 
 # Shelf area an item lives in.  Items created without one land here.
 DEFAULT_CATEGORY = "uncategorized"
+
+# Room the stock physically sits in.  Stock that arrives without a
+# warehouse named - and all stock in state files written before we rented
+# the second room - lives here.
+DEFAULT_WAREHOUSE = "main"
 
 
 def normalize_sku(sku: str) -> str:
@@ -49,16 +54,24 @@ def record_actor(record, actor: str | None) -> None:
 class Item:
     """A single stocked item.
 
+    Stock is tracked per warehouse in ``quantities``; that mapping is the
+    source of truth and ``qty`` is the total across all of them, kept up
+    to date by the methods below.  Everything that thinks in totals
+    (reports, CSV export) can go on reading ``qty``.
+
     Attributes:
         sku: the stock keeping unit, our unique identifier for the item.
         name: human readable description.
-        qty: number of units currently on hand.
+        qty: number of units currently on hand, across all warehouses.
+            Passed to the constructor as the starting stock, which lands
+            in ``DEFAULT_WAREHOUSE``.
         unit_price: what we pay per unit, in dollars.
         supplier_id: id of the Supplier we buy this from, or None for
             items we do not reorder.
         category: shelf area the item belongs to.
         last_actor: name of whoever last changed this item, or None if
             no change has been made with an actor named.
+        quantities: units on hand per warehouse name.
     """
 
     sku: str
@@ -68,13 +81,43 @@ class Item:
     supplier_id: str | None = None
     category: str = DEFAULT_CATEGORY
     last_actor: str | None = None
+    quantities: dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Seed the breakdown, then make ``qty`` agree with it.
+
+        An item built without one - ``Item(qty=5)``, or a state file
+        from before warehouses existed - starts with all its stock in
+        the default warehouse.
+        """
+        if not self.quantities:
+            self.quantities = {DEFAULT_WAREHOUSE: self.qty}
+        self.qty = sum(self.quantities.values())
+
+    def qty_in(self, warehouse: str) -> int:
+        """Units on hand in one warehouse (0 if it never held this item)."""
+        return self.quantities.get(warehouse, 0)
+
+    def adjust(self, qty: int, warehouse: str = DEFAULT_WAREHOUSE) -> None:
+        """Add ``qty`` units to one warehouse (negative to take them out)."""
+        self.quantities[warehouse] = self.qty_in(warehouse) + qty
+        self.qty = sum(self.quantities.values())
+
+    def set_stock(self, qty: int, warehouse: str = DEFAULT_WAREHOUSE) -> None:
+        """Replace all stock of this item with ``qty`` units in one warehouse.
+
+        A CSV row carries one total and no idea of where the goods sit,
+        so importing one puts the whole count in the default warehouse.
+        """
+        self.quantities = {warehouse: qty}
+        self.qty = qty
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this item."""
         return {
             "sku": self.sku,
             "name": self.name,
-            "qty": self.qty,
+            "qty": dict(self.quantities),
             "unit_price": self.unit_price,
             "supplier_id": self.supplier_id,
             "category": self.category,
@@ -83,15 +126,23 @@ class Item:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Item":
-        """Build an Item from a dict previously produced by to_dict."""
+        """Build an Item from a dict previously produced by to_dict.
+
+        ``qty`` is a per-warehouse mapping in the current layout and a
+        plain total in files written before warehouses existed; a total
+        is read as that many units in the default warehouse.
+        """
+        stored_qty = data.get("qty", 0)
+        quantities = dict(stored_qty) if isinstance(stored_qty, dict) else {}
         return cls(
             sku=data["sku"],
             name=data["name"],
-            qty=data.get("qty", 0),
+            qty=0 if quantities else stored_qty,
             unit_price=data.get("unit_price", 0.0),
             supplier_id=data.get("supplier_id"),
             category=data.get("category") or DEFAULT_CATEGORY,
             last_actor=data.get("last_actor"),
+            quantities=quantities,
         )
 
 

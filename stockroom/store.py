@@ -4,15 +4,17 @@ The whole application state lives in one JSON file, stamped with the
 schema version it was written by::
 
     {
-        "version":   2,
+        "version":   3,
         "items":     {sku: {...}, ...},
         "suppliers": {supplier_id: {...}, ...},
         "orders":    [{...}, ...]
     }
 
-Files written before versioning existed have no ``"version"`` key; they
-are version 1 and still load, and are rewritten with a version the next
-time state is saved.
+Version 3 broke each item's ``qty`` down per warehouse; version 2 and
+the original unversioned layout (version 1, no ``"version"`` key) store
+it as one total.  Both still load - their stock lands in the default
+warehouse - and are rewritten in the current layout the next time state
+is saved.
 
 ``Store`` loads that file into dataclasses, lets callers mutate the state
 through simple methods, and writes it back out with ``save()``.  All the
@@ -28,6 +30,7 @@ import os
 
 from .models import (
     DEFAULT_CATEGORY,
+    DEFAULT_WAREHOUSE,
     Item,
     Order,
     STATUS_CANCELLED,
@@ -40,7 +43,7 @@ from .models import (
 
 #: Schema version stamped into every state file we write.  Version 1 is
 #: the original unversioned layout, which carries no ``"version"`` key.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class Store:
@@ -68,8 +71,9 @@ class Store:
 
         A missing file just means a fresh, empty store.  A file that is
         not valid JSON raises ``json.JSONDecodeError`` for the caller to
-        deal with.  A missing ``"version"`` key means the original
-        (version 1) layout, which is read exactly the same way.
+        deal with.  Older layouts (version 2, and version 1 - which
+        carries no ``"version"`` key) are read the same way; the item
+        records themselves know how to read an older quantity.
         """
         if not os.path.exists(self.path):
             return
@@ -143,26 +147,30 @@ class Store:
         """All items, sorted by SKU for stable output."""
         return [self.items[sku] for sku in sorted(self.items)]
 
-    def receive(self, sku: str, qty: int, actor: str | None = None) -> Item:
-        """Add ``qty`` units of an item to stock (goods arrived)."""
+    def receive(self, sku: str, qty: int, warehouse: str = DEFAULT_WAREHOUSE,
+                actor: str | None = None) -> Item:
+        """Add ``qty`` units of an item to one warehouse (goods arrived)."""
         item = self.get_item(sku)
-        item.qty += qty
+        item.adjust(qty, warehouse)
         record_actor(item, actor)
         return item
 
-    def ship(self, sku: str, qty: int, actor: str | None = None) -> Item:
-        """Remove ``qty`` units of an item from stock (goods sent out).
+    def ship(self, sku: str, qty: int, warehouse: str = DEFAULT_WAREHOUSE,
+             actor: str | None = None) -> Item:
+        """Remove ``qty`` units from one warehouse (goods sent out).
 
-        The shelf cannot go negative: shipping more than we have on hand
-        raises ``ValueError`` and leaves the item untouched.  Shipping
+        The shelf cannot go negative: shipping more than that warehouse
+        holds raises ``ValueError`` and leaves the item untouched - what
+        sits in the other room is no help loading this van.  Shipping
         exactly the on-hand quantity is fine.
         """
         item = self.get_item(sku)
-        if qty > item.qty:
+        on_hand = item.qty_in(warehouse)
+        if qty > on_hand:
             raise ValueError(
-                f"cannot ship {qty} x {sku}: only {item.qty} on hand"
+                f"cannot ship {qty} x {sku}: only {on_hand} on hand"
             )
-        item.qty -= qty
+        item.adjust(-qty, warehouse)
         record_actor(item, actor)
         return item
 
@@ -225,15 +233,16 @@ class Store:
 
         Only a pending order can be received; receiving an already
         received or cancelled one raises ``ValueError`` and adds nothing
-        to stock.  Both the order and the restocked item record the
-        actor, since both change.
+        to stock.  Deliveries are booked into the default warehouse.
+        Both the order and the restocked item record the actor, since
+        both change.
         """
         order = self.get_order(order_id)
         self._require_pending(order, "receive")
         order.status = STATUS_RECEIVED
         record_actor(order, actor)
         item = self.get_item(order.sku)
-        item.qty += order.qty
+        item.adjust(order.qty)
         record_actor(item, actor)
         return order
 

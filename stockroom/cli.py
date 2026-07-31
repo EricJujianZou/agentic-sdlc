@@ -17,7 +17,7 @@ import os
 import sys
 
 from . import __version__, csv_io, reports
-from .models import DEFAULT_CATEGORY
+from .models import DEFAULT_CATEGORY, DEFAULT_WAREHOUSE
 from .store import Store
 
 
@@ -56,7 +56,8 @@ def cmd_add_supplier(store: Store, args) -> int:
 
 def cmd_receive(store: Store, args) -> int:
     """Handle ``receive``: goods arrived outside of an order."""
-    item = store.receive(args.sku, args.qty, actor=args.actor)
+    item = store.receive(args.sku, args.qty, warehouse=args.warehouse,
+                         actor=args.actor)
     store.save()
     print(f"received {args.qty} x {item.sku}, now {item.qty} on hand")
     return 0
@@ -64,7 +65,8 @@ def cmd_receive(store: Store, args) -> int:
 
 def cmd_ship(store: Store, args) -> int:
     """Handle ``ship``: send units out of the stockroom."""
-    item = store.ship(args.sku, args.qty, actor=args.actor)
+    item = store.ship(args.sku, args.qty, warehouse=args.warehouse,
+                      actor=args.actor)
     store.save()
     print(f"shipped {args.qty} x {item.sku}, now {item.qty} on hand")
     return 0
@@ -223,6 +225,7 @@ examples:
   stockroom --data ./data add-supplier acme "Acme Supply" orders@acme.example
   stockroom --data ./data add-item WID-1 "Widget" --qty 10 --price 19.99 --supplier acme
   stockroom --data ./data ship WID-1 3
+  stockroom --data ./data receive WID-1 5 --warehouse east
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01
   stockroom --data ./data receive-order 1
   stockroom --data ./data report stock
@@ -237,6 +240,13 @@ def _add_actor(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--actor", default=None,
                         help="who is running this, recorded on the records "
                              "it changes")
+
+
+def _add_warehouse(parser: argparse.ArgumentParser) -> None:
+    """Attach the optional ``--warehouse`` flag to a stock movement."""
+    parser.add_argument("--warehouse", default=DEFAULT_WAREHOUSE,
+                        help=f"room the stock moves in or out of "
+                             f"(default: {DEFAULT_WAREHOUSE})")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -275,12 +285,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("receive", help="add units of an item to stock")
     p.add_argument("sku")
     p.add_argument("qty", type=int)
+    _add_warehouse(p)
     _add_actor(p)
     p.set_defaults(func=cmd_receive)
 
     p = sub.add_parser("ship", help="remove units of an item from stock")
     p.add_argument("sku")
     p.add_argument("qty", type=int)
+    _add_warehouse(p)
     _add_actor(p)
     p.set_defaults(func=cmd_ship)
 

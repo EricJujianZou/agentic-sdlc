@@ -7,8 +7,10 @@ The CSV format is one row per item with a header::
 Export always writes that header.  Import also accepts the older layout
 without a ``category`` column - those rows get ``DEFAULT_CATEGORY``.
 Import merges into the store (existing SKUs are updated in place, new
-SKUs are added).  Suppliers named in the file are not created - the
-supplier_id column is stored as-is, and an empty cell means no supplier.
+SKUs are added).  A row carries one total with no warehouse, so an
+imported quantity is stocked in the default warehouse.  Suppliers named
+in the file are not created - the supplier_id column is stored as-is,
+and an empty cell means no supplier.
 
 This is the format our suppliers exchange stock lists in, so the import
 side has to accept files we did not write ourselves.
@@ -74,7 +76,7 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
                 # Known SKU: refresh the row in place.
                 item = store.items[sku]
                 item.name = row["name"]
-                item.qty = qty
+                item.set_stock(qty)
                 item.unit_price = unit_price
                 item.supplier_id = supplier_id
                 item.category = category
