@@ -496,11 +496,22 @@ def cmd_batch(store: Store, args) -> int:
 
     Nothing is saved until every row has gone through, so a file that
     fails halfway leaves the data exactly as the command found it and
-    says which row to fix.
+    says which row to fix.  ``--dry-run`` reads the sheet out instead of
+    working it: the same checks, in the same order, but no file in the
+    data directory is written - not even rewritten with what it already
+    held - so mtimes stay put and the real run afterwards behaves as if
+    the preview had never happened.
     """
     if not os.path.exists(args.path):
         raise ValueError(f"no such file: {args.path}")
-    count = store.apply_batch(csv_io.read_batch(args.path), actor=args.actor)
+    rows = csv_io.read_batch(args.path)
+    if args.dry_run:
+        lines = store.plan_batch(rows)
+        for line in lines:
+            print(f"would {line}")
+        print(f"dry-run: {len(lines)} operations, nothing changed")
+        return 0
+    count = store.apply_batch(rows, actor=args.actor)
     store.save()
     print(f"applied {count} operations")
     return 0
@@ -854,6 +865,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("batch",
                        help="apply a CSV of stock movements, all or none")
     p.add_argument("path")
+    p.add_argument("--dry-run", action="store_true", dest="dry_run",
+                   help="print what the sheet would do, changing nothing")
     _add_actor(p)
     p.set_defaults(func=cmd_batch)
 

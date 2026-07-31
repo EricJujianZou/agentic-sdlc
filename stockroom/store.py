@@ -185,6 +185,35 @@ def _batch_qty(raw: str | None) -> int:
     return qty
 
 
+def _parse_batch_row(row: dict) -> tuple[str, str, int, str, str]:
+    """A batch row read out as ``op, sku, qty, warehouse, destination``.
+
+    Every complaint a row can draw before the stock itself is looked at
+    lives here, so describing a row and carrying it out agree on what it
+    says.  ``destination`` is empty for anything but a transfer.
+    """
+    op = (row.get("op") or "").strip()
+    if op not in BATCH_OPS:
+        raise ValueError(f"unknown op {op!r}")
+    sku = (row.get("sku") or "").strip()
+    qty = _batch_qty(row.get("qty"))
+    warehouse = (row.get("warehouse") or "").strip() or DEFAULT_WAREHOUSE
+    destination = (row.get("to_warehouse") or "").strip()
+    if op == "transfer" and not destination:
+        raise ValueError("transfer needs a to_warehouse")
+    return op, sku, qty, warehouse, destination
+
+
+def _describe_batch_row(row: dict) -> str:
+    """One line saying what a batch row does, in the operator's words."""
+    op, sku, qty, warehouse, destination = _parse_batch_row(row)
+    if op == "receive":
+        return f"receive {qty} x {sku} into {warehouse}"
+    if op == "ship":
+        return f"ship {qty} x {sku} from {warehouse}"
+    return f"transfer {qty} x {sku} from {warehouse} to {destination}"
+
+
 class Store:
     """Holds the full application state and knows how to load/save it.
 
@@ -692,37 +721,63 @@ class Store:
         Returns:
             The number of rows applied.
         """
-        # The items are mutated in place, so they need copying in full;
-        # the two logs are only ever appended to, so their own order is
-        # the whole of what has to be put back.
-        saved = (copy.deepcopy(self.items), list(self.shipments),
-                 list(self.events))
+        saved = self._batch_snapshot()
         for number, row in enumerate(rows, 1):
             try:
                 self._apply_batch_row(row, actor)
             except ValueError as exc:
-                self.items, self.shipments, self.events = saved
+                self._batch_restore(saved)
                 raise ValueError(
                     f"batch failed at row {number}: {exc}"
                 ) from exc
         return len(rows)
 
+    def plan_batch(self, rows: list[dict]) -> list[str]:
+        """Describe what :meth:`apply_batch` would do, changing nothing.
+
+        The rows are validated exactly as a real run validates them -
+        they are applied to the live objects and then rolled back, every
+        time - so the first row that would not go through raises the
+        same ``ValueError``, naming the same row number and reason.  A
+        successful call returns one plain-language line per row, in the
+        file's order, and leaves the store as it found it, which is what
+        makes a dry run safe to follow with the real thing.
+        """
+        saved = self._batch_snapshot()
+        try:
+            lines = []
+            for number, row in enumerate(rows, 1):
+                try:
+                    self._apply_batch_row(row, None)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"batch failed at row {number}: {exc}"
+                    ) from exc
+                lines.append(_describe_batch_row(row))
+            return lines
+        finally:
+            self._batch_restore(saved)
+
+    def _batch_snapshot(self) -> tuple:
+        """Everything a batch can change, kept for putting back."""
+        # The items are mutated in place, so they need copying in full;
+        # the two logs are only ever appended to, so their own order is
+        # the whole of what has to be put back.
+        return (copy.deepcopy(self.items), list(self.shipments),
+                list(self.events), self.revision)
+
+    def _batch_restore(self, saved: tuple) -> None:
+        """Undo a batch, back to a :meth:`_batch_snapshot`."""
+        (self.items, self.shipments, self.events, self.revision) = saved
+
     def _apply_batch_row(self, row: dict, actor: str | None) -> None:
         """Carry out one batch row, or raise ValueError saying why not."""
-        op = (row.get("op") or "").strip()
-        if op not in BATCH_OPS:
-            raise ValueError(f"unknown op {op!r}")
-        sku = (row.get("sku") or "").strip()
-        qty = _batch_qty(row.get("qty"))
-        warehouse = (row.get("warehouse") or "").strip() or DEFAULT_WAREHOUSE
+        op, sku, qty, warehouse, destination = _parse_batch_row(row)
         if op == "receive":
             self.receive(sku, qty, warehouse=warehouse, actor=actor)
         elif op == "ship":
             self.ship(sku, qty, warehouse=warehouse, actor=actor)
         else:
-            destination = (row.get("to_warehouse") or "").strip()
-            if not destination:
-                raise ValueError("transfer needs a to_warehouse")
             self.transfer(sku, qty, warehouse, destination, actor=actor)
 
     # ------------------------------------------------------------------
