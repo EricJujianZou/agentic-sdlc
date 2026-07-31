@@ -52,5 +52,8 @@
   `Item.unit_price_cents` is the truth and `unit_price` a dollars property over
   it; schema v4 stores `unit_price_cents` + history `old_cents`/`new_cents`
   (v1-v3 float keys still read); `stock_report` sums in cents. API/CLI same.
+- T24 — `stockroom.money.format_money(amount)` -> `"$X.XX"` (`int` = cents,
+  `float` = dollars, negatives `-$X.XX`); every money figure the CLI prints
+  (stock price/value/total, price-changes, `set-price`) goes through it.
 
-## current — none (T23 done)
+## current — none (T24 done)

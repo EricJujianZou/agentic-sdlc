@@ -18,6 +18,7 @@ import sys
 
 from . import __version__, csv_io, reports
 from .models import DEFAULT_CATEGORY, DEFAULT_WAREHOUSE, normalize_sku
+from .money import format_money
 from .store import Store
 
 
@@ -85,7 +86,7 @@ def cmd_set_price(store: Store, args) -> int:
     item = store.set_price(args.sku, args.price, date=args.date,
                            actor=args.actor)
     store.save()
-    print(f"{item.sku} now {item.unit_price:.2f} per unit")
+    print(f"{item.sku} now {format_money(item.unit_price)} per unit")
     return 0
 
 
@@ -160,7 +161,8 @@ def _print_stock_header() -> None:
 def _print_stock_rows(rows: list[dict]) -> None:
     for row in rows:
         print(f"{row['sku']:<12} {row['name']:<24} {row['qty']:>6} "
-              f"{row['unit_price']:>10.2f} {row['value']:>10.2f}")
+              f"{format_money(row['unit_price']):>10} "
+              f"{format_money(row['value']):>10}")
 
 
 def cmd_report_stock(store: Store, args) -> int:
@@ -178,7 +180,7 @@ def cmd_report_stock(store: Store, args) -> int:
     else:
         _print_stock_header()
         _print_stock_rows(report["rows"])
-    print(f"Total value: {report['total_value']:.2f}")
+    print(f"Total value: {format_money(report['total_value'])}")
     return 0
 
 
@@ -252,7 +254,8 @@ def cmd_report_price_changes(store: Store, args) -> int:
         return 0
     for row in rows:
         print(f"{row['date']:<12} {row['sku']:<12} "
-              f"{row['old']:>10.2f} -> {row['new']:>10.2f}")
+              f"{format_money(row['old']):>10} -> "
+              f"{format_money(row['new']):>10}")
     return 0
 
 
