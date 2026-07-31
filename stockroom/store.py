@@ -288,6 +288,29 @@ class Store:
         """All suppliers, sorted by id for stable output."""
         return [self.suppliers[sid] for sid in sorted(self.suppliers)]
 
+    def add_supplier_sku(self, supplier_id: str, sku: str) -> Supplier:
+        """Note that a supplier can supply a SKU.
+
+        The supplier must be one we know about; the SKU need not be an
+        item we stock, since a catalogue is the supplier's list, not
+        ours.  Listing the same SKU twice changes nothing.
+        """
+        supplier = self.get_supplier(supplier_id)
+        sku = normalize_sku(sku)
+        if sku not in supplier.skus:
+            supplier.skus.append(sku)
+        return supplier
+
+    def catalog_skus(self, supplier_id: str) -> list[str]:
+        """The SKUs one supplier's catalogue lists, sorted."""
+        return sorted(self.get_supplier(supplier_id).skus)
+
+    def suppliers_for(self, sku: str) -> list[str]:
+        """Ids of the suppliers whose catalogue lists a SKU, sorted."""
+        sku = normalize_sku(sku)
+        return sorted(sid for sid, supplier in self.suppliers.items()
+                      if sku in supplier.skus)
+
     # ------------------------------------------------------------------
     # orders
     # ------------------------------------------------------------------
@@ -299,17 +322,44 @@ class Store:
         return max(order.id for order in self.orders) + 1
 
     def place_order(self, sku: str, qty: int, date: str,
+                    supplier_id: str | None = None,
                     actor: str | None = None) -> Order:
         """Record a new pending purchase order for an existing item.
 
         ``date`` is stored as given; the CLI defaults it to today when
-        the user does not pass one.
+        the user does not pass one.  The order remembers who it was
+        placed with - ``supplier_id`` when one is named, otherwise
+        whoever ``_order_supplier`` works out.
         """
         item = self.get_item(sku)  # validates the SKU
-        order = Order(id=self.next_order_id(), sku=item.sku, qty=qty, date=date)
+        if supplier_id is not None:
+            self.get_supplier(supplier_id)  # validates the supplier
+        else:
+            supplier_id = self._order_supplier(item)
+        order = Order(id=self.next_order_id(), sku=item.sku, qty=qty, date=date,
+                      supplier_id=supplier_id)
         record_actor(order, actor)
         self.orders.append(order)
         return order
+
+    def _order_supplier(self, item: Item) -> str | None:
+        """Work out who to order an item from when nobody said.
+
+        One catalogue listing the SKU settles it.  Several is a real
+        choice - which one gets the business is not ours to guess - so
+        it raises ``ValueError`` and the caller has to name one.  With
+        no catalogue listing it we fall back to the item's own supplier,
+        which may be nobody.
+        """
+        candidates = self.suppliers_for(item.sku)
+        if len(candidates) == 1:
+            return candidates[0]
+        if candidates:
+            raise ValueError(
+                f"several suppliers list {item.sku} "
+                f"({', '.join(candidates)}): pass --supplier"
+            )
+        return item.supplier_id
 
     def get_order(self, order_id: int) -> Order:
         """Look up an order by id or raise ValueError."""

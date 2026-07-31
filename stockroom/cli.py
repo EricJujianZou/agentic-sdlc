@@ -17,7 +17,7 @@ import os
 import sys
 
 from . import __version__, csv_io, reports
-from .models import DEFAULT_CATEGORY, DEFAULT_WAREHOUSE
+from .models import DEFAULT_CATEGORY, DEFAULT_WAREHOUSE, normalize_sku
 from .store import Store
 
 
@@ -87,9 +87,26 @@ def cmd_place_order(store: Store, args) -> int:
     date = args.date
     if date is None:
         date = datetime.date.today().isoformat()
-    order = store.place_order(args.sku, args.qty, date, actor=args.actor)
+    order = store.place_order(args.sku, args.qty, date,
+                              supplier_id=args.supplier, actor=args.actor)
     store.save()
-    print(f"placed order {order.id}: {order.qty} x {order.sku} on {order.date}")
+    print(f"placed order {order.id}: {order.qty} x {order.sku} on {order.date}"
+          f" from {order.supplier_id or 'no supplier'}")
+    return 0
+
+
+def cmd_catalog_add(store: Store, args) -> int:
+    """Handle ``catalog-add``: note that a supplier can supply a SKU."""
+    supplier = store.add_supplier_sku(args.supplier, args.sku)
+    store.save()
+    print(f"{supplier.id} supplies {normalize_sku(args.sku)}")
+    return 0
+
+
+def cmd_catalog_list(store: Store, args) -> int:
+    """Handle ``catalog-list``: print one supplier's catalogue."""
+    for sku in store.catalog_skus(args.supplier):
+        print(sku)
     return 0
 
 
@@ -274,7 +291,9 @@ examples:
   stockroom --data ./data ship WID-1 3
   stockroom --data ./data receive WID-1 5 --warehouse east
   stockroom --data ./data transfer WID-1 2 main east
-  stockroom --data ./data place-order WID-1 20 --date 2026-07-01
+  stockroom --data ./data catalog-add acme WID-1
+  stockroom --data ./data catalog-list acme
+  stockroom --data ./data place-order WID-1 20 --date 2026-07-01 --supplier acme
   stockroom --data ./data ship-order 1 --qty 5
   stockroom --data ./data receive-order 1
   stockroom --data ./data report stock
@@ -361,8 +380,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("qty", type=int)
     p.add_argument("--date", default=None,
                    help="order date (default: today)")
+    p.add_argument("--supplier", default=None,
+                   help="who to order from (default: whoever's catalogue "
+                        "lists the SKU, else the item's own supplier)")
     _add_actor(p)
     p.set_defaults(func=cmd_place_order)
+
+    p = sub.add_parser("catalog-add",
+                       help="record that a supplier can supply a SKU")
+    p.add_argument("supplier")
+    p.add_argument("sku")
+    p.set_defaults(func=cmd_catalog_add)
+
+    p = sub.add_parser("catalog-list", help="print a supplier's catalogue")
+    p.add_argument("supplier")
+    p.set_defaults(func=cmd_catalog_list)
 
     p = sub.add_parser("ship-order",
                        help="stock part of an order the supplier delivered")

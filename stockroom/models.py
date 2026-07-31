@@ -156,12 +156,15 @@ class Supplier:
         email: where purchase orders get sent.
         lead_time_days: whole days between placing an order and the goods
             turning up.
+        skus: the supplier's catalogue - the SKUs they told us they can
+            supply, in canonical spelling.
     """
 
     id: str
     name: str
     email: str
     lead_time_days: int = 0
+    skus: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this supplier."""
@@ -170,16 +173,22 @@ class Supplier:
             "name": self.name,
             "email": self.email,
             "lead_time_days": self.lead_time_days,
+            "skus": list(self.skus),
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Supplier":
-        """Build a Supplier from a dict previously produced by to_dict."""
+        """Build a Supplier from a dict previously produced by to_dict.
+
+        Suppliers written before catalogues existed have not sent us one
+        yet, so theirs is empty.
+        """
         return cls(
             id=data["id"],
             name=data["name"],
             email=data.get("email", ""),
             lead_time_days=data.get("lead_time_days", 0),
+            skus=list(data.get("skus", [])),
         )
 
 
@@ -194,6 +203,8 @@ class Order:
         date: the date the order was placed, as a string (whatever the
             user typed, normally YYYY-MM-DD).
         status: one of "pending", "received" or "cancelled".
+        supplier_id: id of the Supplier the order was placed with, or
+            None when we could not work out who supplies the item.
         last_actor: name of whoever last changed this order, or None if
             no change has been made with an actor named.
         shipped_qty: units of the order delivered so far.  Suppliers
@@ -207,6 +218,7 @@ class Order:
     qty: int
     date: str
     status: str = STATUS_PENDING
+    supplier_id: str | None = None
     last_actor: str | None = None
     shipped_qty: int = 0
 
@@ -223,6 +235,7 @@ class Order:
             "qty": self.qty,
             "date": self.date,
             "status": self.status,
+            "supplier_id": self.supplier_id,
             "last_actor": self.last_actor,
             "shipped_qty": self.shipped_qty,
         }
@@ -243,6 +256,7 @@ class Order:
             qty=data["qty"],
             date=data["date"],
             status=status,
+            supplier_id=data.get("supplier_id"),
             last_actor=data.get("last_actor"),
             shipped_qty=data.get("shipped_qty", default_shipped),
         )
