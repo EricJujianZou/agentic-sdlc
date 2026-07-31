@@ -1,0 +1,404 @@
+diff --git a/res/css/_components.pcss b/res/css/_components.pcss
+index b6b98aee3e..e4b9c999f0 100644
+--- a/res/css/_components.pcss
++++ b/res/css/_components.pcss
+@@ -28,6 +28,7 @@
+ @import "./components/views/location/_ZoomButtons.pcss";
+ @import "./components/views/messages/_MBeaconBody.pcss";
+ @import "./components/views/messages/shared/_MediaProcessingError.pcss";
++@import "./components/views/settings/devices/_DeviceDetailHeading.pcss";
+ @import "./components/views/settings/devices/_DeviceDetails.pcss";
+ @import "./components/views/settings/devices/_DeviceExpandDetailsButton.pcss";
+ @import "./components/views/settings/devices/_DeviceSecurityCard.pcss";
+diff --git a/res/css/components/views/settings/devices/_DeviceDetailHeading.pcss b/res/css/components/views/settings/devices/_DeviceDetailHeading.pcss
+new file mode 100644
+index 0000000000..df681b5d20
+--- /dev/null
++++ b/res/css/components/views/settings/devices/_DeviceDetailHeading.pcss
+@@ -0,0 +1,37 @@
++/*
++Copyright 2022 The Matrix.org Foundation C.I.C.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++.mx_DeviceDetailHeading {
++    display: flex;
++    flex-direction: column;
++    gap: $spacing-8;
++}
++
++.mx_DeviceDetailHeading_editMessage {
++    font-size: $font-12px;
++    color: $secondary-content;
++}
++
++.mx_DeviceDetailHeading_error {
++    font-size: $font-12px;
++    color: $alert;
++}
++
++.mx_DeviceDetailHeading_editButtons {
++    display: flex;
++    flex-direction: row;
++    gap: $spacing-8;
++}
+diff --git a/src/components/views/settings/devices/CurrentDeviceSection.tsx b/src/components/views/settings/devices/CurrentDeviceSection.tsx
+index e720b47ede..4ba3eade9f 100644
+--- a/src/components/views/settings/devices/CurrentDeviceSection.tsx
++++ b/src/components/views/settings/devices/CurrentDeviceSection.tsx
+@@ -29,6 +29,7 @@ interface Props {
+     device?: DeviceWithVerification;
+     isLoading: boolean;
+     isSigningOut: boolean;
++    saveDeviceName: (deviceId: string, deviceName: string) => Promise<void>;
+     onVerifyCurrentDevice: () => void;
+     onSignOutCurrentDevice: () => void;
+ }
+@@ -37,6 +38,7 @@ const CurrentDeviceSection: React.FC<Props> = ({
+     device,
+     isLoading,
+     isSigningOut,
++    saveDeviceName,
+     onVerifyCurrentDevice,
+     onSignOutCurrentDevice,
+ }) => {
+@@ -46,7 +48,7 @@ const CurrentDeviceSection: React.FC<Props> = ({
+         heading={_t('Current session')}
+         data-testid='current-session-section'
+     >
+-        { isLoading && <Spinner /> }
++        { isLoading && !device && <Spinner /> }
+         { !!device && <>
+             <DeviceTile
+                 device={device}
+@@ -61,6 +63,7 @@ const CurrentDeviceSection: React.FC<Props> = ({
+                 <DeviceDetails
+                     device={device}
+                     isSigningOut={isSigningOut}
++                    saveDeviceName={saveDeviceName}
+                     onSignOutDevice={onSignOutCurrentDevice}
+                 />
+             }
+diff --git a/src/components/views/settings/devices/DeviceDetailHeading.tsx b/src/components/views/settings/devices/DeviceDetailHeading.tsx
+new file mode 100644
+index 0000000000..b2b03a9b80
+--- /dev/null
++++ b/src/components/views/settings/devices/DeviceDetailHeading.tsx
+@@ -0,0 +1,129 @@
++/*
++Copyright 2022 The Matrix.org Foundation C.I.C.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++import React, { useState } from 'react';
++
++import { _t } from '../../../../languageHandler';
++import AccessibleButton from '../../elements/AccessibleButton';
++import Field from '../../elements/Field';
++import Spinner from '../../elements/Spinner';
++import Heading from '../../typography/Heading';
++import { DeviceWithVerification } from './types';
++
++interface Props {
++    device: DeviceWithVerification;
++    saveDeviceName: (deviceId: string, deviceName: string) => Promise<void>;
++}
++
++const MAX_DEVICE_NAME_LENGTH = 100;
++
++export const DeviceDetailHeading: React.FC<Props> = ({ device, saveDeviceName }) => {
++    const [isEditing, setIsEditing] = useState(false);
++    const [isLoading, setIsLoading] = useState(false);
++    const [deviceName, setDeviceName] = useState(device.display_name ?? '');
++    const [error, setError] = useState<string>();
++
++    const onRename = (): void => {
++        setDeviceName(device.display_name ?? '');
++        setError(undefined);
++        setIsEditing(true);
++    };
++
++    const onCancel = (): void => {
++        setIsEditing(false);
++        setError(undefined);
++    };
++
++    const onSave = async (): Promise<void> => {
++        setError(undefined);
++        const previousName = device.display_name ?? '';
++        if (deviceName === previousName) {
++            setIsEditing(false);
++            return;
++        }
++        setIsLoading(true);
++        try {
++            await saveDeviceName(device.device_id, deviceName);
++            setIsLoading(false);
++            setIsEditing(false);
++        } catch (error) {
++            setError(error instanceof Error ? error.message : _t('Failed to set display name'));
++            setIsLoading(false);
++        }
++    };
++
++    if (isEditing) {
++        return <div className='mx_DeviceDetailHeading' data-testid='device-detail-heading'>
++            <form
++                className='mx_DeviceDetailHeading_editForm'
++                onSubmit={(event) => { event.preventDefault(); onSave(); }}
++                data-testid='device-detail-heading-edit-form'
++            >
++                <Field
++                    type='text'
++                    value={deviceName}
++                    onChange={(event) => setDeviceName(event.target.value)}
++                    label={_t('Session name')}
++                    maxLength={MAX_DEVICE_NAME_LENGTH}
++                    disabled={isLoading}
++                    autoComplete='off'
++                    autoFocus
++                    data-testid='device-rename-input'
++                />
++                <div className='mx_DeviceDetailHeading_editMessage'>
++                    { _t('Please be aware that session names are also visible to people you communicate with.') }
++                </div>
++                { error &&
++                    <div className='mx_DeviceDetailHeading_error' data-testid='device-rename-error'>
++                        { error }
++                    </div>
++                }
++                <div className='mx_DeviceDetailHeading_editButtons'>
++                    <AccessibleButton
++                        onClick={onSave}
++                        kind='primary'
++                        disabled={isLoading}
++                        data-testid='device-rename-save-cta'
++                    >
++                        { _t('Save') }
++                        { isLoading && <Spinner w={16} h={16} /> }
++                    </AccessibleButton>
++                    <AccessibleButton
++                        onClick={onCancel}
++                        kind='primary_outline'
++                        disabled={isLoading}
++                        data-testid='device-rename-cancel-cta'
++                    >
++                        { _t('Cancel') }
++                    </AccessibleButton>
++                </div>
++            </form>
++        </div>;
++    }
++
++    return <div className='mx_DeviceDetailHeading' data-testid='device-detail-heading'>
++        <Heading size='h3'>{ device.display_name ?? device.device_id }</Heading>
++        <AccessibleButton
++            kind='link_inline'
++            onClick={onRename}
++            data-testid='device-heading-rename-cta'
++        >
++            { _t('Rename') }
++        </AccessibleButton>
++    </div>;
++};
++
++export default DeviceDetailHeading;
+diff --git a/src/components/views/settings/devices/DeviceDetails.tsx b/src/components/views/settings/devices/DeviceDetails.tsx
+index c773e2cfdb..eb353ee26e 100644
+--- a/src/components/views/settings/devices/DeviceDetails.tsx
++++ b/src/components/views/settings/devices/DeviceDetails.tsx
+@@ -20,13 +20,14 @@ import { formatDate } from '../../../../DateUtils';
+ import { _t } from '../../../../languageHandler';
+ import AccessibleButton from '../../elements/AccessibleButton';
+ import Spinner from '../../elements/Spinner';
+-import Heading from '../../typography/Heading';
++import { DeviceDetailHeading } from './DeviceDetailHeading';
+ import { DeviceVerificationStatusCard } from './DeviceVerificationStatusCard';
+ import { DeviceWithVerification } from './types';
+ 
+ interface Props {
+     device: DeviceWithVerification;
+     isSigningOut: boolean;
++    saveDeviceName: (deviceId: string, deviceName: string) => Promise<void>;
+     onVerifyDevice?: () => void;
+     onSignOutDevice: () => void;
+ }
+@@ -39,6 +40,7 @@ interface MetadataTable {
+ const DeviceDetails: React.FC<Props> = ({
+     device,
+     isSigningOut,
++    saveDeviceName,
+     onVerifyDevice,
+     onSignOutDevice,
+ }) => {
+@@ -61,7 +63,7 @@ const DeviceDetails: React.FC<Props> = ({
+     ];
+     return <div className='mx_DeviceDetails' data-testid={`device-detail-${device.device_id}`}>
+         <section className='mx_DeviceDetails_section'>
+-            <Heading size='h3'>{ device.display_name ?? device.device_id }</Heading>
++            <DeviceDetailHeading device={device} saveDeviceName={saveDeviceName} />
+             <DeviceVerificationStatusCard
+                 device={device}
+                 onVerifyDevice={onVerifyDevice}
+diff --git a/src/components/views/settings/devices/FilteredDeviceList.tsx b/src/components/views/settings/devices/FilteredDeviceList.tsx
+index 74f3f5eebf..7216f38964 100644
+--- a/src/components/views/settings/devices/FilteredDeviceList.tsx
++++ b/src/components/views/settings/devices/FilteredDeviceList.tsx
+@@ -38,6 +38,7 @@ interface Props {
+     expandedDeviceIds: DeviceWithVerification['device_id'][];
+     signingOutDeviceIds: DeviceWithVerification['device_id'][];
+     filter?: DeviceSecurityVariation;
++    saveDeviceName: (deviceId: string, deviceName: string) => Promise<void>;
+     onFilterChange: (filter: DeviceSecurityVariation | undefined) => void;
+     onDeviceExpandToggle: (deviceId: DeviceWithVerification['device_id']) => void;
+     onSignOutDevices: (deviceIds: DeviceWithVerification['device_id'][]) => void;
+@@ -135,6 +136,7 @@ const DeviceListItem: React.FC<{
+     device: DeviceWithVerification;
+     isExpanded: boolean;
+     isSigningOut: boolean;
++    saveDeviceName: (deviceId: string, deviceName: string) => Promise<void>;
+     onDeviceExpandToggle: () => void;
+     onSignOutDevice: () => void;
+     onRequestDeviceVerification?: () => void;
+@@ -142,6 +144,7 @@ const DeviceListItem: React.FC<{
+     device,
+     isExpanded,
+     isSigningOut,
++    saveDeviceName,
+     onDeviceExpandToggle,
+     onSignOutDevice,
+     onRequestDeviceVerification,
+@@ -159,6 +162,7 @@ const DeviceListItem: React.FC<{
+         <DeviceDetails
+             device={device}
+             isSigningOut={isSigningOut}
++            saveDeviceName={saveDeviceName}
+             onVerifyDevice={onRequestDeviceVerification}
+             onSignOutDevice={onSignOutDevice}
+         />
+@@ -175,6 +179,7 @@ export const FilteredDeviceList =
+         filter,
+         expandedDeviceIds,
+         signingOutDeviceIds,
++        saveDeviceName,
+         onFilterChange,
+         onDeviceExpandToggle,
+         onSignOutDevices,
+@@ -232,6 +237,7 @@ export const FilteredDeviceList =
+                     device={device}
+                     isExpanded={expandedDeviceIds.includes(device.device_id)}
+                     isSigningOut={signingOutDeviceIds.includes(device.device_id)}
++                    saveDeviceName={saveDeviceName}
+                     onDeviceExpandToggle={() => onDeviceExpandToggle(device.device_id)}
+                     onSignOutDevice={() => onSignOutDevices([device.device_id])}
+                     onRequestDeviceVerification={
+diff --git a/src/components/views/settings/devices/useOwnDevices.ts b/src/components/views/settings/devices/useOwnDevices.ts
+index b4e3391860..a942d3f674 100644
+--- a/src/components/views/settings/devices/useOwnDevices.ts
++++ b/src/components/views/settings/devices/useOwnDevices.ts
+@@ -22,6 +22,7 @@ import { MatrixError } from "matrix-js-sdk/src/http-api";
+ import { logger } from "matrix-js-sdk/src/logger";
+ 
+ import MatrixClientContext from "../../../../contexts/MatrixClientContext";
++import { _t } from "../../../../languageHandler";
+ import { DevicesDictionary, DeviceWithVerification } from "./types";
+ 
+ const isDeviceVerified = (
+@@ -80,6 +81,7 @@ export type DevicesState = {
+     // not provided when current session cannot request verification
+     requestDeviceVerification?: (deviceId: DeviceWithVerification['device_id']) => Promise<VerificationRequest>;
+     refreshDevices: () => Promise<void>;
++    saveDeviceName: (deviceId: string, deviceName: string) => Promise<void>;
+     error?: OwnDevicesError;
+ };
+ export const useOwnDevices = (): DevicesState => {
+@@ -119,6 +121,19 @@ export const useOwnDevices = (): DevicesState => {
+         refreshDevices();
+     }, [refreshDevices]);
+ 
++    const saveDeviceName = useCallback(
++        async (deviceId: DeviceWithVerification['device_id'], deviceName: string): Promise<void> => {
++            try {
++                await matrixClient.setDeviceDetails(deviceId, { display_name: deviceName });
++                await refreshDevices();
++            } catch (error) {
++                logger.error("Error setting session display name", error);
++                throw new Error(_t("Failed to set display name"));
++            }
++        },
++        [matrixClient, refreshDevices],
++    );
++
+     const isCurrentDeviceVerified = !!devices[currentDeviceId]?.isVerified;
+ 
+     const requestDeviceVerification = isCurrentDeviceVerified && userId
+@@ -135,6 +150,7 @@ export const useOwnDevices = (): DevicesState => {
+         currentDeviceId,
+         requestDeviceVerification,
+         refreshDevices,
++        saveDeviceName,
+         isLoading,
+         error,
+     };
+diff --git a/src/components/views/settings/tabs/user/SessionManagerTab.tsx b/src/components/views/settings/tabs/user/SessionManagerTab.tsx
+index 0b2056b63d..56ae4f7ce9 100644
+--- a/src/components/views/settings/tabs/user/SessionManagerTab.tsx
++++ b/src/components/views/settings/tabs/user/SessionManagerTab.tsx
+@@ -91,6 +91,7 @@ const SessionManagerTab: React.FC = () => {
+         isLoading,
+         requestDeviceVerification,
+         refreshDevices,
++        saveDeviceName,
+     } = useOwnDevices();
+     const [filter, setFilter] = useState<DeviceSecurityVariation>();
+     const [expandedDeviceIds, setExpandedDeviceIds] = useState<DeviceWithVerification['device_id'][]>([]);
+@@ -169,6 +170,7 @@ const SessionManagerTab: React.FC = () => {
+             device={currentDevice}
+             isLoading={isLoading}
+             isSigningOut={signingOutDeviceIds.includes(currentDevice?.device_id)}
++            saveDeviceName={saveDeviceName}
+             onVerifyCurrentDevice={onVerifyCurrentDevice}
+             onSignOutCurrentDevice={onSignOutCurrentDevice}
+         />
+@@ -187,6 +189,7 @@ const SessionManagerTab: React.FC = () => {
+                     filter={filter}
+                     expandedDeviceIds={expandedDeviceIds}
+                     signingOutDeviceIds={signingOutDeviceIds}
++                    saveDeviceName={saveDeviceName}
+                     onFilterChange={setFilter}
+                     onDeviceExpandToggle={onDeviceExpandToggle}
+                     onRequestDeviceVerification={requestDeviceVerification ? onTriggerDeviceVerification : undefined}
+diff --git a/src/i18n/strings/en_EN.json b/src/i18n/strings/en_EN.json
+index ab35c67f36..cb0c9f1a38 100644
+--- a/src/i18n/strings/en_EN.json
++++ b/src/i18n/strings/en_EN.json
+@@ -3543,5 +3543,6 @@
+     "Activate selected button": "Activate selected button",
+     "New line": "New line",
+     "Force complete": "Force complete",
+-    "Search (must be enabled)": "Search (must be enabled)"
++    "Search (must be enabled)": "Search (must be enabled)",
++    "Please be aware that session names are also visible to people you communicate with.": "Please be aware that session names are also visible to people you communicate with."
+ }
