@@ -34,6 +34,12 @@
   --by-category` prints `[category]` headings (flat `report low` and the
   reorder-suggestions block unchanged).
 
+- T07 — strict order lifecycle: pending is the only state you can leave
+  (-> received / cancelled). New `Store._require_pending(order, action)`
+  raises ValueError ("cannot receive order N: it is already received")
+  from `receive_order`/`cancel_order` before any mutation, so a refused
+  move never double-adds stock. CLI unchanged (ValueError -> exit 1).
+
 ## current
 
-(none — T06 done)
+(none — T07 done)

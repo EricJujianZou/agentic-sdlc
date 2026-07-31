@@ -26,6 +26,7 @@ from .models import (
     Item,
     Order,
     STATUS_CANCELLED,
+    STATUS_PENDING,
     STATUS_RECEIVED,
     Supplier,
 )
@@ -194,15 +195,40 @@ class Store:
         raise ValueError(f"unknown order {order_id}")
 
     def receive_order(self, order_id: int) -> Order:
-        """Mark an order received and put its quantity into stock."""
+        """Mark a pending order received and put its quantity into stock.
+
+        Only a pending order can be received; receiving an already
+        received or cancelled one raises ``ValueError`` and adds nothing
+        to stock.
+        """
         order = self.get_order(order_id)
+        self._require_pending(order, "receive")
         order.status = STATUS_RECEIVED
         item = self.get_item(order.sku)
         item.qty += order.qty
         return order
 
     def cancel_order(self, order_id: int) -> Order:
-        """Mark an order cancelled.  Stock is not affected."""
+        """Mark a pending order cancelled.  Stock is not affected.
+
+        Only a pending order can be cancelled; cancelling an already
+        received or cancelled one raises ``ValueError`` and leaves the
+        order as it was.
+        """
         order = self.get_order(order_id)
+        self._require_pending(order, "cancel")
         order.status = STATUS_CANCELLED
         return order
+
+    @staticmethod
+    def _require_pending(order: Order, action: str) -> None:
+        """Guard a lifecycle move: pending is the only state you can leave.
+
+        An order starts pending and may move to received or cancelled;
+        anything else is refused before any state changes.
+        """
+        if order.status != STATUS_PENDING:
+            raise ValueError(
+                f"cannot {action} order {order.id}: it is already "
+                f"{order.status}"
+            )
