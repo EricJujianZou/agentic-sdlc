@@ -19,6 +19,7 @@ import os
 import sys
 
 from . import __version__, csv_io, dates, reports
+from .cache import cached_report
 from .models import DEFAULT_CATEGORY, DEFAULT_WAREHOUSE, normalize_sku
 from .money import format_money
 from .store import Store
@@ -298,8 +299,8 @@ def cmd_report_stock(store: Store, args) -> int:
     """Handle ``report stock``: print the full stock listing, optionally
     grouped under one heading per shelf area or narrowed to one
     warehouse."""
-    report = reports.stock_report(store, by_category=args.by_category,
-                                  warehouse=args.warehouse)
+    report = cached_report(store, "stock", by_category=args.by_category,
+                           warehouse=args.warehouse)
     if args.by_category:
         for category in sorted(report["categories"]):
             print(f"[{category}]")
@@ -323,8 +324,8 @@ def cmd_report_low(store: Store, args) -> int:
     one heading per shelf area, plus reorder suggestions for the ones we
     can actually reorder."""
     if args.by_category:
-        grouped = reports.low_stock_by_category(store,
-                                                threshold=args.threshold)
+        grouped = cached_report(store, "low-by-category",
+                                threshold=args.threshold)
         if not grouped:
             print("no items at or below threshold")
             return 0
@@ -333,12 +334,12 @@ def cmd_report_low(store: Store, args) -> int:
             _print_low_rows(grouped[category])
             print()
     else:
-        rows = reports.low_stock(store, threshold=args.threshold)
+        rows = cached_report(store, "low", threshold=args.threshold)
         if not rows:
             print("no items at or below threshold")
             return 0
         _print_low_rows(rows)
-    suggestions = reports.reorder_suggestions(store, threshold=args.threshold)
+    suggestions = cached_report(store, "reorder", threshold=args.threshold)
     if suggestions:
         print()
         print("reorder suggestions:")
@@ -351,7 +352,7 @@ def cmd_report_low(store: Store, args) -> int:
 
 def cmd_report_monthly(store: Store, args) -> int:
     """Handle ``report monthly``: print orders for one month."""
-    rows = reports.monthly_orders(store, args.month)
+    rows = cached_report(store, "monthly", month=args.month)
     if not rows:
         print(f"no orders in {args.month}")
         return 0
@@ -365,7 +366,7 @@ def cmd_report_monthly(store: Store, args) -> int:
 def cmd_report_revenue(store: Store, args) -> int:
     """Handle ``report revenue``: print what one month's received orders
     were worth."""
-    revenue = reports.monthly_revenue(store, args.month)
+    revenue = cached_report(store, "revenue", month=args.month)
     for row in revenue["rows"]:
         print(f"order {row['id']:>4}  {row['sku']:<12} "
               f"{format_money(row['total']):>10}")
@@ -375,7 +376,7 @@ def cmd_report_revenue(store: Store, args) -> int:
 
 def cmd_report_on_time(store: Store, args) -> int:
     """Handle ``report on-time``: print each supplier's delivery record."""
-    rows = reports.supplier_on_time(store)
+    rows = cached_report(store, "on-time")
     if not rows:
         print("no deliveries with an arrival date recorded")
         return 0
@@ -390,7 +391,7 @@ def cmd_report_aging(store: Store, args) -> int:
     by how long they have been waiting."""
     as_of = (dates.normalize_date(args.as_of) if args.as_of
              else datetime.date.today().isoformat())
-    aging = reports.order_aging(store, as_of)
+    aging = cached_report(store, "aging", as_of=as_of)
     print(f"Open orders as of {as_of}")
     for bucket in reports.AGING_BUCKETS:
         print(f"{bucket} days")
@@ -406,7 +407,7 @@ def cmd_report_aging(store: Store, args) -> int:
 def cmd_report_turnover(store: Store, args) -> int:
     """Handle ``report turnover``: print units shipped per category per
     month."""
-    totals = reports.turnover(store)
+    totals = cached_report(store, "turnover")
     if not totals:
         print("nothing shipped yet")
         return 0
@@ -418,7 +419,7 @@ def cmd_report_turnover(store: Store, args) -> int:
 
 def cmd_report_weekly(store: Store, args) -> int:
     """Handle ``report weekly``: print units shipped per ISO week."""
-    weekly = reports.weekly_shipments(store)
+    weekly = cached_report(store, "weekly")
     if not weekly:
         print("nothing shipped yet")
         return 0
@@ -429,7 +430,7 @@ def cmd_report_weekly(store: Store, args) -> int:
 
 def cmd_report_price_changes(store: Store, args) -> int:
     """Handle ``report price-changes``: print every price change."""
-    rows = reports.price_changes(store)
+    rows = cached_report(store, "price-changes")
     if not rows:
         print("no price changes recorded")
         return 0
@@ -443,7 +444,7 @@ def cmd_report_price_changes(store: Store, args) -> int:
 def cmd_report_history(store: Store, args) -> int:
     """Handle ``report history``: print all orders for a SKU."""
     store.get_item(args.sku)  # complain early about unknown SKUs
-    rows = reports.order_history(store, args.sku)
+    rows = cached_report(store, "history", sku=args.sku)
     if not rows:
         print(f"no orders for {args.sku}")
         return 0

@@ -118,6 +118,12 @@ class Store:
         discounts: mapping of category -> discount percent.
         tax_rate: the flat sales tax percent charged on an order.
         events: the audit trail - one dict per change, oldest first.
+        revision: how many changes this store has seen.  It counts up
+            with every operation that changes the data and is untouched
+            by reads, so anything worked out from the state (a cached
+            report, say) stays good for as long as the number holds.
+            It is a counter for this session rather than a fact about
+            the data, so it is not saved with it.
     """
 
     def __init__(self, path: str):
@@ -129,6 +135,7 @@ class Store:
         self.discounts: dict[str, float] = {}
         self.tax_rate: float = 0.0
         self.events: list[dict] = []
+        self.revision: int = 0
 
     # ------------------------------------------------------------------
     # audit trail
@@ -151,7 +158,11 @@ class Store:
         validation, so a refused operation logs nothing - which is what
         makes a library change land in the trail too.  Reading the state
         (reports, exports, backups) changes nothing and logs nothing.
+
+        Since every change comes through here, this is also where the
+        revision counter moves: one entry on the trail, one revision on.
         """
+        self.revision += 1
         event = {
             "op": op,
             "args": dict(args or {}),
@@ -338,6 +349,8 @@ class Store:
             raise ValueError(f"unknown backup {name}")
         shutil.copyfile(os.path.join(self._backup_dir(), name), self.path)
         self.load()
+        # Nothing was logged, but every record in memory just changed.
+        self.revision += 1
         return name
 
     # ------------------------------------------------------------------
@@ -858,6 +871,9 @@ class Store:
             raise ValueError(f"cannot undo {event.get('op')}")
         reverse(self, event.get("args") or {})
         self.events.pop()
+        # Undoing is a change like any other, and it is the one change
+        # that logs nothing, so it moves the revision on itself.
+        self.revision += 1
         return event
 
     def _undo_add_item(self, args: dict) -> None:
