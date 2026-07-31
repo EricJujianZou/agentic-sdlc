@@ -80,6 +80,19 @@ def stock_report(store: Store, by_category: bool = False,
     return {"rows": rows, "total_value": to_dollars(total_cents)}
 
 
+def per_warehouse_report(store: Store) -> dict:
+    """A stock listing per warehouse.
+
+    Returns:
+        A dict of warehouse name -> that warehouse's stock report (the
+        same shape ``stock_report`` returns), warehouses in name order.
+    """
+    names = sorted({warehouse
+                    for item in store.list_items()
+                    for warehouse in item.quantities})
+    return {name: stock_report(store, warehouse=name) for name in names}
+
+
 def low_stock(store: Store, threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
     """Items whose stock has dropped to the threshold or below.
 
