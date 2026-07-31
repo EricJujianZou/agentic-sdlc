@@ -1,0 +1,194 @@
+diff --git a/config/os.go b/config/os.go
+index 3908a16..6093557 100644
+--- a/config/os.go
++++ b/config/os.go
+@@ -99,13 +99,19 @@ func GetEOL(family, release string) (eol EOL, found bool) {
+ 			"5": {Ended: true},
+ 			"6": {
+ 				StandardSupportUntil: time.Date(2021, 3, 1, 23, 59, 59, 0, time.UTC),
+-				ExtendedSupportUntil: time.Date(2024, 3, 1, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2024, 6, 1, 23, 59, 59, 0, time.UTC),
+ 			},
+ 			"7": {
+ 				StandardSupportUntil: time.Date(2024, 7, 1, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2029, 7, 1, 23, 59, 59, 0, time.UTC),
+ 			},
+ 			"8": {
+ 				StandardSupportUntil: time.Date(2029, 7, 1, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2032, 7, 1, 23, 59, 59, 0, time.UTC),
++			},
++			"9": {
++				StandardSupportUntil: time.Date(2032, 6, 1, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2032, 6, 1, 23, 59, 59, 0, time.UTC),
+ 			},
+ 		}[major(release)]
+ 	case constant.Debian:
+diff --git a/go.mod b/go.mod
+index 565b32b..68ef8aa 100644
+--- a/go.mod
++++ b/go.mod
+@@ -41,7 +41,7 @@ require (
+ 	github.com/vulsio/go-kev v0.1.1-0.20220118062020-5f69b364106f
+ 	github.com/vulsio/go-msfdb v0.2.1-0.20211028071756-4a9759bd9f14
+ 	github.com/vulsio/gost v0.4.2-0.20220630181607-2ed593791ec3
+-	github.com/vulsio/goval-dictionary v0.7.3
++	github.com/vulsio/goval-dictionary v0.8.0
+ 	go.etcd.io/bbolt v1.3.6
+ 	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
+ 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
+diff --git a/go.sum b/go.sum
+index 178340a..db1f0dc 100644
+--- a/go.sum
++++ b/go.sum
+@@ -1380,8 +1380,8 @@ github.com/vulsio/go-msfdb v0.2.1-0.20211028071756-4a9759bd9f14 h1:2uYZw2gQ0kymw
+ github.com/vulsio/go-msfdb v0.2.1-0.20211028071756-4a9759bd9f14/go.mod h1:NGdcwWxCK/ES8vZ/crzREqI69S5gH1MivCpSp1pa2Rc=
+ github.com/vulsio/gost v0.4.2-0.20220630181607-2ed593791ec3 h1:a9Efv2KuTXfxZRbAD0uSapj43ox0k9lrAOlQ5s0dU04=
+ github.com/vulsio/gost v0.4.2-0.20220630181607-2ed593791ec3/go.mod h1:6xRvzXkpm8nJ/jMmL/TJZvabfVZyy2aB1nr4wtmJ1KI=
+-github.com/vulsio/goval-dictionary v0.7.3 h1:p9Ul3QSFCbzEpEsyV6Ijenf6Z1ifdeRc7CPT8QwsWxU=
+-github.com/vulsio/goval-dictionary v0.7.3/go.mod h1:i9dj1Z+AsaknmmijKgqKH+F4K4X6VKEIZnKaZ3i0FOU=
++github.com/vulsio/goval-dictionary v0.8.0 h1:hwxIwSEo7C3yPGOcrzr5jyKhBnxEidtUVNPIlbrBg+8=
++github.com/vulsio/goval-dictionary v0.8.0/go.mod h1:6gfsQfQN0jkO3ZNJlHP5r+2iyx375CBiMBdCcL8MmwM=
+ github.com/willf/bitset v1.1.11-0.20200630133818-d5bec3311243/go.mod h1:RjeCKbqT1RxIR/KWY6phxZiaY1IyutSBfGjNPySAYV4=
+ github.com/willf/bitset v1.1.11/go.mod h1:83CECat5yLh5zVOf4P1ErAgKA5UDvKtgyUABdr3+MjI=
+ github.com/xanzy/ssh-agent v0.2.1/go.mod h1:mLlQY/MoOhWBj+gOGMQkOeiEvkx+8pJSI+0Bx9h2kr4=
+diff --git a/oval/util.go b/oval/util.go
+index d383a11..525504f 100644
+--- a/oval/util.go
++++ b/oval/util.go
+@@ -90,6 +90,7 @@ type request struct {
+ 	versionRelease    string
+ 	newVersionRelease string
+ 	arch              string
++	repository        string // Amazon Linux 2 Only
+ 	binaryPackNames   []string
+ 	isSrcPack         bool
+ 	modularityLabel   string // RHEL 8 or later only
+@@ -118,6 +119,7 @@ func getDefsByPackNameViaHTTP(r *models.ScanResult, url string) (relatedDefs ova
+ 				newVersionRelease: pack.FormatVer(),
+ 				isSrcPack:         false,
+ 				arch:              pack.Arch,
++				repository:        pack.Repository,
+ 			}
+ 		}
+ 		for _, pack := range r.SrcPackages {
+@@ -255,6 +257,7 @@ func getDefsByPackNameFromOvalDB(r *models.ScanResult, driver ovaldb.DB) (relate
+ 			versionRelease:    pack.FormatVer(),
+ 			newVersionRelease: pack.FormatNewVer(),
+ 			arch:              pack.Arch,
++			repository:        pack.Repository,
+ 			isSrcPack:         false,
+ 		})
+ 	}
+@@ -315,6 +318,14 @@ func getDefsByPackNameFromOvalDB(r *models.ScanResult, driver ovaldb.DB) (relate
+ var modularVersionPattern = regexp.MustCompile(`.+\.module(?:\+el|_f)\d{1,2}.*`)
+ 
+ func isOvalDefAffected(def ovalmodels.Definition, req request, family string, running models.Kernel, enabledMods []string) (affected, notFixedYet bool, fixedIn string, err error) {
++	// Amazon Linux 2 has the Extra Repository in addition to the core one, and
++	// an advisory only applies to the repository the package was installed from
++	// (e.g. amzn2-core, amzn2extra-docker). AffectedRepository is empty for the
++	// other families, as is request.repository.
++	if family == constant.Amazon && def.Advisory.AffectedRepository != req.repository {
++		return false, false, "", nil
++	}
++
+ 	for _, ovalPack := range def.AffectedPacks {
+ 		if req.packName != ovalPack.Name {
+ 			continue
+diff --git a/scanner/redhatbase.go b/scanner/redhatbase.go
+index e0a3c9f..845bc54 100644
+--- a/scanner/redhatbase.go
++++ b/scanner/redhatbase.go
+@@ -448,7 +448,15 @@ func (o *redhatBase) scanInstalledPackages() (models.Packages, error) {
+ 		Version: version,
+ 	}
+ 
+-	r := o.exec(o.rpmQa(), noSudo)
++	cmd, sudoOpt := o.rpmQa(), noSudo
++	if o.isAmazonLinux2() {
++		// Packages may come from the Extra Repository, and `rpm -qa` can not
++		// tell which repository a package was installed from.
++		cmd = util.PrependProxyEnv(`repoquery --installed --qf "%{NAME} %{EPOCH} %{VERSION} %{RELEASE} %{ARCH} %{UI_FROM_REPO}"`)
++		sudoOpt = o.sudo.repoquery()
++	}
++
++	r := o.exec(cmd, sudoOpt)
+ 	if !r.isSuccess() {
+ 		return nil, xerrors.Errorf("Scan packages failed: %s", r)
+ 	}
+@@ -469,9 +477,19 @@ func (o *redhatBase) parseInstalledPackages(stdout string) (models.Packages, mod
+ 		if trimmed := strings.TrimSpace(line); trimmed == "" {
+ 			continue
+ 		}
+-		pack, err := o.parseInstalledPackagesLine(line)
+-		if err != nil {
+-			return nil, nil, err
++		var pack *models.Package
++		if o.isAmazonLinux2() {
++			p, err := o.parseInstalledPackagesLineFromRepoquery(line)
++			if err != nil {
++				return nil, nil, err
++			}
++			pack = &p
++		} else {
++			p, err := o.parseInstalledPackagesLine(line)
++			if err != nil {
++				return nil, nil, err
++			}
++			pack = p
+ 		}
+ 
+ 		// `Kernel` and `kernel-devel` package may be installed multiple versions.
+@@ -522,6 +540,53 @@ func (o *redhatBase) parseInstalledPackagesLine(line string) (*models.Package, e
+ 	}, nil
+ }
+ 
++// parseInstalledPackagesLineFromRepoquery in method form, to match the other
++// line parsers on redhatBase.
++func (o *redhatBase) parseInstalledPackagesLineFromRepoquery(line string) (models.Package, error) {
++	return parseInstalledPackagesLineFromRepoquery(line)
++}
++
++// parseInstalledPackagesLineFromRepoquery parses a line of
++// `repoquery --installed --qf "%{NAME} %{EPOCH} %{VERSION} %{RELEASE} %{ARCH} %{UI_FROM_REPO}"`,
++// e.g. `yum-utils 0 1.1.31 46.amzn2.0.1 noarch @amzn2-core`
++func parseInstalledPackagesLineFromRepoquery(line string) (models.Package, error) {
++	fields := strings.Fields(line)
++	if len(fields) != 6 {
++		return models.Package{}, xerrors.Errorf("Failed to parse package line: %s", line)
++	}
++
++	ver := ""
++	epoch := fields[1]
++	if epoch == "0" || epoch == "(none)" {
++		ver = fields[2]
++	} else {
++		ver = fmt.Sprintf("%s:%s", epoch, fields[2])
++	}
++
++	// UI_FROM_REPO is `installed` for the packages that come with the AMI,
++	// they are provided by the core repository.
++	repo := strings.TrimPrefix(fields[5], "@")
++	if repo == "installed" {
++		repo = "amzn2-core"
++	}
++
++	return models.Package{
++		Name:       fields[0],
++		Version:    ver,
++		Release:    fields[3],
++		Arch:       fields[4],
++		Repository: repo,
++	}, nil
++}
++
++func (o *redhatBase) isAmazonLinux2() bool {
++	if o.Distro.Family != constant.Amazon {
++		return false
++	}
++	ss := strings.Fields(o.Distro.Release)
++	return len(ss) > 0 && ss[0] == "2"
++}
++
+ func (o *redhatBase) parseRpmQfLine(line string) (pkg *models.Package, ignored bool, err error) {
+ 	for _, suffix := range []string{
+ 		"Permission denied",
