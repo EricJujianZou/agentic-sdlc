@@ -414,6 +414,17 @@ def cmd_report_turnover(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_weekly(store: Store, args) -> int:
+    """Handle ``report weekly``: print units shipped per ISO week."""
+    weekly = reports.weekly_shipments(store)
+    if not weekly:
+        print("nothing shipped yet")
+        return 0
+    for week, units in weekly.items():
+        print(f"{week:<10} {units:>6}")
+    return 0
+
+
 def cmd_report_price_changes(store: Store, args) -> int:
     """Handle ``report price-changes``: print every price change."""
     rows = reports.price_changes(store)
@@ -524,6 +535,7 @@ examples:
   stockroom --data ./data report on-time
   stockroom --data ./data report aging --as-of 2026-08-01
   stockroom --data ./data report turnover
+  stockroom --data ./data report weekly
   stockroom --data ./data report price-changes
   stockroom --data ./data search widget
   stockroom --data ./data export-csv items.csv
@@ -731,6 +743,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = report_sub.add_parser("turnover",
                               help="units shipped per category per month")
     p.set_defaults(func=cmd_report_turnover)
+
+    p = report_sub.add_parser("weekly",
+                              help="units shipped per ISO week")
+    p.set_defaults(func=cmd_report_weekly)
 
     p = report_sub.add_parser("price-changes",
                               help="every recorded price change")

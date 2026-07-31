@@ -211,6 +211,35 @@ def turnover(store: Store) -> dict[str, dict[str, int]]:
     return totals
 
 
+def weekly_shipments(store: Store) -> dict[str, int]:
+    """Units shipped, week by week.
+
+    Pick-up rounds are planned by the week rather than the month, so the
+    same shipment log ``turnover`` reads is counted off in ISO weeks: a
+    week runs Monday to Sunday, and the year in the label is the ISO
+    week-numbering year, which is why a shipment dated 2026-01-05 counts
+    toward 2026-W02.
+
+    Returns:
+        A dict mapping the week label ("YYYY-Www", the week zero-padded
+        to two digits) to the units shipped that week, oldest week
+        first.  A week nothing left in is left out entirely, so an empty
+        dict means nothing has gone out at all.
+    """
+    totals: dict[tuple[int, int], int] = {}
+    for shipment in store.shipments:
+        try:
+            day = dates.parse_date(shipment.date)
+        except ValueError:
+            # A date we cannot read belongs to no week, the same way it
+            # belongs to no month; skipping it beats inventing one.
+            continue
+        year, week, _ = day.isocalendar()
+        totals[(year, week)] = totals.get((year, week), 0) + shipment.qty
+    return {f"{year:04d}-W{week:02d}": units
+            for (year, week), units in sorted(totals.items())}
+
+
 def price_changes(store: Store) -> list[dict]:
     """Every recorded price change, across every item.
 
