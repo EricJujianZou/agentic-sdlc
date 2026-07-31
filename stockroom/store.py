@@ -226,6 +226,8 @@ class Store:
         discounts: mapping of category -> discount percent.
         tax_rate: the flat sales tax percent charged on an order.
         events: the audit trail - one dict per change, oldest first.
+        redo_stack: the changes ``undo`` took off the trail, newest last,
+            waiting to be walked forward again by ``redo``.
         revision: how many changes this store has seen.  It counts up
             with every operation that changes the data and is untouched
             by reads, so anything worked out from the state (a cached
@@ -243,6 +245,7 @@ class Store:
         self.discounts: dict[str, float] = {}
         self.tax_rate: float = 0.0
         self.events: list[dict] = []
+        self.redo_stack: list[dict] = []
         self.revision: int = 0
 
     # ------------------------------------------------------------------
@@ -269,8 +272,11 @@ class Store:
 
         Since every change comes through here, this is also where the
         revision counter moves: one entry on the trail, one revision on.
+        A new change also ends whatever ``undo`` set aside: history has
+        gone another way, so there is nothing to walk forward to.
         """
         self.revision += 1
+        self.redo_stack.clear()
         event = {
             "op": op,
             "args": dict(args or {}),
@@ -377,6 +383,7 @@ class Store:
         }
         self.tax_rate = float(raw.get("tax_rate", 0.0))
         self.events = self._load_events(raw)
+        self.redo_stack = self._load_redo()
         if not _has_embedded_quantities(raw):
             self._load_quantities()
 
@@ -419,12 +426,29 @@ class Store:
 
     def _load_events(self, raw: dict) -> list[dict]:
         """The audit trail: the sidecar's when it exists, else ``raw``'s."""
+        sidecar = self._read_sidecar()
+        if sidecar is None:
+            return [dict(event) for event in raw.get("events", [])]
+        return [dict(event) for event in sidecar.get("events", [])]
+
+    def _load_redo(self) -> list[dict]:
+        """What ``undo`` set aside, from the sidecar it was saved in.
+
+        The redo history lives with the trail, so walking forward again
+        works across invocations just as walking back does.  A sidecar
+        written before redo existed carries none, which is simply
+        nothing to redo.
+        """
+        sidecar = self._read_sidecar() or {}
+        return [dict(event) for event in sidecar.get("redo", [])]
+
+    def _read_sidecar(self) -> dict | None:
+        """The events sidecar's contents, or None when there is no file."""
         path = self.events_path()
         if not os.path.exists(path):
-            return [dict(event) for event in raw.get("events", [])]
+            return None
         with open(path, encoding="utf-8") as f:
-            sidecar = json.load(f)
-        return [dict(event) for event in sidecar.get("events", [])]
+            return json.load(f)
 
     def save(self) -> None:
         """Write the current state back out to the data directory.
@@ -494,8 +518,11 @@ class Store:
         _write_json(path, raw)
 
     def _write_events(self, path: str) -> None:
-        """Serialize the audit trail to its sidecar at ``path``."""
-        _write_json(path, {"events": [dict(event) for event in self.events]})
+        """Serialize the audit trail, and its redo history, to ``path``."""
+        _write_json(path, {
+            "events": [dict(event) for event in self.events],
+            "redo": [dict(event) for event in self.redo_stack],
+        })
 
     # ------------------------------------------------------------------
     # backups
@@ -764,11 +791,12 @@ class Store:
         # the two logs are only ever appended to, so their own order is
         # the whole of what has to be put back.
         return (copy.deepcopy(self.items), list(self.shipments),
-                list(self.events), self.revision)
+                list(self.events), list(self.redo_stack), self.revision)
 
     def _batch_restore(self, saved: tuple) -> None:
         """Undo a batch, back to a :meth:`_batch_snapshot`."""
-        (self.items, self.shipments, self.events, self.revision) = saved
+        (self.items, self.shipments, self.events, self.redo_stack,
+         self.revision) = saved
 
     def _apply_batch_row(self, row: dict, actor: str | None) -> None:
         """Carry out one batch row, or raise ValueError saying why not."""
@@ -1067,42 +1095,95 @@ class Store:
     # undo
     # ------------------------------------------------------------------
 
-    def undo(self) -> dict:
-        """Reverse the most recent change and return the event undone.
+    def undo(self, steps: int = 1) -> list[dict]:
+        """Reverse the ``steps`` most recent changes, newest first.
 
         The audit trail is the undo history: its last entry says what
         changed and with which arguments, so backing that change out is
         a matter of applying the entry's inverse.  The entry is then
         dropped - the trail is the story of how the state got this way,
         and a change that has been reversed is no longer part of it -
-        which is also what makes a second undo step back to the change
-        before it, and a third to the one before that.  Since the trail
-        is saved alongside the state, undo reaches into earlier sessions
-        just as well as into this one.
+        which is also what makes the next step back reach the change
+        before it.  Since the trail is saved alongside the state, undo
+        reaches into earlier sessions just as well as into this one.
 
-        An empty trail leaves nothing to undo, and some changes cannot
-        be reversed from what was recorded at all - nobody wrote down
-        the discount rate a ``set-discount`` replaced, so putting it
-        back would be a guess.  Either way ``ValueError`` is raised
-        before anything is touched, rather than a wrong reversal being
-        applied quietly.
+        A trail with fewer than ``steps`` changes on it leaves nothing
+        to undo them by, and some changes cannot be reversed from what
+        was recorded at all - nobody wrote down the discount rate a
+        ``set-discount`` replaced, so putting it back would be a guess.
+        Both are checked over the whole run before any of it is applied,
+        so a refusal is all-or-nothing: ``ValueError`` is raised and not
+        one of the steps has happened.
+
+        Every change undone is set aside on :attr:`redo_stack` for
+        :meth:`redo` to walk forward again.
 
         Only the records themselves are put back.  Whoever an undone
         change named as the item's or order's last actor stays named:
         undo is a correction, not a way to make a change unhappen.
+
+        Returns:
+            The events undone, in the order they were undone.
         """
-        if not self.events:
-            raise ValueError("nothing to undo")
-        event = self.events[-1]
-        reverse = self._UNDO.get(event.get("op"))
-        if reverse is None:
-            raise ValueError(f"cannot undo {event.get('op')}")
-        reverse(self, event.get("args") or {})
-        self.events.pop()
-        # Undoing is a change like any other, and it is the one change
-        # that logs nothing, so it moves the revision on itself.
+        window = self._history_window(self.events, steps, "undo", self._UNDO)
+        for event in window:
+            self._UNDO[event["op"]](self, event.get("args") or {})
+            self.redo_stack.append(self.events.pop())
+        # Undoing is a change like any other, and it is one of the two
+        # that log nothing, so it moves the revision on itself.
         self.revision += 1
-        return event
+        return window
+
+    def redo(self, steps: int = 1) -> list[dict]:
+        """Re-apply the ``steps`` oldest changes ``undo`` set aside.
+
+        Redo walks forward through the undone changes in the order they
+        originally happened, so after ``undo --steps 2`` the first redo
+        brings back the older of the two and the second the newer.  Each
+        change re-applied goes back onto the audit trail where it was,
+        and comes off the redo history - and since that history is saved
+        with the trail, this works across invocations too.
+
+        Making any new change clears the redo history: the state has
+        gone another way and there is no forward to walk to.  A history
+        with fewer than ``steps`` changes left on it raises
+        ``ValueError`` before anything is touched.
+
+        Returns:
+            The events re-applied, in the order they were re-applied.
+        """
+        window = self._history_window(self.redo_stack, steps, "redo",
+                                      self._REDO)
+        for event in window:
+            self._REDO[event["op"]](self, event.get("args") or {},
+                                    event.get("actor"))
+            self.events.append(self.redo_stack.pop())
+        self.revision += 1
+        return window
+
+    @staticmethod
+    def _history_window(history: list[dict], steps: int, action: str,
+                        table: dict) -> list[dict]:
+        """The ``steps`` entries ``action`` would work through, in order.
+
+        Both histories are worked from their newest end, so this is the
+        tail of the list reversed.  It is also where a run is refused:
+        too few entries, or one among them ``table`` has no handler for,
+        and nothing has been touched yet.
+        """
+        if steps < 1:
+            raise ValueError(f"cannot {action} {steps} changes")
+        if len(history) < steps:
+            raise ValueError(
+                f"nothing to {action}" if not history else
+                f"cannot {action} {steps} changes: "
+                f"only {len(history)} to {action}"
+            )
+        window = list(reversed(history[-steps:]))
+        for event in window:
+            if event.get("op") not in table:
+                raise ValueError(f"cannot {action} {event.get('op')}")
+        return window
 
     def _undo_add_item(self, args: dict) -> None:
         """Take back an ``add-item``: the item goes away again."""
@@ -1179,4 +1260,104 @@ class Store:
         "place-order": _undo_place_order,
         "cancel-order": _undo_cancel_order,
         "set-price": _undo_set_price,
+    }
+
+    # ------------------------------------------------------------------
+    # redo
+    # ------------------------------------------------------------------
+
+    # Each of these makes an undone change happen again from what the
+    # trail wrote down, the way the operation itself made it happen the
+    # first time - the entry goes back on the trail as it was, so the
+    # record keeps the original actor and timestamp rather than gaining
+    # a second one for the same change.
+
+    def _redo_add_item(self, args: dict, actor: str | None) -> None:
+        """Put an ``add-item`` back: the item exists again."""
+        item = Item(sku=normalize_sku(args["sku"]), name=args["name"],
+                    qty=args.get("qty", 0),
+                    unit_price=args.get("unit_price", 0.0),
+                    supplier_id=args.get("supplier_id"),
+                    category=args.get("category", DEFAULT_CATEGORY))
+        record_actor(item, actor)
+        self.items[item.sku] = item
+
+    def _redo_add_supplier(self, args: dict, actor: str | None) -> None:
+        """Put an ``add-supplier`` back: the supplier exists again."""
+        self.suppliers[args["id"]] = Supplier(
+            id=args["id"], name=args["name"], email=args["email"],
+            lead_time_days=args.get("lead_time_days", 0),
+        )
+
+    def _redo_receive(self, args: dict, actor: str | None) -> None:
+        """Put a ``receive`` back: the units arrive again."""
+        item = self.get_item(args["sku"])
+        item.adjust(args["qty"], args.get("warehouse", DEFAULT_WAREHOUSE))
+        record_actor(item, actor)
+
+    def _redo_ship(self, args: dict, actor: str | None) -> None:
+        """Put a ``ship`` back: the units leave, and are logged, again."""
+        warehouse = args.get("warehouse", DEFAULT_WAREHOUSE)
+        item = self.get_item(args["sku"])
+        item.adjust(-args["qty"], warehouse)
+        record_actor(item, actor)
+        self.shipments.append(
+            Shipment(sku=item.sku, qty=args["qty"], warehouse=warehouse,
+                     date=args.get("date"))
+        )
+
+    def _redo_transfer(self, args: dict, actor: str | None) -> None:
+        """Put a ``transfer`` back: the units walk across again."""
+        item = self.get_item(args["sku"])
+        item.adjust(-args["qty"], args["src"])
+        item.adjust(args["qty"], args["dst"])
+        record_actor(item, actor)
+
+    def _redo_place_order(self, args: dict, actor: str | None) -> None:
+        """Put a ``place-order`` back: the order is on the books again.
+
+        It keeps the id it was placed under - the undo that took it off
+        was the newest change, so nothing has been placed since to have
+        taken that id.
+        """
+        order = Order(id=args["id"], sku=args["sku"], qty=args["qty"],
+                      date=args["date"], supplier_id=args.get("supplier_id"))
+        record_actor(order, actor)
+        self.orders.append(order)
+
+    def _redo_cancel_order(self, args: dict, actor: str | None) -> None:
+        """Put a ``cancel-order`` back: the order is cancelled again."""
+        order = self.get_order(args["id"])
+        order.status = STATUS_CANCELLED
+        record_actor(order, actor)
+
+    def _redo_set_price(self, args: dict, actor: str | None) -> None:
+        """Put a ``set-price`` back: the new price is the price again.
+
+        The history entry the undo popped is written again from what the
+        item costs now, so undoing this once more still has the old
+        price to go back to.
+        """
+        item = self.get_item(args["sku"])
+        old_price = item.unit_price
+        item.unit_price = args["price"]
+        item.price_history.append({
+            "date": args.get("date"),
+            "old": old_price,
+            "new": item.unit_price,
+        })
+        record_actor(item, actor)
+
+    #: How each kind of change is applied again, keyed by the op the
+    #: trail records.  Only a change ``undo`` took off can be redone, so
+    #: this covers exactly what :data:`_UNDO` covers.
+    _REDO = {
+        "add-item": _redo_add_item,
+        "add-supplier": _redo_add_supplier,
+        "receive": _redo_receive,
+        "ship": _redo_ship,
+        "transfer": _redo_transfer,
+        "place-order": _redo_place_order,
+        "cancel-order": _redo_cancel_order,
+        "set-price": _redo_set_price,
     }

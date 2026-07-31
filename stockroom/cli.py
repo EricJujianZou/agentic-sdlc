@@ -273,15 +273,23 @@ def cmd_cancel_order(store: Store, args) -> int:
 
 
 def cmd_undo(store: Store, args) -> int:
-    """Handle ``undo``: reverse the most recent change.
+    """Handle ``undo``: reverse the most recent changes, newest first.
 
-    Nothing is saved unless the reversal went through, so an undo with
-    no history behind it (or one the store refuses) leaves the state
-    file exactly as it was.
+    Nothing is saved unless the whole run went through, so an undo with
+    too little history behind it (or one the store refuses) leaves the
+    state file exactly as it was.
     """
-    event = store.undo()
+    for event in store.undo(args.steps):
+        print(f"undid {event['op']}")
     store.save()
-    print(f"undid {event['op']}")
+    return 0
+
+
+def cmd_redo(store: Store, args) -> int:
+    """Handle ``redo``: apply undone changes again, oldest first."""
+    for event in store.redo(args.steps):
+        print(f"redid {event['op']}")
+    store.save()
     return 0
 
 
@@ -798,8 +806,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_actor(p)
     p.set_defaults(func=cmd_cancel_order)
 
-    p = sub.add_parser("undo", help="reverse the most recent change")
+    p = sub.add_parser("undo", help="reverse the most recent changes")
+    p.add_argument("--steps", type=int, default=1,
+                   help="how many changes to undo (default: 1)")
     p.set_defaults(func=cmd_undo)
+
+    p = sub.add_parser("redo", help="apply undone changes again")
+    p.add_argument("--steps", type=int, default=1,
+                   help="how many changes to redo (default: 1)")
+    p.set_defaults(func=cmd_redo)
 
     report = sub.add_parser("report", help="print a report")
     report_sub = report.add_subparsers(dest="report_kind", required=True)
