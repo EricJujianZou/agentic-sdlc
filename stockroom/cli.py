@@ -16,7 +16,7 @@ import json
 import os
 import sys
 
-from . import __version__, csv_io, reports
+from . import __version__, csv_io, dates, reports
 from .models import DEFAULT_CATEGORY, DEFAULT_WAREHOUSE, normalize_sku
 from .money import format_money
 from .store import Store
@@ -337,6 +337,24 @@ def cmd_report_on_time(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_aging(store: Store, args) -> int:
+    """Handle ``report aging``: print the orders still outstanding, grouped
+    by how long they have been waiting."""
+    as_of = (dates.normalize_date(args.as_of) if args.as_of
+             else datetime.date.today().isoformat())
+    aging = reports.order_aging(store, as_of)
+    print(f"Open orders as of {as_of}")
+    for bucket in reports.AGING_BUCKETS:
+        print(f"{bucket} days")
+        if not aging[bucket]:
+            print("  (none)")
+            continue
+        for row in aging[bucket]:
+            print(f"  {row['date']:<12} order {row['id']:>4}  "
+                  f"{row['qty']:>4} x {row['sku']}")
+    return 0
+
+
 def cmd_report_turnover(store: Store, args) -> int:
     """Handle ``report turnover``: print units shipped per category per
     month."""
@@ -456,6 +474,7 @@ examples:
   stockroom --data ./data report monthly 2026-07
   stockroom --data ./data report revenue 2026-07
   stockroom --data ./data report on-time
+  stockroom --data ./data report aging --as-of 2026-08-01
   stockroom --data ./data report turnover
   stockroom --data ./data report price-changes
   stockroom --data ./data search widget
@@ -639,6 +658,12 @@ def build_parser() -> argparse.ArgumentParser:
                               help="how well each supplier keeps to its "
                                    "lead time")
     p.set_defaults(func=cmd_report_on_time)
+
+    p = report_sub.add_parser("aging",
+                              help="how long open orders have been waiting")
+    p.add_argument("--as-of", default=None,
+                   help="day to count the ages up to (default: today)")
+    p.set_defaults(func=cmd_report_aging)
 
     p = report_sub.add_parser("turnover",
                               help="units shipped per category per month")

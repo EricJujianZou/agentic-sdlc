@@ -376,6 +376,53 @@ def _as_date(date: str) -> datetime.date:
     return dates.parse_date(date)
 
 
+# How long an order has been waiting, in whole days, split into the three
+# bands the shelf is worried about.  The last band has no upper edge.
+AGING_BUCKETS = ("0-7", "8-30", "31+")
+
+
+def order_aging(store: Store,
+                as_of: str | datetime.date) -> dict[str, list[dict]]:
+    """How long the orders still outstanding have been waiting.
+
+    An order's age is the whole days from the day it was placed up to
+    ``as_of``, so one placed on the as-of day itself is 0 days old and
+    lands in the first band.  Only pending orders are aged: a received
+    order is no longer waiting and a cancelled one never will be.
+
+    Args:
+        as_of: the day to count up to, either a ``datetime.date`` or a
+            date string, which is read the way any typed date is.
+
+    Returns:
+        A dict with one key per band in ``AGING_BUCKETS`` - always all
+        three, so an empty band shows up as an empty list rather than
+        going missing - each holding that band's orders (id, sku, qty,
+        date) oldest first.
+    """
+    today = as_of if isinstance(as_of, datetime.date) else _as_date(as_of)
+    buckets: dict[str, list[dict]] = {name: [] for name in AGING_BUCKETS}
+    for order in store.orders:
+        if order.status != STATUS_PENDING:
+            continue
+        age = (today - _as_date(order.date)).days
+        if age <= 7:
+            bucket = "0-7"
+        elif age <= 30:
+            bucket = "8-30"
+        else:
+            bucket = "31+"
+        buckets[bucket].append({
+            "id": order.id,
+            "sku": order.sku,
+            "qty": order.qty,
+            "date": order.date,
+        })
+    for rows in buckets.values():
+        rows.sort(key=lambda row: (row["date"], row["id"]))
+    return buckets
+
+
 def reorder_suggestions(store: Store,
                         threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
     """Suggest order quantities for items running low.

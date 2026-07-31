@@ -38,4 +38,9 @@
   `normalize_date` -> ISO str, `normalize_stored` (tolerant, unparseable/None kept) used by `Order`/`Shipment`/price-history `from_dict` so legacy dates normalize on load and save back padded;
   `place_order`/`ship`/`set_price`/`receive_order` normalize before mutating. `reports._in_month(date, month)` (parsed, not prefix) drives `monthly_orders`/`monthly_revenue`; `_normalize_date`/`_as_date` now delegate to `dates`.
 
-## current — none (T32 done)
+- T33 — `reports.AGING_BUCKETS` = `("0-7", "8-30", "31+")` and `order_aging(store, as_of)` (ISO str or `date`):
+  pending orders only, age = whole days from order date to as-of -> `<=7`/`<=30`/rest; every bucket key always
+  present, rows (id/sku/qty/date) oldest first. CLI `report aging [--as-of YYYY-MM-DD]` (default today) prints
+  all three headings, "(none)" under an empty one; bad date -> exit 1.
+
+## current — none (T33 done)
