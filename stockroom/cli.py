@@ -5,6 +5,8 @@ Usage::
     python -m stockroom.cli --data <dir> <command> [args...]
 
 ``--data`` names a directory; state is kept in ``<dir>/state.json``.
+``--read-only`` refuses every command that would change that data, as
+does ``lock`` until somebody runs ``unlock``.
 
 Exit codes: 0 on success, 1 on a user error (unknown SKU, bad order id,
 missing file, ...), 2 when the state file cannot be parsed.
@@ -512,6 +514,24 @@ def cmd_restore(store: Store, args) -> int:
     return 0
 
 
+def cmd_lock(store: Store, args) -> int:
+    """Handle ``lock``: mark the data read-only until it is unlocked."""
+    store.lock()
+    print(f"{args.data} is now read-only")
+    return 0
+
+
+def cmd_unlock(store: Store, args) -> int:
+    """Handle ``unlock``: clear the read-only mark.
+
+    The one command a read-only stockroom always allows - otherwise a
+    locked one could never be changed again.
+    """
+    store.unlock()
+    print(f"{args.data} is now writable")
+    return 0
+
+
 # ----------------------------------------------------------------------
 # argument parsing
 # ----------------------------------------------------------------------
@@ -550,6 +570,9 @@ examples:
   stockroom --data ./data export-events events.csv --since 2026-07-01
   stockroom --data ./data backup
   stockroom --data ./data restore state.json.bak-20260101T090000000000
+  stockroom --data ./data --read-only report stock
+  stockroom --data ./data lock
+  stockroom --data ./data unlock
 """
 
 
@@ -578,6 +601,11 @@ def build_parser() -> argparse.ArgumentParser:
                         version=f"stockroom {__version__}")
     parser.add_argument("--data", required=True,
                         help="directory holding state.json")
+    parser.add_argument("--read-only", action="store_true", dest="read_only",
+                        help="refuse any command that would change the data")
+    # A command is refused in read-only mode unless its own parser says
+    # it is safe there, so a new command is guarded by default.
+    parser.set_defaults(read_only_ok=False)
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("add-item", help="create a new item")
@@ -641,7 +669,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_set_discount)
 
     p = sub.add_parser("list-discounts", help="print the discount rules")
-    p.set_defaults(func=cmd_list_discounts)
+    p.set_defaults(func=cmd_list_discounts, read_only_ok=True)
 
     p = sub.add_parser("remove-discount", help="drop a category's discount")
     p.add_argument("category")
@@ -657,7 +685,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id", type=int)
     p.add_argument("--output", default=None,
                    help="also write the invoice to this file")
-    p.set_defaults(func=cmd_invoice)
+    p.set_defaults(func=cmd_invoice, read_only_ok=True)
 
     p = sub.add_parser("place-order", help="record a purchase order")
     p.add_argument("sku")
@@ -687,7 +715,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("catalog-list", help="print a supplier's catalogue")
     p.add_argument("supplier")
-    p.set_defaults(func=cmd_catalog_list)
+    p.set_defaults(func=cmd_catalog_list, read_only_ok=True)
 
     p = sub.add_parser("ship-order",
                        help="stock part of an order the supplier delivered")
@@ -721,57 +749,57 @@ def build_parser() -> argparse.ArgumentParser:
                    help="group the listing by shelf area")
     p.add_argument("--warehouse", default=None,
                    help="report on one warehouse alone (default: all of them)")
-    p.set_defaults(func=cmd_report_stock)
+    p.set_defaults(func=cmd_report_stock, read_only_ok=True)
 
     p = report_sub.add_parser("low", help="items running low")
     p.add_argument("--threshold", type=int, default=reports.DEFAULT_THRESHOLD)
     p.add_argument("--by-category", action="store_true",
                    help="group the low items under one heading per shelf area")
-    p.set_defaults(func=cmd_report_low)
+    p.set_defaults(func=cmd_report_low, read_only_ok=True)
 
     p = report_sub.add_parser("monthly", help="orders placed in a month")
     p.add_argument("month", help="month prefix, e.g. 2026-01")
-    p.set_defaults(func=cmd_report_monthly)
+    p.set_defaults(func=cmd_report_monthly, read_only_ok=True)
 
     p = report_sub.add_parser("revenue",
                               help="what a month's received orders were worth")
     p.add_argument("month", help="month prefix, e.g. 2026-01")
-    p.set_defaults(func=cmd_report_revenue)
+    p.set_defaults(func=cmd_report_revenue, read_only_ok=True)
 
     p = report_sub.add_parser("on-time",
                               help="how well each supplier keeps to its "
                                    "lead time")
-    p.set_defaults(func=cmd_report_on_time)
+    p.set_defaults(func=cmd_report_on_time, read_only_ok=True)
 
     p = report_sub.add_parser("aging",
                               help="how long open orders have been waiting")
     p.add_argument("--as-of", default=None,
                    help="day to count the ages up to (default: today)")
-    p.set_defaults(func=cmd_report_aging)
+    p.set_defaults(func=cmd_report_aging, read_only_ok=True)
 
     p = report_sub.add_parser("turnover",
                               help="units shipped per category per month")
-    p.set_defaults(func=cmd_report_turnover)
+    p.set_defaults(func=cmd_report_turnover, read_only_ok=True)
 
     p = report_sub.add_parser("weekly",
                               help="units shipped per ISO week")
-    p.set_defaults(func=cmd_report_weekly)
+    p.set_defaults(func=cmd_report_weekly, read_only_ok=True)
 
     p = report_sub.add_parser("price-changes",
                               help="every recorded price change")
-    p.set_defaults(func=cmd_report_price_changes)
+    p.set_defaults(func=cmd_report_price_changes, read_only_ok=True)
 
     p = report_sub.add_parser("history", help="order history for one SKU")
     p.add_argument("sku")
-    p.set_defaults(func=cmd_report_history)
+    p.set_defaults(func=cmd_report_history, read_only_ok=True)
 
     p = sub.add_parser("search", help="find items by name or SKU")
     p.add_argument("query", help="text to look for in the name or SKU")
-    p.set_defaults(func=cmd_search)
+    p.set_defaults(func=cmd_search, read_only_ok=True)
 
     p = sub.add_parser("export-csv", help="write items to a CSV file")
     p.add_argument("path")
-    p.set_defaults(func=cmd_export_csv)
+    p.set_defaults(func=cmd_export_csv, read_only_ok=True)
 
     p = sub.add_parser("export-events",
                        help="write the audit trail to a CSV file")
@@ -780,7 +808,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="keep only the events with exactly this op")
     p.add_argument("--since", default=None, metavar="YYYY-MM-DD",
                    help="keep only the events stamped this day or later")
-    p.set_defaults(func=cmd_export_events)
+    p.set_defaults(func=cmd_export_events, read_only_ok=True)
 
     p = sub.add_parser("import-csv", help="read items from a CSV file")
     p.add_argument("path")
@@ -791,13 +819,35 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_backup)
 
     p = sub.add_parser("list-backups", help="list the existing backups")
-    p.set_defaults(func=cmd_list_backups)
+    p.set_defaults(func=cmd_list_backups, read_only_ok=True)
 
     p = sub.add_parser("restore", help="put the state back to a backup")
     p.add_argument("name", help="backup name, as printed by backup")
     p.set_defaults(func=cmd_restore)
 
+    p = sub.add_parser("lock", help="mark the data read-only from now on")
+    p.set_defaults(func=cmd_lock)
+
+    p = sub.add_parser("unlock", help="let the data be changed again")
+    p.set_defaults(func=cmd_unlock)
+
     return parser
+
+
+def _read_only_reason(args, store: Store) -> str | None:
+    """Why this command may not run, or ``None`` when it may.
+
+    Two ways in: ``--read-only`` for the run at hand (the accounting
+    laptop, an auditor's copy), and ``lock`` for the data itself.
+    ``unlock`` is the way back out of a lock, so the lock never refuses
+    it - the flag still does, since the flag is this run asking for no
+    writes at all and dropping it is enough to unlock.
+    """
+    if args.read_only:
+        return "--read-only was given"
+    if store.is_locked() and args.command != "unlock":
+        return "this data is locked; run 'unlock' to change it"
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -812,6 +862,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: state file {state_path} is corrupt: {exc}",
               file=sys.stderr)
         return 2
+
+    if not args.read_only_ok:
+        # Checked before the handler runs, so a refused command leaves
+        # every file in the data directory exactly as it found it.
+        reason = _read_only_reason(args, store)
+        if reason is not None:
+            print(f"error: cannot run '{args.command}' in read-only mode: "
+                  f"{reason}", file=sys.stderr)
+            return 1
 
     try:
         return args.func(store, args)

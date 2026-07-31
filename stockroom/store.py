@@ -69,6 +69,10 @@ BACKUP_SUFFIX = ".bak-"
 #: name with its ``.json`` suffix replaced by this one.
 EVENTS_SUFFIX = ".events.json"
 
+#: What the marker file saying this data is read-only is called: the
+#: state file's own name with this suffix appended.
+LOCK_SUFFIX = ".lock"
+
 
 def _backup_stamp() -> str:
     """Timestamp for a backup name: sortable, and legal in a filename.
@@ -150,6 +154,32 @@ class Store:
         if base.endswith(".json"):
             base = base[:-len(".json")]
         return base + EVENTS_SUFFIX
+
+    def lock_path(self) -> str:
+        """Where the read-only marker for this state file lives."""
+        return self.path + LOCK_SUFFIX
+
+    def is_locked(self) -> bool:
+        """Whether this data has been marked read-only.
+
+        The mark is the marker file's existence, and it sits with the
+        data rather than inside the state file - so it survives across
+        invocations and machines, and restoring an older backup cannot
+        quietly unlock a stockroom somebody locked on purpose.
+        """
+        return os.path.exists(self.lock_path())
+
+    def lock(self) -> str:
+        """Mark this data read-only and return the marker's path."""
+        path = self.lock_path()
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("read-only\n")
+        return path
+
+    def unlock(self) -> None:
+        """Clear the read-only mark; unlocking an unlocked store is fine."""
+        if self.is_locked():
+            os.remove(self.lock_path())
 
     def load(self) -> None:
         """Read state from the JSON file.

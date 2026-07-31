@@ -36,9 +36,7 @@
 - T32 — every stored date is ISO `YYYY-MM-DD` (v5): `stockroom.dates` = `parse_date` (accepts `YYYY-M-D`, ValueError -> exit 1 on anything not a real day), `normalize_date` -> ISO str, `normalize_stored` (tolerant, unparseable/None kept) used by `Order`/`Shipment`/price-history `from_dict` so legacy dates normalize on load and save back padded; `place_order`/`ship`/`set_price`/`receive_order` normalize before mutating; `reports._in_month(date, month)` (parsed, not prefix) drives `monthly_orders`/`monthly_revenue`, and `_normalize_date`/`_as_date` delegate to `dates`.
 - T33 — `reports.AGING_BUCKETS` = `("0-7", "8-30", "31+")`, `order_aging(store, as_of)` (ISO str or `date`): pending only, age = whole days order date -> as-of, `<=7`/`<=30`/rest; every bucket key always present, rows (id/sku/qty/date) oldest first.
   CLI `report aging [--as-of YYYY-MM-DD]` (default today) prints all three headings, "(none)" under an empty one; bad date -> exit 1.
-- T34 — audit trail: `store.events` = `{"op", "args", "actor", "timestamp"}` oldest first via `store.log_event(op, args, actor)`, called
-  once, last, by every mutator (refused op logs nothing, library calls do), `op` spelled as the CLI command; `import_items` logs one
-  "import-csv"/file; `add_supplier`/`set_discount`/`remove_discount`/`set_tax_rate`/`add_supplier_sku` gained `actor=` + `--actor`.
+- T34 — audit trail: `store.events` = `{"op", "args", "actor", "timestamp"}` oldest first via `store.log_event(op, args, actor)`, called once, last, by every mutator (refused op logs nothing, library calls do), `op` spelled as the CLI command; `import_items` logs one "import-csv"/file; `add_supplier`/`set_discount`/`remove_discount`/`set_tax_rate`/`add_supplier_sku` gained `actor=` + `--actor`.
 - T35 — `Store.undo()` (CLI `undo`) reverses the newest change and pops it off `store.events`, walking the trail back step by step.
   `Store._UNDO` maps op -> inverse from the logged args + state: add-item/add-supplier delete, receive/ship/transfer adjust back (ship
   drops its shipment), place-order removes it, cancel-order -> pending, set-price pops the last `price_history` entry. Logs nothing, leaves `last_actor` alone, raises before mutating ("nothing to undo" / "cannot undo OP").
@@ -55,5 +53,6 @@
 - T40 — events live in a sidecar (v6): `store.EVENTS_SUFFIX` + `Store.events_path()` (`state.json` -> `state.events.json`, holding
   `{"events": [...]}`); `_write` no longer embeds them (so backups are state alone), `save()` also writes the sidecar every time, and
   `_load_events` reads the sidecar when present, else the main file's embedded trail (v5 and earlier) - missing both = empty trail.
+- T41 — read-only mode: `store.LOCK_SUFFIX` + `Store.lock_path()`/`is_locked()`/`lock()`/`unlock()` - a `state.json.lock` marker beside the state file (existence = locked, kept out of state.json so a restore cannot unlock it); CLI global `--read-only` flag and `lock`/`unlock` commands, gated in `main()` *before* dispatch so a refusal touches no file: a command is refused (exit 1, stderr "...in read-only mode...") unless its parser set `read_only_ok=True` (reports/search/invoice/exports/list-*/catalog-list), so a new command is guarded by default; `unlock` beats the lock but not the flag, and `backup`/`restore`/`lock` count as mutating.
 
-## current — none (T40 done)
+## current — none (T41 done)
