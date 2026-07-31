@@ -5,7 +5,7 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
-from .models import STATUS_PENDING, percent_of, to_dollars
+from .models import (STATUS_PENDING, STATUS_RECEIVED, percent_of, to_dollars)
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -246,18 +246,64 @@ def order_total(store: Store, order_id: int) -> dict:
         in dollars.  Each line is worked out in whole cents, so the four
         add up exactly as printed.
     """
-    order = store.get_order(order_id)
+    cents = _order_total_cents(store, store.get_order(order_id))
+    return {name: to_dollars(value) for name, value in cents.items()}
+
+
+def _order_total_cents(store: Store, order) -> dict:
+    """The ``order_total`` breakdown for one order, in whole cents.
+
+    Kept apart from :func:`order_total` so a report that adds several
+    orders up can total the cents and convert once at the end, rather
+    than adding the rounded dollar figures back together.
+    """
     item = store.get_item(order.sku)
     subtotal_cents = order.qty * item.unit_price_cents
     discount_cents = percent_of(subtotal_cents,
                                 store.get_discount(item.category))
     tax_cents = percent_of(subtotal_cents - discount_cents, store.tax_rate)
     return {
-        "subtotal": to_dollars(subtotal_cents),
-        "discount": to_dollars(discount_cents),
-        "tax": to_dollars(tax_cents),
-        "total": to_dollars(subtotal_cents - discount_cents + tax_cents),
+        "subtotal": subtotal_cents,
+        "discount": discount_cents,
+        "tax": tax_cents,
+        "total": subtotal_cents - discount_cents + tax_cents,
     }
+
+
+def monthly_revenue(store: Store, month: str) -> dict:
+    """What one month's completed orders came to.
+
+    Only orders that were received count: one still pending has not been
+    paid for yet and a cancelled one never will be.  Each order is
+    priced the same way its invoice is - current unit price, category
+    discount off, tax on the rest - so the two always agree.
+
+    Args:
+        month: a prefix like "2026-07"; order dates are zero-padded
+            before matching, same as ``monthly_orders``.
+
+    Returns:
+        A dict with ``rows``, one dict per counted order (id, sku,
+        total) oldest first, and ``total``, the dollar sum of those row
+        totals.  A month with nothing received gives no rows and a
+        total of 0.0.  The sum is worked out in whole cents, so it
+        matches the printed rows added up by hand.
+    """
+    counted = [order for order in store.orders
+               if order.status == STATUS_RECEIVED
+               and _normalize_date(order.date).startswith(month)]
+    counted.sort(key=lambda order: _normalize_date(order.date))
+    rows = []
+    total_cents = 0
+    for order in counted:
+        order_cents = _order_total_cents(store, order)["total"]
+        total_cents += order_cents
+        rows.append({
+            "id": order.id,
+            "sku": order.sku,
+            "total": to_dollars(order_cents),
+        })
+    return {"rows": rows, "total": to_dollars(total_cents)}
 
 
 def reorder_suggestions(store: Store,

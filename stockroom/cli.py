@@ -310,6 +310,17 @@ def cmd_report_monthly(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_revenue(store: Store, args) -> int:
+    """Handle ``report revenue``: print what one month's received orders
+    were worth."""
+    revenue = reports.monthly_revenue(store, args.month)
+    for row in revenue["rows"]:
+        print(f"order {row['id']:>4}  {row['sku']:<12} "
+              f"{format_money(row['total']):>10}")
+    print(f"Total revenue: {format_money(revenue['total'])}")
+    return 0
+
+
 def cmd_report_turnover(store: Store, args) -> int:
     """Handle ``report turnover``: print units shipped per category per
     month."""
@@ -427,6 +438,7 @@ examples:
   stockroom --data ./data receive-order 1
   stockroom --data ./data report stock
   stockroom --data ./data report monthly 2026-07
+  stockroom --data ./data report revenue 2026-07
   stockroom --data ./data report turnover
   stockroom --data ./data report price-changes
   stockroom --data ./data search widget
@@ -598,6 +610,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = report_sub.add_parser("monthly", help="orders placed in a month")
     p.add_argument("month", help="month prefix, e.g. 2026-01")
     p.set_defaults(func=cmd_report_monthly)
+
+    p = report_sub.add_parser("revenue",
+                              help="what a month's received orders were worth")
+    p.add_argument("month", help="month prefix, e.g. 2026-01")
+    p.set_defaults(func=cmd_report_revenue)
 
     p = report_sub.add_parser("turnover",
                               help="units shipped per category per month")
