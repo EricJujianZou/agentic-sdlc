@@ -174,6 +174,27 @@ class Store:
         record_actor(item, actor)
         return item
 
+    def transfer(self, sku: str, qty: int, src: str, dst: str,
+                 actor: str | None = None) -> Item:
+        """Walk ``qty`` units of an item from one warehouse to another.
+
+        You cannot move more than the source room actually holds: an
+        overdraw raises ``ValueError`` before anything moves, same as
+        shipping below zero.  A successful transfer touches only the two
+        warehouses named - the item's total is unchanged.
+        """
+        item = self.get_item(sku)
+        on_hand = item.qty_in(src)
+        if qty > on_hand:
+            raise ValueError(
+                f"cannot transfer {qty} x {sku} out of {src}: "
+                f"only {on_hand} on hand"
+            )
+        item.adjust(-qty, src)
+        item.adjust(qty, dst)
+        record_actor(item, actor)
+        return item
+
     # ------------------------------------------------------------------
     # suppliers
     # ------------------------------------------------------------------

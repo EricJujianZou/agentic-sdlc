@@ -72,6 +72,16 @@ def cmd_ship(store: Store, args) -> int:
     return 0
 
 
+def cmd_transfer(store: Store, args) -> int:
+    """Handle ``transfer``: walk units from one warehouse to another."""
+    item = store.transfer(args.sku, args.qty, args.src, args.dst,
+                          actor=args.actor)
+    store.save()
+    print(f"transferred {args.qty} x {item.sku} from {args.src} to "
+          f"{args.dst}, now {item.qty_in(args.dst)} there")
+    return 0
+
+
 def cmd_place_order(store: Store, args) -> int:
     """Handle ``place-order``: record a pending purchase order."""
     date = args.date
@@ -226,6 +236,7 @@ examples:
   stockroom --data ./data add-item WID-1 "Widget" --qty 10 --price 19.99 --supplier acme
   stockroom --data ./data ship WID-1 3
   stockroom --data ./data receive WID-1 5 --warehouse east
+  stockroom --data ./data transfer WID-1 2 main east
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01
   stockroom --data ./data receive-order 1
   stockroom --data ./data report stock
@@ -295,6 +306,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_warehouse(p)
     _add_actor(p)
     p.set_defaults(func=cmd_ship)
+
+    p = sub.add_parser("transfer",
+                       help="move units of an item between warehouses")
+    p.add_argument("sku")
+    p.add_argument("qty", type=int)
+    p.add_argument("src", help="warehouse the stock leaves")
+    p.add_argument("dst", help="warehouse the stock arrives in")
+    _add_actor(p)
+    p.set_defaults(func=cmd_transfer)
 
     p = sub.add_parser("place-order", help="record a purchase order")
     p.add_argument("sku")
