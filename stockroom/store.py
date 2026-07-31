@@ -22,6 +22,7 @@ import json
 import os
 
 from .models import (
+    DEFAULT_CATEGORY,
     Item,
     Order,
     STATUS_CANCELLED,
@@ -92,6 +93,7 @@ class Store:
         qty: int = 0,
         unit_price: float = 0.0,
         supplier_id: str | None = None,
+        category: str = DEFAULT_CATEGORY,
     ) -> Item:
         """Create a new item.
 
@@ -103,7 +105,8 @@ class Store:
         if supplier_id is not None and supplier_id not in self.suppliers:
             raise ValueError(f"unknown supplier {supplier_id}")
         item = Item(sku=sku, name=name, qty=qty, unit_price=unit_price,
-                    supplier_id=supplier_id)
+                    supplier_id=supplier_id,
+                    category=category or DEFAULT_CATEGORY)
         self.items[sku] = item
         return item
 

@@ -12,27 +12,38 @@ from .store import Store
 DEFAULT_THRESHOLD = 5
 
 
-def stock_report(store: Store) -> dict:
+def stock_report(store: Store, by_category: bool = False) -> dict:
     """Full stock listing plus total inventory value.
 
+    Args:
+        by_category: group the rows by shelf area instead of returning
+            one flat list.
+
     Returns:
-        A dict with two keys: ``rows`` is a list with one entry per item
-        (sorted by SKU), each carrying sku/name/qty/unit_price and the
-        line ``value`` (qty times unit price); ``total_value`` is the
-        value of the whole stockroom.
+        A dict with two keys.  ``total_value`` is the value of the whole
+        stockroom.  The other key is ``rows``, a list with one entry per
+        item (sorted by SKU) carrying sku/name/qty/unit_price and the
+        line ``value`` (qty times unit price) - or, when ``by_category``
+        is set, ``categories``, mapping each category name to the rows
+        for that category (still sorted by SKU).
     """
     rows = []
     total_value = 0.0
+    categories: dict[str, list[dict]] = {}
     for item in store.list_items():
         value = item.qty * item.unit_price
         total_value += value
-        rows.append({
+        row = {
             "sku": item.sku,
             "name": item.name,
             "qty": item.qty,
             "unit_price": item.unit_price,
             "value": value,
-        })
+        }
+        rows.append(row)
+        categories.setdefault(item.category, []).append(row)
+    if by_category:
+        return {"categories": categories, "total_value": total_value}
     return {"rows": rows, "total_value": total_value}
 
 

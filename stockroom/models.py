@@ -19,6 +19,9 @@ STATUS_PENDING = "pending"
 STATUS_RECEIVED = "received"
 STATUS_CANCELLED = "cancelled"
 
+# Shelf area an item lives in.  Items created without one land here.
+DEFAULT_CATEGORY = "uncategorized"
+
 
 @dataclass
 class Item:
@@ -31,6 +34,7 @@ class Item:
         unit_price: what we pay per unit, in dollars.
         supplier_id: id of the Supplier we buy this from, or None for
             items we do not reorder.
+        category: shelf area the item belongs to.
     """
 
     sku: str
@@ -38,6 +42,7 @@ class Item:
     qty: int = 0
     unit_price: float = 0.0
     supplier_id: str | None = None
+    category: str = DEFAULT_CATEGORY
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this item."""
@@ -47,6 +52,7 @@ class Item:
             "qty": self.qty,
             "unit_price": self.unit_price,
             "supplier_id": self.supplier_id,
+            "category": self.category,
         }
 
     @classmethod
@@ -58,6 +64,7 @@ class Item:
             qty=data.get("qty", 0),
             unit_price=data.get("unit_price", 0.0),
             supplier_id=data.get("supplier_id"),
+            category=data.get("category") or DEFAULT_CATEGORY,
         )
 
 
