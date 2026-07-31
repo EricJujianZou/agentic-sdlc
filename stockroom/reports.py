@@ -5,7 +5,7 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
-from .models import STATUS_PENDING, to_dollars
+from .models import STATUS_PENDING, percent_of, to_dollars
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
@@ -230,6 +230,34 @@ def order_history(store: Store, sku: str) -> list[dict]:
             })
     rows.sort(key=lambda row: row["date"])
     return rows
+
+
+def order_total(store: Store, order_id: int) -> dict:
+    """What one order comes to, broken down.
+
+    The order is priced at the item's *current* unit price, then the
+    discount rule for that item's category comes off (no rule means no
+    discount), and the tax rate applies to what is left - you are not
+    taxed on money you were never charged.  An unknown order id raises
+    ``ValueError``, same as looking it up any other way.
+
+    Returns:
+        A dict of ``subtotal``, ``discount``, ``tax`` and ``total``, all
+        in dollars.  Each line is worked out in whole cents, so the four
+        add up exactly as printed.
+    """
+    order = store.get_order(order_id)
+    item = store.get_item(order.sku)
+    subtotal_cents = order.qty * item.unit_price_cents
+    discount_cents = percent_of(subtotal_cents,
+                                store.get_discount(item.category))
+    tax_cents = percent_of(subtotal_cents - discount_cents, store.tax_rate)
+    return {
+        "subtotal": to_dollars(subtotal_cents),
+        "discount": to_dollars(discount_cents),
+        "tax": to_dollars(tax_cents),
+        "total": to_dollars(subtotal_cents - discount_cents + tax_cents),
+    }
 
 
 def reorder_suggestions(store: Store,

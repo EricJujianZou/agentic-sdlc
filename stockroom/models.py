@@ -49,6 +49,18 @@ def to_dollars(cents: int) -> float:
     return cents / 100
 
 
+def percent_of(cents: int, percent: float) -> int:
+    """Return ``percent`` of an amount of cents, as whole cents.
+
+    Rates land on fractions of a cent all the time - 5% of $17.55 is
+    87.75 - and money only comes in whole ones, so the result is rounded
+    half up, the way a till does.  Working from cents rather than
+    dollars keeps a breakdown adding up to its own total.
+    """
+    share = Decimal(cents) * Decimal(str(percent)) / 100
+    return int(share.to_integral_value(rounding=ROUND_HALF_UP))
+
+
 def normalize_sku(sku: str) -> str:
     """Return the canonical spelling of a SKU.
 

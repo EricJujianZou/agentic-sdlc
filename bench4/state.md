@@ -22,18 +22,16 @@
 - T10 — `Item.last_actor`/`Order.last_actor` + `models.record_actor(rec, actor)`
   (writes only when not None); `actor=None` on mutators; CLI `--actor`.
 - T11 — `store.SCHEMA_VERSION` -> top-level `"version"` key (first) by `save()`.
-- T12 — warehouses: `DEFAULT_WAREHOUSE`="main"; `Item.quantities` is the truth,
-  `qty` its total (stored dict or int); `qty_in`/`adjust`/`set_stock` take one;
-  `receive`/`ship` hit one room; CLI `--warehouse`.
+- T12 — warehouses (`DEFAULT_WAREHOUSE`="main"): `Item.quantities` is the truth,
+  `qty` its total; `qty_in`/`adjust`/`set_stock`/`receive`/`ship` take one room.
 - T13 — `Store.transfer(sku, qty, src, dst, actor=None)`: ValueError "cannot
   transfer N x SKU out of SRC: only M on hand" first; CLI `transfer`.
 - T14 — `stock_report(store, by_category=False, warehouse=None)`: a warehouse
   prices on `qty_in(wh)` alone, dropping 0s (`None` unchanged); CLI `--warehouse`.
 - T15 — reorder nets out stock: `suggested_qty = max(0, threshold - qty -
   pending)`, pending summing that SKU's pending orders; 0 rows omitted.
-- T16 — `Store._write(path)` split out of `save()`; `backup()` ->
-  `<state>.bak-<stamp>` beside it, `list_backups()` sorted, `restore(name)`
-  copies over + reloads (ValueError unless listed).
+- T16 — `Store._write(path)` split out of `save()`; `backup()` -> `<state>.bak-
+  <stamp>`, `list_backups()` sorted, `restore(name)` (ValueError unless listed).
 - T17 — `Order.shipped_qty` (older -> `qty` when received) + `outstanding`;
   `ship_order(id, qty)` pending-only, 1..outstanding; `receive_order` = the rest.
 - T18 — `Supplier.skus` (older -> []), `add_supplier_sku`/`catalog_skus`/
@@ -45,15 +43,17 @@
 - T21 — `Item.price_history` of `{"date","old","new"}` (dollars); `set_price(sku,
   price, date=None, actor=None)`; `reports.price_changes`; CLI `set-price`.
 - T22 — `stock_report` values exact (no float drift). API/CLI unchanged.
-- T23 — money is whole cents: `models.to_cents`/`to_dollars`;
-  `Item.unit_price_cents` is the truth, `unit_price` a dollars property over it;
-  v4 stores it + history `old_cents`/`new_cents` (v1-v3 floats still read).
+- T23 — whole cents: `models.to_cents`/`to_dollars`; `Item.unit_price_cents` is
+  the truth, `unit_price` a property; v4 + history `old_cents`/`new_cents`.
 - T24 — `stockroom.money.format_money(amount)` -> `"$X.XX"` (`int` = cents,
   `float` = dollars, negatives `-$X.XX`); every CLI money figure goes through it.
-- T25 — `Store.discounts` (category -> percent) under top-level `"discounts"`
-  (missing -> `{}`, no schema bump); `set_discount` (ValueError outside 0..100),
-  `get_discount` -> percent or 0.0, `list_discounts()` sorted pairs,
-  `remove_discount` (ValueError when no rule); CLI `set-discount CAT PCT`/
-  `list-discounts`/`remove-discount CAT`. Not applied to pricing yet.
+- T25 — `Store.discounts` (category -> percent) under `"discounts"` (missing ->
+  `{}`); `set_discount` (ValueError outside 0..100), `get_discount` -> percent
+  or 0.0, `list_discounts`, `remove_discount` (ValueError when no rule); CLI.
+- T26 — `Store.tax_rate` under `"tax_rate"` (missing -> 0.0) + `set_tax_rate`
+  (ValueError when negative); `models.percent_of(cents, percent)` -> cents, half
+  up; `reports.order_total(store, order_id)` -> dollars `subtotal`/`discount`/
+  `tax`/`total` (qty x current price, category discount off, tax on the rest);
+  CLI `set-tax-rate PCT`/`invoice ID`.
 
-## current — none (T25 done)
+## current — none (T26 done)

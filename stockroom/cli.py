@@ -128,6 +128,23 @@ def cmd_remove_discount(store: Store, args) -> int:
     return 0
 
 
+def cmd_set_tax_rate(store: Store, args) -> int:
+    """Handle ``set-tax-rate``: set the flat tax charged on orders."""
+    percent = store.set_tax_rate(args.percent)
+    store.save()
+    print(f"tax rate {_format_percent(percent)}")
+    return 0
+
+
+def cmd_invoice(store: Store, args) -> int:
+    """Handle ``invoice``: print what one order comes to, line by line."""
+    breakdown = reports.order_total(store, args.id)
+    print(f"invoice for order {args.id}")
+    for label in ("subtotal", "discount", "tax", "total"):
+        print(f"  {label:<10} {format_money(breakdown[label]):>10}")
+    return 0
+
+
 def cmd_place_order(store: Store, args) -> int:
     """Handle ``place-order``: record a pending purchase order."""
     date = args.date
@@ -368,6 +385,8 @@ examples:
   stockroom --data ./data set-discount widgets 12.5
   stockroom --data ./data list-discounts
   stockroom --data ./data remove-discount widgets
+  stockroom --data ./data set-tax-rate 5
+  stockroom --data ./data invoice 1
   stockroom --data ./data catalog-add acme WID-1
   stockroom --data ./data catalog-list acme
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01 --supplier acme
@@ -476,6 +495,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("remove-discount", help="drop a category's discount")
     p.add_argument("category")
     p.set_defaults(func=cmd_remove_discount)
+
+    p = sub.add_parser("set-tax-rate", help="set the flat tax rate on orders")
+    p.add_argument("percent", type=float, help="a percent, decimals allowed")
+    p.set_defaults(func=cmd_set_tax_rate)
+
+    p = sub.add_parser("invoice", help="print an order's cost breakdown")
+    p.add_argument("id", type=int)
+    p.set_defaults(func=cmd_invoice)
 
     p = sub.add_parser("place-order", help="record a purchase order")
     p.add_argument("sku")

@@ -9,7 +9,8 @@ schema version it was written by::
         "suppliers": {supplier_id: {...}, ...},
         "orders":    [{...}, ...],
         "shipments": [{...}, ...],
-        "discounts": {category: percent, ...}
+        "discounts": {category: percent, ...},
+        "tax_rate":  percent
     }
 
 Version 4 keeps every price as a whole number of cents; version 3 and
@@ -76,6 +77,7 @@ class Store:
         orders: list of Order, in the order they were placed.
         shipments: list of Shipment, in the order they went out.
         discounts: mapping of category -> discount percent.
+        tax_rate: the flat sales tax percent charged on an order.
     """
 
     def __init__(self, path: str):
@@ -85,6 +87,7 @@ class Store:
         self.orders: list[Order] = []
         self.shipments: list[Shipment] = []
         self.discounts: dict[str, float] = {}
+        self.tax_rate: float = 0.0
 
     # ------------------------------------------------------------------
     # persistence
@@ -100,7 +103,7 @@ class Store:
         records themselves know how to read an older quantity.  A file
         written before shipments were logged has none, which is simply
         an empty log, and one written before discounts were negotiated
-        has no rules.
+        has no rules and no tax.
         """
         if not os.path.exists(self.path):
             return
@@ -121,6 +124,7 @@ class Store:
             category: float(percent)
             for category, percent in raw.get("discounts", {}).items()
         }
+        self.tax_rate = float(raw.get("tax_rate", 0.0))
 
     def save(self) -> None:
         """Write the current state back to the JSON file.
@@ -138,6 +142,7 @@ class Store:
             "orders": [order.to_dict() for order in self.orders],
             "shipments": [s.to_dict() for s in self.shipments],
             "discounts": dict(self.discounts),
+            "tax_rate": self.tax_rate,
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(raw, f, indent=2)
@@ -355,6 +360,19 @@ class Store:
         if category not in self.discounts:
             raise ValueError(f"no discount rule for {category}")
         return self.discounts.pop(category)
+
+    def set_tax_rate(self, percent: float) -> float:
+        """Set the flat tax percent charged on an order.
+
+        Every order is taxed at the same rate, so this is one setting
+        rather than a rule per category.  A negative rate is refused
+        with ``ValueError`` - that would be a rebate, not a tax - and
+        leaves the old rate alone.
+        """
+        if percent < 0:
+            raise ValueError(f"tax rate must not be negative, not {percent}")
+        self.tax_rate = float(percent)
+        return self.tax_rate
 
     # ------------------------------------------------------------------
     # suppliers
