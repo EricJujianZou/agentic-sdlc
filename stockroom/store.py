@@ -4,16 +4,21 @@ The whole application state lives in one JSON file, stamped with the
 schema version it was written by::
 
     {
-        "version":   5,
+        "version":   6,
         "items":     {sku: {...}, ...},
         "suppliers": {supplier_id: {...}, ...},
         "orders":    [{...}, ...],
         "shipments": [{...}, ...],
         "discounts": {category: percent, ...},
-        "tax_rate":  percent,
-        "events":    [{...}, ...]
+        "tax_rate":  percent
     }
 
+Version 6 keeps the audit trail out of that file and in a sidecar of
+its own beside it - ``state.json`` gets a ``state.events.json`` holding
+``{"events": [...]}`` - so the state file stays about the state, and a
+backup of it is not mostly log.  Version 5 and earlier embedded the
+events under an ``"events"`` key; those files still load, and the next
+save moves their trail out to the sidecar.
 Version 5 writes every date zero-padded as ``YYYY-MM-DD``; earlier
 versions wrote them however they were typed.  Version 4 keeps every
 price as a whole number of cents; version 3 and earlier wrote fractional
@@ -55,10 +60,14 @@ from .models import (
 
 #: Schema version stamped into every state file we write.  Version 1 is
 #: the original unversioned layout, which carries no ``"version"`` key.
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 #: What separates the state file's name from a backup's timestamp.
 BACKUP_SUFFIX = ".bak-"
+
+#: What the sidecar holding the audit trail is called: the state file's
+#: name with its ``.json`` suffix replaced by this one.
+EVENTS_SUFFIX = ".events.json"
 
 
 def _backup_stamp() -> str:
@@ -130,6 +139,18 @@ class Store:
     # persistence
     # ------------------------------------------------------------------
 
+    def events_path(self) -> str:
+        """Where this store's audit trail is kept.
+
+        The sidecar sits beside the state file under the same name, with
+        the ``.json`` suffix swapped for ``.events.json``; a state file
+        named anything else simply gets the suffix appended.
+        """
+        base = self.path
+        if base.endswith(".json"):
+            base = base[:-len(".json")]
+        return base + EVENTS_SUFFIX
+
     def load(self) -> None:
         """Read state from the JSON file.
 
@@ -142,6 +163,12 @@ class Store:
         an empty log, and one written before discounts were negotiated
         has no rules and no tax.  A file written before changes were
         audited carries no events, which is likewise an empty trail.
+
+        The audit trail comes from the sidecar when there is one, and
+        from the state file itself when there is not - which is how a
+        version 5 file, whose trail is still embedded, reads back whole.
+        No sidecar and nothing embedded is a store nothing has happened
+        to yet.
         """
         if not os.path.exists(self.path):
             return
@@ -163,17 +190,34 @@ class Store:
             for category, percent in raw.get("discounts", {}).items()
         }
         self.tax_rate = float(raw.get("tax_rate", 0.0))
-        self.events = [dict(event) for event in raw.get("events", [])]
+        self.events = self._load_events(raw)
+
+    def _load_events(self, raw: dict) -> list[dict]:
+        """The audit trail: the sidecar's when it exists, else ``raw``'s."""
+        path = self.events_path()
+        if not os.path.exists(path):
+            return [dict(event) for event in raw.get("events", [])]
+        with open(path, encoding="utf-8") as f:
+            sidecar = json.load(f)
+        return [dict(event) for event in sidecar.get("events", [])]
 
     def save(self) -> None:
         """Write the current state back to the JSON file.
 
         The file always declares the schema version it was written by.
+        The audit trail goes to the sidecar rather than into that file -
+        every time, so a trail that has been undone back to nothing does
+        not come back to life out of a stale sidecar.
         """
         self._write(self.path)
+        self._write_events(self.events_path())
 
     def _write(self, path: str) -> None:
-        """Serialize the current state to ``path`` in the current layout."""
+        """Serialize the current state to ``path`` in the current layout.
+
+        The events are not part of it: they live in their own file, so
+        what this writes - including a backup - is state alone.
+        """
         raw = {
             "version": SCHEMA_VERSION,
             "items": {sku: item.to_dict() for sku, item in self.items.items()},
@@ -182,10 +226,16 @@ class Store:
             "shipments": [s.to_dict() for s in self.shipments],
             "discounts": dict(self.discounts),
             "tax_rate": self.tax_rate,
-            "events": [dict(event) for event in self.events],
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(raw, f, indent=2)
+            f.write("\n")
+
+    def _write_events(self, path: str) -> None:
+        """Serialize the audit trail to its sidecar at ``path``."""
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"events": [dict(event) for event in self.events]},
+                      f, indent=2)
             f.write("\n")
 
     # ------------------------------------------------------------------

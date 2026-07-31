@@ -36,24 +36,24 @@
 - T32 — every stored date is ISO `YYYY-MM-DD` (v5): `stockroom.dates` = `parse_date` (accepts `YYYY-M-D`, ValueError -> exit 1 on anything not a real day), `normalize_date` -> ISO str, `normalize_stored` (tolerant, unparseable/None kept) used by `Order`/`Shipment`/price-history `from_dict` so legacy dates normalize on load and save back padded; `place_order`/`ship`/`set_price`/`receive_order` normalize before mutating; `reports._in_month(date, month)` (parsed, not prefix) drives `monthly_orders`/`monthly_revenue`, and `_normalize_date`/`_as_date` delegate to `dates`.
 - T33 — `reports.AGING_BUCKETS` = `("0-7", "8-30", "31+")`, `order_aging(store, as_of)` (ISO str or `date`): pending only, age = whole days order date -> as-of, `<=7`/`<=30`/rest; every bucket key always present, rows (id/sku/qty/date) oldest first.
   CLI `report aging [--as-of YYYY-MM-DD]` (default today) prints all three headings, "(none)" under an empty one; bad date -> exit 1.
-- T34 — audit trail: `store.events` (`"events"`, missing -> []) = `{"op", "args", "actor", "timestamp"}` oldest first via
-  `store.log_event(op, args, actor)`, called once, last, by every mutator (refused op logs nothing, library calls do), `op` spelled as the
-  CLI command; `import_items` logs one "import-csv"/file; `add_supplier`/`set_discount`/`remove_discount`/`set_tax_rate`/`add_supplier_sku`
-  gained `actor=` + `--actor`. Reports/exports/backup/restore log nothing.
-- T35 — `Store.undo()` (CLI `undo`) reverses the newest change and pops it off `store.events`, so undo walks the trail back step by step.
-  `Store._UNDO` maps op -> inverse from the logged args + current state: add-item/add-supplier delete, receive/ship/transfer adjust back
-  (ship drops its shipment), place-order removes the order, cancel-order -> pending, set-price pops the last `price_history` entry. Logs
-  nothing, leaves `last_actor` alone, raises before mutating ("nothing to undo" / "cannot undo OP" outside `_UNDO`).
+- T34 — audit trail: `store.events` = `{"op", "args", "actor", "timestamp"}` oldest first via `store.log_event(op, args, actor)`, called
+  once, last, by every mutator (refused op logs nothing, library calls do), `op` spelled as the CLI command; `import_items` logs one
+  "import-csv"/file; `add_supplier`/`set_discount`/`remove_discount`/`set_tax_rate`/`add_supplier_sku` gained `actor=` + `--actor`.
+- T35 — `Store.undo()` (CLI `undo`) reverses the newest change and pops it off `store.events`, walking the trail back step by step.
+  `Store._UNDO` maps op -> inverse from the logged args + state: add-item/add-supplier delete, receive/ship/transfer adjust back (ship
+  drops its shipment), place-order removes it, cancel-order -> pending, set-price pops the last `price_history` entry. Logs nothing, leaves `last_actor` alone, raises before mutating ("nothing to undo" / "cannot undo OP").
 - T36 — CLI `scheduled-reorders --as-of YYYY-MM-DD [--threshold N] [--actor A]` (`cli.cmd_scheduled_reorders`, no new store/report API):
-  each `reorder_suggestions(threshold)` row with `suggested_qty > 0` becomes one `place_order(sku, suggested_qty, as_of, supplier_id=row's)`,
-  skipping a SKU already ordered on as-of; prints each order or "nothing to reorder on DATE", exit 0, saves only if placed.
+  each `reorder_suggestions(threshold)` row with `suggested_qty > 0` -> one `place_order(sku, suggested_qty, as_of, supplier_id=row's)`, a
+  SKU already ordered on as-of skipped; prints each order or "nothing to reorder on DATE", exit 0, saves only if placed.
 - T37 — `reports.weekly_shipments(store)` -> `{"YYYY-Www": units}` over `store.shipments`, keyed by `date.isocalendar()` (week zero-padded),
   oldest week first, empty weeks and unparseable dates left out. CLI `report weekly`, "nothing shipped yet" when none.
 - T38 — `reports.order_history` sorts on `_normalize_date(row["date"])`, not the raw string, so a legacy "2026-1-15" is chronological;
   the sort is stable, so same-day orders keep placement order. Shape/CLI unchanged.
 - T39 — `csv_io.export_events(store, path, op=None, since=None)` writes the trail as `ts,op,actor,args` (args JSON in one cell, no actor
-  -> empty cell, oldest first), `op` matched exactly and `since` (ISO day, inclusive) against the timestamp's date part, both filters
-  combining and an empty match still writing the header; `csv_io._event_timestamp` reads either spelling (`timestamp`, older `ts`).
-  CLI `export-events PATH [--op NAME] [--since YYYY-MM-DD]` normalizes `--since` via `dates` (bad date -> exit 1) and prints the count.
+  -> empty cell, oldest first), `op` exact and `since` (ISO day, inclusive) on the timestamp's date part, combining, empty match still
+  writes the header; `_event_timestamp` reads either spelling (`timestamp`/older `ts`). CLI `export-events PATH [--op N] [--since DAY]`.
+- T40 — events live in a sidecar (v6): `store.EVENTS_SUFFIX` + `Store.events_path()` (`state.json` -> `state.events.json`, holding
+  `{"events": [...]}`); `_write` no longer embeds them (so backups are state alone), `save()` also writes the sidecar every time, and
+  `_load_events` reads the sidecar when present, else the main file's embedded trail (v5 and earlier) - missing both = empty trail.
 
-## current — none (T39 done)
+## current — none (T40 done)
