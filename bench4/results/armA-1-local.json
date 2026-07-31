@@ -1,0 +1,439 @@
+{
+  "generated_at": "2026-07-31T08:35:38.410959+00:00",
+  "mode": "working_tree",
+  "scope": {
+    "merge_base": "9ef77a17b732ac334d931e733b381a368f71457c",
+    "changed_files": [
+      "bench4/results/armA-1/T01.meta.json",
+      "bench4/results/armA-1/T02.meta.json",
+      "bench4/results/armA-1/T03.meta.json",
+      "bench4/results/armA-1/T04.meta.json",
+      "bench4/results/armA-1/T05.meta.json",
+      "bench4/results/armA-1/T06.meta.json",
+      "bench4/results/armA-1/T07.meta.json",
+      "bench4/results/armA-1/T08.meta.json",
+      "bench4/results/armA-1/T09.meta.json",
+      "bench4/results/armA-1/T10.meta.json",
+      "bench4/results/armA-1/T11.meta.json",
+      "bench4/results/armA-1/T12.meta.json",
+      "bench4/results/armA-1/T13.meta.json",
+      "bench4/results/armA-1/T14.meta.json",
+      "bench4/results/armA-1/T15.meta.json",
+      "bench4/results/armA-1/T16.meta.json",
+      "bench4/results/armA-1/T17.meta.json",
+      "bench4/results/armA-1/T18.meta.json",
+      "bench4/results/armA-1/T19.meta.json",
+      "bench4/results/armA-1/T20.meta.json",
+      "bench4/results/armA-1/T21.meta.json",
+      "bench4/results/armA-1/T22.meta.json",
+      "bench4/results/armA-1/T23.meta.json",
+      "bench4/results/armA-1/T24.meta.json",
+      "bench4/results/armA-1/T25.meta.json",
+      "bench4/results/armA-1/T26.meta.json",
+      "bench4/results/armA-1/T27.meta.json",
+      "bench4/results/armA-1/T28.meta.json",
+      "bench4/results/armA-1/T29.meta.json",
+      "bench4/results/armA-1/T30.meta.json",
+      "bench4/results/armA-1/T31.meta.json",
+      "bench4/results/armA-1/T32.meta.json",
+      "bench4/results/armA-1/T33.meta.json",
+      "bench4/results/armA-1/T34.meta.json",
+      "bench4/results/armA-1/T35.meta.json",
+      "bench4/results/armA-1/T36.meta.json",
+      "bench4/results/armA-1/T37.meta.json",
+      "bench4/results/armA-1/T38.meta.json",
+      "bench4/results/armA-1/T39.meta.json",
+      "bench4/results/armA-1/T40.meta.json",
+      "bench4/results/armA-1/T41.meta.json",
+      "bench4/results/armA-1/T42.meta.json",
+      "bench4/results/armA-1/T43.meta.json",
+      "bench4/results/armA-1/T44.meta.json",
+      "bench4/results/armA-1/T45.meta.json",
+      "bench4/results/armA-1/T46.meta.json",
+      "bench4/results/armA-1/T47.meta.json",
+      "bench4/results/armA-1/T48.meta.json",
+      "bench4/results/armA-1/T49.meta.json",
+      "bench4/results/armA-1/T50.meta.json",
+      "bench4/state.md",
+      "stockroom/api.py",
+      "stockroom/cache.py",
+      "stockroom/cli.py",
+      "stockroom/csv_io.py",
+      "stockroom/dates.py",
+      "stockroom/models.py",
+      "stockroom/money.py",
+      "stockroom/reports.py",
+      "stockroom/store.py"
+    ],
+    "violations": [],
+    "scope_ok": true
+  },
+  "tests_tampered": true,
+  "tampered_files": [
+    "bench4/grade.py",
+    "bench4/tasks/T01.md",
+    "bench4/tasks/T02.md",
+    "bench4/tasks/T03.md",
+    "bench4/tasks/T04.md",
+    "bench4/tasks/T05.md",
+    "bench4/tasks/T06.md",
+    "bench4/tasks/T07.md",
+    "bench4/tasks/T08.md",
+    "bench4/tasks/T09.md",
+    "bench4/tasks/T10.md",
+    "bench4/tasks/T11.md",
+    "bench4/tasks/T12.md",
+    "bench4/tasks/T13.md",
+    "bench4/tasks/T14.md",
+    "bench4/tasks/T15.md",
+    "bench4/tasks/T16.md",
+    "bench4/tasks/T17.md",
+    "bench4/tasks/T18.md",
+    "bench4/tasks/T19.md",
+    "bench4/tasks/T20.md",
+    "bench4/tasks/T21.md",
+    "bench4/tasks/T22.md",
+    "bench4/tasks/T23.md",
+    "bench4/tasks/T24.md",
+    "bench4/tasks/T25.md",
+    "bench4/tasks/T26.md",
+    "bench4/tasks/T27.md",
+    "bench4/tasks/T28.md",
+    "bench4/tasks/T29.md",
+    "bench4/tasks/T30.md",
+    "bench4/tasks/T31.md",
+    "bench4/tasks/T32.md",
+    "bench4/tasks/T33.md",
+    "bench4/tasks/T34.md",
+    "bench4/tasks/T35.md",
+    "bench4/tasks/T36.md",
+    "bench4/tasks/T37.md",
+    "bench4/tasks/T38.md",
+    "bench4/tasks/T39.md",
+    "bench4/tasks/T40.md",
+    "bench4/tasks/T41.md",
+    "bench4/tasks/T42.md",
+    "bench4/tasks/T43.md",
+    "bench4/tasks/T44.md",
+    "bench4/tasks/T45.md",
+    "bench4/tasks/T46.md",
+    "bench4/tasks/T47.md",
+    "bench4/tasks/T48.md",
+    "bench4/tasks/T49.md",
+    "bench4/tasks/T50.md",
+    "bench4/tests/fixtures/state_v1.json",
+    "bench4/tests/fixtures/state_v2.json",
+    "bench4/tests/fixtures/state_v3.json",
+    "bench4/tests/fixtures/state_v4.json",
+    "bench4/tests/fixtures/state_v5.json",
+    "bench4/tests/fixtures/state_v6.events.json",
+    "bench4/tests/fixtures/state_v6.json",
+    "bench4/tests/test_T01.py",
+    "bench4/tests/test_T02.py",
+    "bench4/tests/test_T03.py",
+    "bench4/tests/test_T04.py",
+    "bench4/tests/test_T05.py",
+    "bench4/tests/test_T06.py",
+    "bench4/tests/test_T07.py",
+    "bench4/tests/test_T08.py",
+    "bench4/tests/test_T09.py",
+    "bench4/tests/test_T10.py",
+    "bench4/tests/test_T11.py",
+    "bench4/tests/test_T12.py",
+    "bench4/tests/test_T13.py",
+    "bench4/tests/test_T14.py",
+    "bench4/tests/test_T15.py",
+    "bench4/tests/test_T16.py",
+    "bench4/tests/test_T17.py",
+    "bench4/tests/test_T18.py",
+    "bench4/tests/test_T19.py",
+    "bench4/tests/test_T20.py",
+    "bench4/tests/test_T21.py",
+    "bench4/tests/test_T22.py",
+    "bench4/tests/test_T23.py",
+    "bench4/tests/test_T24.py",
+    "bench4/tests/test_T25.py",
+    "bench4/tests/test_T26.py",
+    "bench4/tests/test_T27.py",
+    "bench4/tests/test_T28.py",
+    "bench4/tests/test_T29.py",
+    "bench4/tests/test_T30.py",
+    "bench4/tests/test_T31.py",
+    "bench4/tests/test_T32.py",
+    "bench4/tests/test_T33.py",
+    "bench4/tests/test_T34.py",
+    "bench4/tests/test_T35.py",
+    "bench4/tests/test_T36.py",
+    "bench4/tests/test_T37.py",
+    "bench4/tests/test_T38.py",
+    "bench4/tests/test_T39.py",
+    "bench4/tests/test_T40.py",
+    "bench4/tests/test_T41.py",
+    "bench4/tests/test_T42.py",
+    "bench4/tests/test_T43.py",
+    "bench4/tests/test_T44.py",
+    "bench4/tests/test_T45.py",
+    "bench4/tests/test_T46.py",
+    "bench4/tests/test_T47.py",
+    "bench4/tests/test_T48.py",
+    "bench4/tests/test_T49.py",
+    "bench4/tests/test_T50.py"
+  ],
+  "tasks": {
+    "T01": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 1.33s"
+    },
+    "T02": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.25s"
+    },
+    "T03": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.68s"
+    },
+    "T04": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.98s"
+    },
+    "T05": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 0.31s"
+    },
+    "T06": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.52s"
+    },
+    "T07": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.68s"
+    },
+    "T08": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.57s"
+    },
+    "T09": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.63s"
+    },
+    "T10": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 2.05s"
+    },
+    "T11": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.70s"
+    },
+    "T12": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "9 passed in 1.62s"
+    },
+    "T13": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 1.37s"
+    },
+    "T14": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 2.28s"
+    },
+    "T15": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 3.03s"
+    },
+    "T16": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 2.10s"
+    },
+    "T17": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 3.23s"
+    },
+    "T18": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 3.71s"
+    },
+    "T19": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 2.37s"
+    },
+    "T20": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 4.01s"
+    },
+    "T21": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 2.01s"
+    },
+    "T22": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.54s"
+    },
+    "T23": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "7 passed in 0.28s"
+    },
+    "T24": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.95s"
+    },
+    "T25": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 1.61s"
+    },
+    "T26": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 2.70s"
+    },
+    "T27": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 4.15s"
+    },
+    "T28": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 3.18s"
+    },
+    "T29": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 9.70s"
+    },
+    "T30": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 3.06s"
+    },
+    "T31": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 13.95s"
+    },
+    "T32": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 1.85s"
+    },
+    "T33": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "7 passed in 13.96s"
+    },
+    "T34": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "7 passed in 5.82s"
+    },
+    "T35": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "8 passed in 5.16s"
+    },
+    "T36": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 5.93s"
+    },
+    "T37": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 3.80s"
+    },
+    "T38": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.75s"
+    },
+    "T39": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 1.94s"
+    },
+    "T40": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "6 passed in 0.63s"
+    },
+    "T41": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 5.72s"
+    },
+    "T42": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 3.32s"
+    },
+    "T43": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "5 passed in 0.08s"
+    },
+    "T44": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "8 passed in 1.37s"
+    },
+    "T45": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 1.56s"
+    },
+    "T46": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "3 passed in 2.55s"
+    },
+    "T47": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 7.44s"
+    },
+    "T48": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "4 passed in 4.08s"
+    },
+    "T49": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "2 passed in 4.92s"
+    },
+    "T50": {
+      "status": "pass",
+      "returncode": 0,
+      "summary": "7 passed in 0.68s"
+    }
+  },
+  "counts": {
+    "passed": 50,
+    "failed": 0,
+    "total": 50
+  }
+}

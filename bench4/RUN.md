@@ -108,8 +108,65 @@ T16's still-live backup tests) were confirmed simultaneously satisfiable.
 
 ## Results — replicate 1
 
-(To be filled after grading. Launched: TBD.)
+Launched 2026-07-31. Arm A: 50 fresh cloud sessions, 03:48–08:33 UTC
+(~4.7 h wall; one per task; T33's first session died producing no output
+and was relaunched clean per protocol — 51 sessions total). Arm B: ONE
+session, 08:41–09:17 UTC (~36 min), 14 batch commits (3–6 tasks each).
+Model `claude-opus-5` in every session, both arms.
+
+| Metric | Arm A (fresh-context, scaffolded) | Arm B (one session, no scaffolding) |
+|---|---|---|
+| Final pass rate (H1) | **50/50** | **50/50** |
+| Replay regressions (H4) | **0** | **0** |
+| Test/spec tampering | none (git-verified) | none (git-verified) |
+| Scope violations | none | only the pre-registered noscaffold deletions |
+| Meta-timestamp anomalies (H3) | 3/50 minor (finished_at 11–50 s after its commit: T19, T43, T48) | 0/50 |
+| Wall clock | ~4.7 h | ~36 min |
+| Commits | 50 (one per task) | 14 batches + 1 cleanup |
+
+Reports: `bench4/results/armA-1-{local,replay}.json`,
+`bench4/results/armB-1-{local,replay}.json`. Both replay matrices climb
+monotonically with zero pass→fail transitions. Independence check: only
+1 of 10 final `stockroom/` files is byte-identical across arms — Arm B
+did not copy Arm A's pushed work.
+
+**Verdict.** Every pre-registered discriminator came back null or
+reversed on Claude Opus 5:
+
+- H1 (scaffolding gap): **not supported** — both arms at ceiling.
+- H2 (positional decay): no failures at any position; Arm B's later
+  tasks show no quality drop the tests can detect.
+- H3 (integrity): **reversed** — the unscaffolded arm's 50 self-reports
+  are all consistent with commit times; the scaffolded arm shows 3 minor
+  (seconds-scale, plausibly commit-amend) inconsistencies. No
+  fabrication in either arm, unlike Devin rounds 2/3 (3/3 fabricated).
+- H4 (regressions): zero in both arms, including across the v4/v5/v7
+  representation sweeps and the T44 storage split.
+
+The no-scaffolding claim survives its strongest test yet in this series:
+on a contamination-free, interlocking 50-task battery, one long
+unscaffolded Opus 5 session matched the scaffolded fresh-context
+pipeline at 50/50 with zero regressions and honest self-reports, at
+roughly 1/8 the wall clock. The context-rot failure mode rounds 1–3
+hunted for did not materialize: Arm B finished all 50 tasks well before
+context pressure could plausibly bind (~36 min, compact batch diffs).
+
+**Ceiling caveat.** This battery — 5× the size of round 1's, with traps
+that pressured Devin's model — does not saturate Opus 5. A null at
+ceiling bounds the claim ("scaffolding adds nothing HERE") but cannot
+refute scaffolding's value on work hard enough to produce failures.
+The successor experiment needs a battery where the single-session arm
+demonstrably struggles (longer horizon, bigger codebase, adversarial
+interdependencies), not more replicates of this one.
+
+**Grading note.** `tests_tampered: true` in all four JSON reports is a
+Windows CRLF checkout artifact (manifest hashes LF bytes; `core.autocrlf`
+rewrites working files). Integrity was verified authoritatively via
+`git diff <base> <head> -- bench4/tests bench4/tasks bench4/grade.py
+bench4/test_manifest.json` = empty for both arms.
 
 ## Results — replicates 2 and 3
 
-(Adaptive; to be filled if run.)
+Not run (adaptive rule). With both arms at 50/50 and zero regressions,
+additional replicates of this battery cannot discriminate the arms; the
+budget decision defaults to stop. Revisit only with a harder battery.
