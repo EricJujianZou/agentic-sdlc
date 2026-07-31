@@ -76,11 +76,14 @@ class Supplier:
         id: short handle used to reference the supplier from items.
         name: the supplier's business name.
         email: where purchase orders get sent.
+        lead_time_days: whole days between placing an order and the goods
+            turning up.
     """
 
     id: str
     name: str
     email: str
+    lead_time_days: int = 0
 
     def to_dict(self) -> dict:
         """Return a JSON-ready dict for this supplier."""
@@ -88,6 +91,7 @@ class Supplier:
             "id": self.id,
             "name": self.name,
             "email": self.email,
+            "lead_time_days": self.lead_time_days,
         }
 
     @classmethod
@@ -97,6 +101,7 @@ class Supplier:
             id=data["id"],
             name=data["name"],
             email=data.get("email", ""),
+            lead_time_days=data.get("lead_time_days", 0),
         )
 
 

@@ -118,16 +118,19 @@ def reorder_suggestions(store: Store,
     nobody to order the rest from.
 
     Returns:
-        A list of dicts (sku, supplier_id, qty, suggested_qty), sorted
-        by SKU.
+        A list of dicts (sku, supplier_id, qty, suggested_qty,
+        lead_time_days), sorted by SKU.  ``lead_time_days`` is the
+        supplier's lead time, so slow suppliers stand out.
     """
     rows = []
     for item in store.list_items():
         if item.qty < threshold and item.supplier_id is not None:
+            supplier = store.suppliers.get(item.supplier_id)
             rows.append({
                 "sku": item.sku,
                 "supplier_id": item.supplier_id,
                 "qty": item.qty,
                 "suggested_qty": threshold - item.qty,
+                "lead_time_days": supplier.lead_time_days if supplier else 0,
             })
     return rows

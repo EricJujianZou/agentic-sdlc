@@ -136,11 +136,13 @@ class Store:
     # suppliers
     # ------------------------------------------------------------------
 
-    def add_supplier(self, supplier_id: str, name: str, email: str) -> Supplier:
+    def add_supplier(self, supplier_id: str, name: str, email: str,
+                     lead_time_days: int = 0) -> Supplier:
         """Create a new supplier.  The id must not already exist."""
         if supplier_id in self.suppliers:
             raise ValueError(f"supplier {supplier_id} already exists")
-        supplier = Supplier(id=supplier_id, name=name, email=email)
+        supplier = Supplier(id=supplier_id, name=name, email=email,
+                            lead_time_days=lead_time_days)
         self.suppliers[supplier_id] = supplier
         return supplier
 

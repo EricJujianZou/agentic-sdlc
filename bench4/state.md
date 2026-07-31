@@ -8,7 +8,11 @@
   {name: rows}, "total_value"}` when true (plain shape unchanged), CLI
   `add-item --category` + `report stock --by-category`, CSV `category` column
   (last in `csv_io.FIELDNAMES`, import defaults it when absent).
+- T02 — lead times: `Supplier.lead_time_days: int = 0` (persisted; missing key
+  in legacy state -> 0), `Store.add_supplier(..., lead_time_days=0)`,
+  `reports.reorder_suggestions` rows gain `lead_time_days` (0 if supplier
+  missing), CLI `add-supplier --lead-time DAYS` + `report low` prints it.
 
 ## current
 
-(none — T01 done)
+(none — T02 done)

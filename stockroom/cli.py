@@ -42,7 +42,8 @@ def cmd_add_item(store: Store, args) -> int:
 
 def cmd_add_supplier(store: Store, args) -> int:
     """Handle ``add-supplier``: register a new supplier."""
-    supplier = store.add_supplier(args.id, args.name, args.email)
+    supplier = store.add_supplier(args.id, args.name, args.email,
+                                  lead_time_days=args.lead_time)
     store.save()
     print(f"added supplier {supplier.id} ({supplier.name})")
     return 0
@@ -133,7 +134,8 @@ def cmd_report_low(store: Store, args) -> int:
         print("reorder suggestions:")
         for row in suggestions:
             print(f"  {row['sku']}: order {row['suggested_qty']} "
-                  f"from {row['supplier_id']}")
+                  f"from {row['supplier_id']} "
+                  f"(lead time {row['lead_time_days']} days)")
     return 0
 
 
@@ -224,6 +226,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.add_argument("name")
     p.add_argument("email")
+    p.add_argument("--lead-time", type=int, default=0, dest="lead_time",
+                   help="days between placing an order and delivery")
     p.set_defaults(func=cmd_add_supplier)
 
     p = sub.add_parser("receive", help="add units of an item to stock")
