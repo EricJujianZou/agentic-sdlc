@@ -264,13 +264,18 @@ def reorder_suggestions(store: Store,
                         threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
     """Suggest order quantities for items running low.
 
-    For each item below the threshold, suggest topping back up to the
-    threshold, minus whatever is still on the way on that item's pending
-    orders - orders that were received or cancelled count for nothing,
-    and neither does the part of a pending order already delivered,
-    since those units are on the shelf being counted already.  An item whose pending orders already cover the top-up is
-    left out rather than suggested at 0.  Only items with a supplier are
-    included, since there is nobody to order the rest from.
+    For each item the low report flags - stock at the threshold or below,
+    the same test ``low_stock`` uses, so the two views always agree -
+    suggest topping back up to the threshold, minus whatever is still on
+    the way on that item's pending orders: orders that were received or
+    cancelled count for nothing, and neither does the part of a pending
+    order already delivered, since those units are on the shelf being
+    counted already.  An item already at the threshold gets a row
+    suggested at 0 rather than vanishing from under a low list that
+    flagged it; the one item left out is one whose pending orders
+    already cover the top-up, since the restock is on its way.  Only
+    items with a supplier are included, since there is nobody to order
+    the rest from.
 
     Returns:
         A list of dicts (sku, supplier_id, qty, suggested_qty,
@@ -283,10 +288,10 @@ def reorder_suggestions(store: Store,
             pending[order.sku] = pending.get(order.sku, 0) + order.outstanding
     rows = []
     for item in store.list_items():
-        if item.qty < threshold and item.supplier_id is not None:
-            suggested_qty = max(
-                0, threshold - item.qty - pending.get(item.sku, 0))
-            if suggested_qty == 0:
+        if item.qty <= threshold and item.supplier_id is not None:
+            on_the_way = pending.get(item.sku, 0)
+            suggested_qty = max(0, threshold - item.qty - on_the_way)
+            if suggested_qty == 0 and on_the_way:
                 continue
             supplier = store.suppliers.get(item.supplier_id)
             rows.append({

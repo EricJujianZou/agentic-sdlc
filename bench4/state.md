@@ -2,11 +2,11 @@
 
 ## completed
 
-- T01 — `Item.category` (persisted; `models.DEFAULT_CATEGORY`="uncategorized"),
+- T01 — `Item.category` (`models.DEFAULT_CATEGORY`="uncategorized"),
   `add_item(category=)`, `stock_report(by_category=True)` -> `{"categories":
   {name: rows}, "total_value"}`; CLI `--category`/`--by-category`.
-- T02 — `Supplier.lead_time_days: int = 0` (persisted; missing -> 0), on
-  `add_supplier`/`reorder_suggestions` rows; CLI `add-supplier --lead-time`.
+- T02 — `Supplier.lead_time_days: int = 0` (missing -> 0), on `add_supplier`/
+  `reorder_suggestions` rows; CLI `add-supplier --lead-time`.
 - T03 — `reports._normalize_date` pads "2026-1-5" -> "2026-01-05";
   `monthly_orders` matches/sorts on it, dates stored as typed.
 - T04 — `ship` raises ValueError "cannot ship N x SKU: only M on hand" before
@@ -28,8 +28,7 @@
   transfer N x SKU out of SRC: only M on hand" first; CLI `transfer`.
 - T14 — `stock_report(store, by_category=False, warehouse=None)`: a warehouse
   prices on `qty_in(wh)` alone, dropping 0s (`None` unchanged); CLI `--warehouse`.
-- T15 — reorder nets out stock: `suggested_qty = max(0, threshold - qty -
-  pending)`, pending summing that SKU's pending orders; 0 rows omitted.
+- T15 — reorder nets out stock: `max(0, threshold - qty - pending)` over that SKU's pending orders (omission rule: T27).
 - T16 — `Store._write(path)` split out of `save()`; `backup()` -> `<state>.bak-
   <stamp>`, `list_backups()` sorted, `restore(name)` (ValueError unless listed).
 - T17 — `Order.shipped_qty` (older -> `qty` when received) + `outstanding`;
@@ -40,20 +39,21 @@
   warehouse; import is header-name driven, no column -> main.
 - T20 — `models.Shipment` (sku/qty/warehouse/date) in `"shipments"`; `ship(...,
   date=None)` appends one; `turnover(store)` -> `{category: {"YYYY-MM": units}}`.
-- T21 — `Item.price_history` of `{"date","old","new"}` (dollars); `set_price(sku,
-  price, date=None, actor=None)`; `reports.price_changes`; CLI `set-price`.
-- T22 — `stock_report` values exact (no float drift). API/CLI unchanged.
-- T23 — whole cents: `models.to_cents`/`to_dollars`; `Item.unit_price_cents` is
-  the truth, `unit_price` a property; v4 + history `old_cents`/`new_cents`.
+- T21/T22/T23 — whole cents (v4): `models.to_cents`/`to_dollars`,
+  `Item.unit_price_cents` the truth + `unit_price` property, exact
+  `stock_report` values; `Item.price_history` `{"date","old","new"}` dollars in
+  memory / `old_cents`/`new_cents` saved; `set_price(sku, price, date=None,
+  actor=None)`, `reports.price_changes`, CLI `set-price`.
 - T24 — `stockroom.money.format_money(amount)` -> `"$X.XX"` (`int` = cents,
   `float` = dollars, negatives `-$X.XX`); every CLI money figure goes through it.
-- T25 — `Store.discounts` (category -> percent) under `"discounts"` (missing ->
-  `{}`); `set_discount` (ValueError outside 0..100), `get_discount` -> percent
-  or 0.0, `list_discounts`, `remove_discount` (ValueError when no rule); CLI.
-- T26 — `Store.tax_rate` under `"tax_rate"` (missing -> 0.0) + `set_tax_rate`
+- T25 — `Store.discounts` category -> percent (`"discounts"`, missing -> `{}`):
+  `set_discount` (ValueError outside 0..100), `get_discount` -> percent or 0.0, `list_discounts`, `remove_discount` (ValueError when no rule); CLI for each.
+- T26 — `Store.tax_rate` (`"tax_rate"`, missing -> 0.0) + `set_tax_rate`
   (ValueError when negative); `models.percent_of(cents, percent)` -> cents, half
   up; `reports.order_total(store, order_id)` -> dollars `subtotal`/`discount`/
-  `tax`/`total` (qty x current price, category discount off, tax on the rest);
-  CLI `set-tax-rate PCT`/`invoice ID`.
+  `tax`/`total` (qty x price, discount off, tax on rest); CLI `set-tax-rate PCT`/`invoice ID`.
+- T27 — `reorder_suggestions` flags on `qty <= threshold` (same test as
+  `low_stock`) and keeps `suggested_qty == 0` rows; only an item whose pending
+  orders cover the top-up is still omitted (T15). CLI/report shape unchanged.
 
-## current — none (T26 done)
+## current — none (T27 done)
