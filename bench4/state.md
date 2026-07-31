@@ -28,6 +28,12 @@
   category; `export_items`/`FIELDNAMES` unchanged. Only the module
   docstring was updated to state that `category` is optional on import.
 
+- T06 — grouped low stock: new `reports.low_stock_by_category(store,
+  threshold=5)` -> `{category: [sku/name/qty rows, SKU-sorted]}`, categories
+  with nothing low omitted (empty dict when none); CLI `report low
+  --by-category` prints `[category]` headings (flat `report low` and the
+  reorder-suggestions block unchanged).
+
 ## current
 
-(none — T05 done)
+(none — T06 done)

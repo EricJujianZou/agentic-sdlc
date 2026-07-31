@@ -65,6 +65,28 @@ def low_stock(store: Store, threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
     return rows
 
 
+def low_stock_by_category(store: Store,
+                          threshold: int = DEFAULT_THRESHOLD
+                          ) -> dict[str, list[dict]]:
+    """The low-stock listing split up one shelf area at a time.
+
+    Returns:
+        A dict mapping category name to that category's low-stock rows
+        (the same sku/name/qty rows as ``low_stock``, sorted by SKU).
+        A category with nothing running low is left out entirely, so an
+        empty dict means the whole stockroom is above the threshold.
+    """
+    grouped: dict[str, list[dict]] = {}
+    for item in store.list_items():
+        if item.qty <= threshold:
+            grouped.setdefault(item.category, []).append({
+                "sku": item.sku,
+                "name": item.name,
+                "qty": item.qty,
+            })
+    return grouped
+
+
 def _normalize_date(date: str) -> str:
     """Zero-pad a YYYY-M-D date so it matches and sorts as YYYY-MM-DD.
 

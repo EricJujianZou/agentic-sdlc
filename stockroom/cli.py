@@ -119,15 +119,31 @@ def cmd_report_stock(store: Store, args) -> int:
     return 0
 
 
-def cmd_report_low(store: Store, args) -> int:
-    """Handle ``report low``: print items running low, plus
-    reorder suggestions for the ones we can actually reorder."""
-    rows = reports.low_stock(store, threshold=args.threshold)
-    if not rows:
-        print("no items at or below threshold")
-        return 0
+def _print_low_rows(rows: list[dict]) -> None:
     for row in rows:
         print(f"{row['sku']:<12} {row['name']:<24} {row['qty']:>6}")
+
+
+def cmd_report_low(store: Store, args) -> int:
+    """Handle ``report low``: print items running low, optionally under
+    one heading per shelf area, plus reorder suggestions for the ones we
+    can actually reorder."""
+    if args.by_category:
+        grouped = reports.low_stock_by_category(store,
+                                                threshold=args.threshold)
+        if not grouped:
+            print("no items at or below threshold")
+            return 0
+        for category in sorted(grouped):
+            print(f"[{category}]")
+            _print_low_rows(grouped[category])
+            print()
+    else:
+        rows = reports.low_stock(store, threshold=args.threshold)
+        if not rows:
+            print("no items at or below threshold")
+            return 0
+        _print_low_rows(rows)
     suggestions = reports.reorder_suggestions(store, threshold=args.threshold)
     if suggestions:
         print()
@@ -266,6 +282,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = report_sub.add_parser("low", help="items running low")
     p.add_argument("--threshold", type=int, default=reports.DEFAULT_THRESHOLD)
+    p.add_argument("--by-category", action="store_true",
+                   help="group the low items under one heading per shelf area")
     p.set_defaults(func=cmd_report_low)
 
     p = report_sub.add_parser("monthly", help="orders placed in a month")
