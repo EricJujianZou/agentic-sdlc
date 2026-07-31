@@ -34,4 +34,8 @@
 - T31 — `Order.received_date` (None on older orders), stamped by `_book_delivery` when an order tips to received: `receive_order(id, actor=, date=)` -> today when omitted; CLI `receive-order --date`.
   `reports.supplier_on_time(store)` -> `[{supplier_id, total, on_time, pct}]` sorted by id, over received orders *with* a date, grouped by the **item's** supplier, on time when arrival <= placed + lead time (`_as_date` parses via `_normalize_date`); no countable orders -> supplier omitted. CLI `report on-time`.
 
-## current — none (T31 done)
+- T32 — every stored date is ISO `YYYY-MM-DD` (v5): `stockroom.dates` = `parse_date` (accepts `YYYY-M-D`, ValueError -> exit 1 on anything not a real day),
+  `normalize_date` -> ISO str, `normalize_stored` (tolerant, unparseable/None kept) used by `Order`/`Shipment`/price-history `from_dict` so legacy dates normalize on load and save back padded;
+  `place_order`/`ship`/`set_price`/`receive_order` normalize before mutating. `reports._in_month(date, month)` (parsed, not prefix) drives `monthly_orders`/`monthly_revenue`; `_normalize_date`/`_as_date` now delegate to `dates`.
+
+## current — none (T32 done)

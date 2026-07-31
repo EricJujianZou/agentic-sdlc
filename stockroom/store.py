@@ -4,7 +4,7 @@ The whole application state lives in one JSON file, stamped with the
 schema version it was written by::
 
     {
-        "version":   4,
+        "version":   5,
         "items":     {sku: {...}, ...},
         "suppliers": {supplier_id: {...}, ...},
         "orders":    [{...}, ...],
@@ -13,13 +13,15 @@ schema version it was written by::
         "tax_rate":  percent
     }
 
-Version 4 keeps every price as a whole number of cents; version 3 and
-earlier wrote fractional dollars.  Version 3 broke each item's ``qty``
-down per warehouse; version 2 and the original unversioned layout
-(version 1, no ``"version"`` key) store it as one total.  All of them
-still load - their prices are converted and their stock lands in the
-default warehouse - and are rewritten in the current layout the next
-time state is saved.
+Version 5 writes every date zero-padded as ``YYYY-MM-DD``; earlier
+versions wrote them however they were typed.  Version 4 keeps every
+price as a whole number of cents; version 3 and earlier wrote fractional
+dollars.  Version 3 broke each item's ``qty`` down per warehouse;
+version 2 and the original unversioned layout (version 1, no
+``"version"`` key) store it as one total.  All of them still load -
+their dates are normalized, their prices converted and their stock lands
+in the default warehouse - and are rewritten in the current layout the
+next time state is saved.
 
 ``Store`` loads that file into dataclasses, lets callers mutate the state
 through simple methods, and writes it back out with ``save()``.  All the
@@ -35,6 +37,7 @@ import json
 import os
 import shutil
 
+from .dates import normalize_date
 from .models import (
     DEFAULT_CATEGORY,
     DEFAULT_WAREHOUSE,
@@ -51,7 +54,7 @@ from .models import (
 
 #: Schema version stamped into every state file we write.  Version 1 is
 #: the original unversioned layout, which carries no ``"version"`` key.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 #: What separates the state file's name from a backup's timestamp.
 BACKUP_SUFFIX = ".bak-"
@@ -261,8 +264,12 @@ class Store:
 
         Every shipment that does go out is written to the shipment log,
         dated ``date`` or today when no date is given, so reports can
-        tell movement from mere stock levels later on.
+        tell movement from mere stock levels later on.  The date is
+        stored zero-padded; one that is not a real day raises
+        ``ValueError`` before any stock moves.
         """
+        date = (datetime.date.today().isoformat() if date is None
+                else normalize_date(date))
         item = self.get_item(sku)
         on_hand = item.qty_in(warehouse)
         if qty > on_hand:
@@ -271,8 +278,6 @@ class Store:
             )
         item.adjust(-qty, warehouse)
         record_actor(item, actor)
-        if date is None:
-            date = datetime.date.today().isoformat()
         self.shipments.append(
             Shipment(sku=item.sku, qty=qty, warehouse=warehouse, date=date)
         )
@@ -285,12 +290,14 @@ class Store:
         The old and new price are noted on the item's ``price_history``,
         dated ``date`` or today when no date is given, so a report can
         say later what anything cost at the time.  The history records
-        the price the item ended up holding, rounded to whole cents,
-        rather than whatever was typed.
+        the price the item ended up holding, rounded to whole cents, and
+        the date zero-padded, rather than whatever was typed; a date
+        that is not a real day raises ``ValueError`` and the price is
+        left alone.
         """
+        date = (datetime.date.today().isoformat() if date is None
+                else normalize_date(date))
         item = self.get_item(sku)
-        if date is None:
-            date = datetime.date.today().isoformat()
         old_price = item.unit_price
         item.unit_price = price
         item.price_history.append({
@@ -436,11 +443,14 @@ class Store:
                     actor: str | None = None) -> Order:
         """Record a new pending purchase order for an existing item.
 
-        ``date`` is stored as given; the CLI defaults it to today when
-        the user does not pass one.  The order remembers who it was
-        placed with - ``supplier_id`` when one is named, otherwise
-        whoever ``_order_supplier`` works out.
+        ``date`` is stored zero-padded, however it was typed, and one
+        that is not a real day raises ``ValueError`` before the order is
+        recorded; the CLI defaults it to today when the user does not
+        pass one.  The order remembers who it was placed with -
+        ``supplier_id`` when one is named, otherwise whoever
+        ``_order_supplier`` works out.
         """
+        date = normalize_date(date)
         item = self.get_item(sku)  # validates the SKU
         if supplier_id is not None:
             self.get_supplier(supplier_id)  # validates the supplier
@@ -513,12 +523,15 @@ class Store:
         ``date`` is the day the goods turned up, today when no date is
         given; it is what the on-time report measures the supplier
         against, so it is worth passing when booking in a late delivery
-        after the fact.
+        after the fact.  It is stored zero-padded, and one that is not a
+        real day raises ``ValueError`` before anything is booked in.
 
         Only a pending order can be received; receiving an already
         received or cancelled one raises ``ValueError`` and adds nothing
         to stock.
         """
+        if date is not None:
+            date = normalize_date(date)
         order = self.get_order(order_id)
         self._require_pending(order, "receive")
         self._book_delivery(order, order.outstanding, actor, date)

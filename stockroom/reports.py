@@ -7,6 +7,7 @@ module mutates state, so the CLI never saves after running a report.
 
 import datetime
 
+from . import dates
 from .models import (STATUS_PENDING, STATUS_RECEIVED, percent_of, to_dollars)
 from .store import Store
 
@@ -128,36 +129,54 @@ def search_items(store: Store, query: str) -> list[dict]:
 
 
 def _normalize_date(date: str) -> str:
-    """Zero-pad a YYYY-M-D date so it matches and sorts as YYYY-MM-DD.
+    """The canonical YYYY-MM-DD spelling of a date, for sorting.
 
-    Order dates are stored exactly as typed and people routinely leave
-    the leading zeros off ("2026-1-5").  Anything that is not three
-    numeric parts is returned unchanged, so an odd date still shows up
-    in reports rather than breaking them.
+    Dates are stored zero-padded, so this is normally the date itself;
+    anything odd enough not to parse is returned unchanged, so it still
+    shows up in reports rather than breaking them.
     """
-    parts = date.split("-")
-    if len(parts) != 3 or not all(part.isdigit() for part in parts):
-        return date
-    year, month, day = parts
-    return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+    return dates.normalize_stored(date)
+
+
+def _in_month(date: str, month: str) -> bool:
+    """Whether a stored date falls in the given "YYYY-MM" month.
+
+    Both sides are read as numbers rather than compared as text, so
+    neither an unpadded month nor an odd spelling on the date can put an
+    order in the wrong month - or leave it out of every one.  A date
+    that is not a real day belongs to no month.
+    """
+    try:
+        value = dates.parse_date(date)
+    except ValueError:
+        return False
+    return (value.year, value.month) == _month_parts(month)
+
+
+def _month_parts(month: str) -> tuple[int, int] | None:
+    """A "YYYY-MM" month as (year, month), or None when it is not one."""
+    parts = month.split("-")
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        return None
+    return int(parts[0]), int(parts[1])
 
 
 def monthly_orders(store: Store, month: str) -> list[dict]:
     """All orders placed in the given month.
 
     Args:
-        month: a prefix like "2026-01"; any order dated within that
-            month is included, regardless of status.  Order dates are
-            zero-padded before matching, so one dated "2026-1-5" counts
-            toward January just like "2026-01-05".
+        month: a month like "2026-01"; any order dated within that month
+            is included, regardless of status.  The month and the order
+            dates are matched as calendar dates rather than as text, so
+            an order dated "2026-1-5" counts toward January just like
+            "2026-01-05".
 
     Returns:
         A list of dicts (id, sku, qty, date, status), oldest first.
-        ``date`` is the date as originally recorded.
     """
     rows = []
     for order in store.orders:
-        if _normalize_date(order.date).startswith(month):
+        if _in_month(order.date, month):
             rows.append({
                 "id": order.id,
                 "sku": order.sku,
@@ -281,8 +300,8 @@ def monthly_revenue(store: Store, month: str) -> dict:
     discount off, tax on the rest - so the two always agree.
 
     Args:
-        month: a prefix like "2026-07"; order dates are zero-padded
-            before matching, same as ``monthly_orders``.
+        month: a month like "2026-07"; order dates are matched as
+            calendar dates, same as ``monthly_orders``.
 
     Returns:
         A dict with ``rows``, one dict per counted order (id, sku,
@@ -293,7 +312,7 @@ def monthly_revenue(store: Store, month: str) -> dict:
     """
     counted = [order for order in store.orders
                if order.status == STATUS_RECEIVED
-               and _normalize_date(order.date).startswith(month)]
+               and _in_month(order.date, month)]
     counted.sort(key=lambda order: _normalize_date(order.date))
     rows = []
     total_cents = 0
@@ -354,7 +373,7 @@ def supplier_on_time(store: Store) -> list[dict]:
 
 def _as_date(date: str) -> datetime.date:
     """Read a stored date as a real date, so days can be counted off it."""
-    return datetime.date.fromisoformat(_normalize_date(date))
+    return dates.parse_date(date)
 
 
 def reorder_suggestions(store: Store,

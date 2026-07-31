@@ -15,6 +15,8 @@ dict shape is exactly what ends up on disk, so keep the keys stable.
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 
+from .dates import normalize_stored
+
 # Order lifecycle: an order starts out pending, then is either received
 # (goods arrived and were added to stock) or cancelled.
 STATUS_PENDING = "pending"
@@ -246,15 +248,18 @@ def _price_change_from_dict(entry: dict) -> dict:
 
     Entries record whole cents (``old_cents`` / ``new_cents``); ones
     written before that carry fractional dollars under ``old`` / ``new``
-    and are taken as they are.
+    and are taken as they are.  The date is normalized either way, so a
+    change stored as "2026-1-5" reports as "2026-01-05".
     """
     if "old_cents" in entry:
         return {
-            "date": entry["date"],
+            "date": normalize_stored(entry["date"]),
             "old": to_dollars(entry["old_cents"]),
             "new": to_dollars(entry["new_cents"]),
         }
-    return dict(entry)
+    change = dict(entry)
+    change["date"] = normalize_stored(change.get("date"))
+    return change
 
 
 @dataclass
@@ -317,7 +322,7 @@ class Shipment:
         sku: the item that went out.
         qty: how many units went.
         warehouse: the room they were picked from.
-        date: the day they went out, as a string (normally YYYY-MM-DD).
+        date: the day they went out, as a ``YYYY-MM-DD`` string.
     """
 
     sku: str
@@ -336,12 +341,15 @@ class Shipment:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Shipment":
-        """Build a Shipment from a dict previously produced by to_dict."""
+        """Build a Shipment from a dict previously produced by to_dict.
+
+        A date stored unpadded is read back in the canonical spelling.
+        """
         return cls(
             sku=data["sku"],
             qty=data["qty"],
             warehouse=data.get("warehouse", DEFAULT_WAREHOUSE),
-            date=data.get("date", ""),
+            date=normalize_stored(data.get("date", "")),
         )
 
 
@@ -353,8 +361,7 @@ class Order:
         id: small integer id, unique within the store.
         sku: the item being ordered.
         qty: how many units were ordered.
-        date: the date the order was placed, as a string (whatever the
-            user typed, normally YYYY-MM-DD).
+        date: the date the order was placed, as a ``YYYY-MM-DD`` string.
         status: one of "pending", "received" or "cancelled".
         supplier_id: id of the Supplier the order was placed with, or
             None when we could not work out who supplies the item.
@@ -364,8 +371,8 @@ class Order:
             deliver in parts, so this climbs from 0 to ``qty`` over one
             or more deliveries; the order is received once it gets
             there.
-        received_date: the day the goods actually turned up, as a string
-            (normally YYYY-MM-DD), or None for an order that has not
+        received_date: the day the goods actually turned up, as a
+            ``YYYY-MM-DD`` string, or None for an order that has not
             arrived - or one received before we started noting the day.
     """
 
@@ -406,7 +413,8 @@ class Order:
         ``shipped_qty``; a pending one of those has had nothing
         delivered, and a received one arrived whole.  Ones written
         before arrival days were noted carry no ``received_date``, so we
-        do not know when they turned up.
+        do not know when they turned up.  Dates stored unpadded, as they
+        were typed, are read back in the canonical spelling.
         """
         status = data.get("status", STATUS_PENDING)
         default_shipped = data["qty"] if status == STATUS_RECEIVED else 0
@@ -414,10 +422,10 @@ class Order:
             id=data["id"],
             sku=data["sku"],
             qty=data["qty"],
-            date=data["date"],
+            date=normalize_stored(data["date"]),
             status=status,
             supplier_id=data.get("supplier_id"),
             last_actor=data.get("last_actor"),
             shipped_qty=data.get("shipped_qty", default_shipped),
-            received_date=data.get("received_date"),
+            received_date=normalize_stored(data.get("received_date")),
         )
