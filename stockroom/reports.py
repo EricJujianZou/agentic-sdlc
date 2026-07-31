@@ -184,6 +184,28 @@ def turnover(store: Store) -> dict[str, dict[str, int]]:
     return totals
 
 
+def price_changes(store: Store) -> list[dict]:
+    """Every recorded price change, across every item.
+
+    Returns:
+        A list of dicts (sku, date, old, new), oldest first.  ``date``
+        is the date as recorded; the sort zero-pads it first, so a
+        change dated "2026-1-5" lands ahead of one dated "2026-01-10".
+        Empty when no price has ever been changed.
+    """
+    rows = []
+    for item in store.list_items():
+        for entry in item.price_history:
+            rows.append({
+                "sku": item.sku,
+                "date": entry["date"],
+                "old": entry["old"],
+                "new": entry["new"],
+            })
+    rows.sort(key=lambda row: _normalize_date(row["date"]))
+    return rows
+
+
 def order_history(store: Store, sku: str) -> list[dict]:
     """Every order ever placed for one SKU.
 

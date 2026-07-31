@@ -262,6 +262,26 @@ class Store:
         )
         return item
 
+    def set_price(self, sku: str, price: float, date: str | None = None,
+                  actor: str | None = None) -> Item:
+        """Change what an item costs per unit, and remember the change.
+
+        The old and new price are noted on the item's ``price_history``,
+        dated ``date`` or today when no date is given, so a report can
+        say later what anything cost at the time.
+        """
+        item = self.get_item(sku)
+        if date is None:
+            date = datetime.date.today().isoformat()
+        item.price_history.append({
+            "date": date,
+            "old": item.unit_price,
+            "new": price,
+        })
+        item.unit_price = price
+        record_actor(item, actor)
+        return item
+
     def transfer(self, sku: str, qty: int, src: str, dst: str,
                  actor: str | None = None) -> Item:
         """Walk ``qty`` units of an item from one warehouse to another.

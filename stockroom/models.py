@@ -73,6 +73,9 @@ class Item:
         last_actor: name of whoever last changed this item, or None if
             no change has been made with an actor named.
         quantities: units on hand per warehouse name.
+        price_history: one entry per price change, oldest first, each a
+            dict of date / old price / new price.  An item whose price
+            has never been changed has an empty history.
     """
 
     sku: str
@@ -83,6 +86,7 @@ class Item:
     category: str = DEFAULT_CATEGORY
     last_actor: str | None = None
     quantities: dict[str, int] = field(default_factory=dict)
+    price_history: list[dict] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Seed the breakdown, then make ``qty`` agree with it.
@@ -134,6 +138,7 @@ class Item:
             "supplier_id": self.supplier_id,
             "category": self.category,
             "last_actor": self.last_actor,
+            "price_history": [dict(entry) for entry in self.price_history],
         }
 
     @classmethod
@@ -142,7 +147,9 @@ class Item:
 
         ``qty`` is a per-warehouse mapping in the current layout and a
         plain total in files written before warehouses existed; a total
-        is read as that many units in the default warehouse.
+        is read as that many units in the default warehouse.  Items
+        written before prices were tracked have no history, which is
+        simply an empty one.
         """
         stored_qty = data.get("qty", 0)
         quantities = dict(stored_qty) if isinstance(stored_qty, dict) else {}
@@ -155,6 +162,8 @@ class Item:
             category=data.get("category") or DEFAULT_CATEGORY,
             last_actor=data.get("last_actor"),
             quantities=quantities,
+            price_history=[dict(entry)
+                           for entry in data.get("price_history", [])],
         )
 
 

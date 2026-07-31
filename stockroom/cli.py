@@ -76,6 +76,19 @@ def cmd_ship(store: Store, args) -> int:
     return 0
 
 
+def cmd_set_price(store: Store, args) -> int:
+    """Handle ``set-price``: change an item's unit price.
+
+    ``--date`` says when the new price took effect; the store dates the
+    change today when it is left off.
+    """
+    item = store.set_price(args.sku, args.price, date=args.date,
+                           actor=args.actor)
+    store.save()
+    print(f"{item.sku} now {item.unit_price:.2f} per unit")
+    return 0
+
+
 def cmd_transfer(store: Store, args) -> int:
     """Handle ``transfer``: walk units from one warehouse to another."""
     item = store.transfer(args.sku, args.qty, args.src, args.dst,
@@ -231,6 +244,18 @@ def cmd_report_turnover(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_price_changes(store: Store, args) -> int:
+    """Handle ``report price-changes``: print every price change."""
+    rows = reports.price_changes(store)
+    if not rows:
+        print("no price changes recorded")
+        return 0
+    for row in rows:
+        print(f"{row['date']:<12} {row['sku']:<12} "
+              f"{row['old']:>10.2f} -> {row['new']:>10.2f}")
+    return 0
+
+
 def cmd_report_history(store: Store, args) -> int:
     """Handle ``report history``: print all orders for a SKU."""
     store.get_item(args.sku)  # complain early about unknown SKUs
@@ -308,6 +333,7 @@ examples:
   stockroom --data ./data ship WID-1 3
   stockroom --data ./data receive WID-1 5 --warehouse east
   stockroom --data ./data transfer WID-1 2 main east
+  stockroom --data ./data set-price WID-1 24.50 --date 2026-07-05
   stockroom --data ./data catalog-add acme WID-1
   stockroom --data ./data catalog-list acme
   stockroom --data ./data place-order WID-1 20 --date 2026-07-01 --supplier acme
@@ -316,6 +342,7 @@ examples:
   stockroom --data ./data report stock
   stockroom --data ./data report monthly 2026-07
   stockroom --data ./data report turnover
+  stockroom --data ./data report price-changes
   stockroom --data ./data search widget
   stockroom --data ./data export-csv items.csv
   stockroom --data ./data backup
@@ -385,6 +412,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_warehouse(p)
     _add_actor(p)
     p.set_defaults(func=cmd_ship)
+
+    p = sub.add_parser("set-price", help="change an item's unit price")
+    p.add_argument("sku")
+    p.add_argument("price", type=float)
+    p.add_argument("--date", default=None,
+                   help="date the new price took effect (default: today)")
+    _add_actor(p)
+    p.set_defaults(func=cmd_set_price)
 
     p = sub.add_parser("transfer",
                        help="move units of an item between warehouses")
@@ -458,6 +493,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = report_sub.add_parser("turnover",
                               help="units shipped per category per month")
     p.set_defaults(func=cmd_report_turnover)
+
+    p = report_sub.add_parser("price-changes",
+                              help="every recorded price change")
+    p.set_defaults(func=cmd_report_price_changes)
 
     p = report_sub.add_parser("history", help="order history for one SKU")
     p.add_argument("sku")
