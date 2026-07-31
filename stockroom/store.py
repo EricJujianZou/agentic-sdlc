@@ -1,18 +1,21 @@
 """Persistence and business operations for the stockroom.
 
-The whole application state lives in one JSON file with three top-level
-keys::
+The application state lives in a small set of JSON files in the data
+directory::
 
-    {
-        "items":     {sku: {...}, ...},
-        "suppliers": {supplier_id: {...}, ...},
-        "orders":    [{...}, ...]
-    }
+    state.json            meta: version, catalogue, suppliers, settings
+    items.<warehouse>.json  {sku: qty} for one warehouse
+    orders.json           the purchase orders
+    state.events.json     the activity history
 
-``Store`` loads that file into dataclasses, lets callers mutate the state
-through simple methods, and writes it back out with ``save()``.  All the
-"business rules" (such as they are) live here too, so the CLI stays a
-thin layer of argument parsing and printing.
+``Store`` loads those into records, lets callers mutate the state through
+simple methods, and writes them back out with ``save()`` -- each file
+written to a temporary name and renamed into place, so a crash mid-save
+cannot truncate one.  Every layout we have ever written still loads, all
+the way back to the original single self-contained ``state.json``; the
+next save upgrades it in place.  All the "business rules" (such as they
+are) live here too, so the CLI stays a thin layer of argument parsing and
+printing.
 
 Errors are reported by raising ``ValueError`` with a human readable
 message; the CLI turns those into exit code 1.

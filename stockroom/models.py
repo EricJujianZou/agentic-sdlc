@@ -6,12 +6,15 @@ Three record types cover everything the app tracks:
 * ``Supplier`` - somewhere we buy items from.
 * ``Order`` - a purchase order for more of an item.
 
-Each type is a small dataclass with ``to_dict`` / ``from_dict`` helpers so
-the store can serialise state to JSON without any extra machinery.  The
-dict shape is exactly what ends up on disk, so keep the keys stable.
+Each type has ``to_dict`` / ``from_dict`` helpers so the store can
+serialise state to JSON without any extra machinery.  The dict shape is
+what ends up on disk, so keep the keys stable -- and ``from_dict`` has to
+read every shape we have ever written: plain integer quantities from
+before warehouses, fractional dollars from before money moved to cents,
+and dates typed without their leading zeros.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .dates import normalize_stored_date
 from .money import to_cents, to_dollars
