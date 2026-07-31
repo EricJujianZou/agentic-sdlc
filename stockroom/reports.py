@@ -5,6 +5,8 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
+from decimal import Decimal
+
 from .models import STATUS_PENDING
 from .store import Store
 
@@ -32,29 +34,34 @@ def stock_report(store: Store,
         item (sorted by SKU) carrying sku/name/qty/unit_price and the
         line ``value`` (qty times unit price) - or, when ``by_category``
         is set, ``categories``, mapping each category name to the rows
-        for that category (still sorted by SKU).
+        for that category (still sorted by SKU).  Both the line values
+        and the total are worked out in exact decimal arithmetic, so
+        they match a hand-added column to the cent.
     """
     rows = []
-    total_value = 0.0
+    total_value = Decimal(0)
     categories: dict[str, list[dict]] = {}
     for item in store.list_items():
         qty = item.qty if warehouse is None else item.qty_in(warehouse)
         if warehouse is not None and qty == 0:
             continue
-        value = qty * item.unit_price
+        # Money is counted in decimal, not binary: a price like 0.10 has no
+        # exact float form, so multiplying and adding them up drifts a
+        # fraction of a cent off what the same sum does on paper.
+        value = qty * Decimal(str(item.unit_price))
         total_value += value
         row = {
             "sku": item.sku,
             "name": item.name,
             "qty": qty,
             "unit_price": item.unit_price,
-            "value": value,
+            "value": float(value),
         }
         rows.append(row)
         categories.setdefault(item.category, []).append(row)
     if by_category:
-        return {"categories": categories, "total_value": total_value}
-    return {"rows": rows, "total_value": total_value}
+        return {"categories": categories, "total_value": float(total_value)}
+    return {"rows": rows, "total_value": float(total_value)}
 
 
 def low_stock(store: Store, threshold: int = DEFAULT_THRESHOLD) -> list[dict]:

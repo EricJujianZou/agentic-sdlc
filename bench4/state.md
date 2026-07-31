@@ -25,7 +25,7 @@
 - T11 — `store.SCHEMA_VERSION` -> top-level `"version"` key (first) by `save()`.
 - T12 — warehouses: `DEFAULT_WAREHOUSE`="main"; `Item.quantities` is the truth,
   `qty` its total; `qty_in(wh)`/`adjust(qty,wh)`/`set_stock(qty,wh)`; `receive`/
-  `ship` hit one room; CLI `--warehouse`; stored `"qty"` = dict or int (main).
+  `ship` hit one room; CLI `--warehouse`; stored `"qty"` = dict or int.
 - T13 — `Store.transfer(sku, qty, src, dst, actor=None)`: ValueError "cannot
   transfer N x SKU out of SRC: only M on hand" before moving, else `adjust`
   both; CLI `transfer SKU QTY SRC DST`.
@@ -40,14 +40,12 @@
 - T17 — `Order.shipped_qty` (persisted; older -> `qty` when received) +
   `outstanding`; `ship_order(id, qty)` pending-only, `1<=qty<=outstanding` or
   ValueError, else `_book_delivery` (received at 0); `receive_order` = the rest.
-- T18 — `Supplier.skus` (persisted, older -> []), `add_supplier_sku(sid, sku)`/
-  `catalog_skus(sid)`/`suppliers_for(sku)`; `place_order(..., supplier_id=None)`
-  sets `Order.supplier_id`: named wins, else sole catalogue match, several ->
-  ValueError, none -> item's own.
-- T19 — CSV v3: `warehouse` last in `csv_io.FIELDNAMES`; export = one row per
-  warehouse holding stock (sorted, `qty` = that room's), stockless -> `main`/0.
-  Import is header-name driven (any column order); a `warehouse` column sets
-  that room via `Item.set_warehouse_stock`, none -> `set_stock` into `main`.
+- T18 — `Supplier.skus` (persisted, older -> []), `add_supplier_sku(sid,sku)`/`catalog_skus`/
+  `suppliers_for(sku)`; `place_order(...,supplier_id=None)` sets `Order.supplier_id`:
+  named > sole catalogue match > item's own; several matches -> ValueError.
+- T19 — CSV v3: `warehouse` last in `csv_io.FIELDNAMES`; export = one row per warehouse
+  holding stock (sorted, `qty` = that room's), stockless -> `main`/0. Import is header-name
+  driven (any column order); `warehouse` column -> `set_warehouse_stock`, none -> main.
 - T20 — `models.Shipment` (sku/qty/warehouse/date) in top-level `"shipments"`
   (missing -> []); `ship(..., date=None)` -> today appends one (only `ship`);
   `turnover(store)` -> `{category: {"YYYY-MM": units}}`; CLI `report turnover`.
@@ -55,5 +53,7 @@
   []); `set_price(sku, price, date=None, actor=None)` -> today appends one, sets
   `unit_price`; `reports.price_changes(store)` -> sku/date/old/new sorted by
   `_normalize_date`. CLI `set-price SKU PRICE [--date]`, `report price-changes`.
+- T22 — `stock_report` values exact: `qty * Decimal(str(item.unit_price))`,
+  `float()` only when filling `value`/`total_value`. API/CLI unchanged.
 
-## current — none (T21 done)
+## current — none (T22 done)
