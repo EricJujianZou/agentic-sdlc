@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_qutebrowser__qutebrowser-394bfaed6544c952c6b3463751abab3176ad4997-vafb3e8e01b31319c66c4e666b8a3b1d8ba55db24",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-07-31T23:28:00Z",
+  "finished_at": "2026-07-31T23:42:00Z",
+  "turns_estimate": 55,
+  "self_assessment": "Reasonably confident on the core mechanics (new qutebrowser/misc/elf.py ELF parser validated byte-for-byte against readelf and against a real installed libQt5WebEngineCore.so.5 extracting correct QtWebEngine/Chromium versions; VersionNumber now genuinely subclasses QVersionNumber; UserAgent.qt_version and WebEngineVersions/qtwebengine_versions/_variant/_backend all manually exercised end-to-end with real PyQt5 and behave sensibly, including a caught-and-fixed normalization bug in version threshold comparisons and a caught-and-fixed QVersionNumber.__str__ bug), but less confident on exact-string details the hidden tests may pin down verbatim (e.g. precise source-field casing/format, exact fallback precedence between UA/ELF/PyQt, and any private helper names) since the task explicitly disallowed consulting the real gold patch or later history and the written requirements/interface text was internally inconsistent on ordering and naming in a couple of places."
+}
