@@ -5,14 +5,24 @@ dicts); formatting for the terminal happens in the CLI.  Nothing in this
 module mutates state, so the CLI never saves after running a report.
 """
 
+from decimal import ROUND_HALF_UP, Decimal
+
 from .dates import parse_date, sort_key
-from .models import DEFAULT_CATEGORY, STATUS_PENDING
-from .money import to_dollars
+from .models import DEFAULT_CATEGORY, STATUS_PENDING, STATUS_RECEIVED
+from .money import format_money, to_cents, to_dollars
 from .store import Store
 
 # Items at or around this stock level are worth another look.  The CLI
 # lets the user override it per invocation with --threshold.
 DEFAULT_THRESHOLD = 5
+
+
+def _percent_of(cents: int, percent) -> int:
+    """*percent* of an amount in cents, rounded to whole cents."""
+    if not percent:
+        return 0
+    return int((Decimal(cents) * Decimal(str(percent)) / 100)
+               .quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _in_month(date: str, month: str) -> bool:
@@ -168,8 +178,9 @@ def reorder_suggestions(store: Store,
                         threshold: int = DEFAULT_THRESHOLD) -> list[dict]:
     """Suggest order quantities for items running low.
 
-    For each item below the threshold, suggest topping back up to the
-    threshold, minus whatever is already on the way on pending orders.
+    For each item at or below the threshold -- the same items the
+    low-stock report flags -- suggest topping back up to the threshold,
+    minus whatever is already on the way on pending orders.
     Only items with a supplier are included, since there is nobody to
     order the rest from, and items the pending orders already cover are
     left out.
@@ -181,10 +192,13 @@ def reorder_suggestions(store: Store,
     """
     rows = []
     for item in store.list_items():
-        if item.qty >= threshold or item.supplier_id is None:
+        # Same test as the low-stock report, so the two always agree.
+        if item.qty > threshold or item.supplier_id is None:
             continue
-        suggested = threshold - item.qty - pending_qty(store, item.sku)
-        if suggested <= 0:
+        pending = pending_qty(store, item.sku)
+        suggested = max(0, threshold - item.qty - pending)
+        if suggested == 0 and pending:
+            # Orders already on the way cover us; nothing to suggest.
             continue
         supplier = store.suppliers.get(item.supplier_id)
         rows.append({
@@ -195,6 +209,70 @@ def reorder_suggestions(store: Store,
             "lead_time_days": supplier.lead_time_days if supplier else 0,
         })
     return rows
+
+
+def order_total(store: Store, order_id: int) -> dict:
+    """What an order costs once discount and tax are applied.
+
+    Returns:
+        A dict with ``subtotal``, ``discount``, ``tax`` and ``total``,
+        all dollar amounts, computed in whole cents so they are exact.
+    """
+    order = store.get_order(order_id)
+    item = store.get_item(order.sku)
+    subtotal = order.qty * item.unit_price_cents
+    discount = _percent_of(subtotal, store.get_discount(item.category))
+    tax = _percent_of(subtotal - discount, store.tax_rate)
+    return {
+        "subtotal": to_dollars(subtotal),
+        "discount": to_dollars(discount),
+        "tax": to_dollars(tax),
+        "total": to_dollars(subtotal - discount + tax),
+    }
+
+
+def monthly_revenue(store: Store, month: str) -> dict:
+    """What the month's completed orders were worth.
+
+    Returns:
+        ``{"rows": [{"id", "sku", "total"}, ...], "total": dollars}`` --
+        one row per received order dated in *month*, priced the same way
+        the invoice is (category discount and tax at current prices).
+        Pending and cancelled orders do not count.
+    """
+    rows = []
+    total_cents = 0
+    for order in store.orders:
+        if order.status != STATUS_RECEIVED or not _in_month(order.date, month):
+            continue
+        breakdown = order_total(store, order.id)
+        total_cents += to_cents(breakdown["total"])
+        rows.append({"id": order.id, "sku": order.sku,
+                     "total": breakdown["total"]})
+    rows.sort(key=lambda row: row["id"])
+    return {"rows": rows, "total": to_dollars(total_cents)}
+
+
+def invoice_text(store: Store, order_id: int) -> str:
+    """The invoice for one order as plain text.
+
+    The layout is fixed and carries nothing run-dependent, so the same
+    order always produces byte-identical output.
+    """
+    order = store.get_order(order_id)
+    breakdown = order_total(store, order_id)
+    lines = [
+        f"Invoice for order {order.id}",
+        f"SKU:      {order.sku}",
+        f"Quantity: {order.qty}",
+        f"Date:     {order.date}",
+        "",
+        f"Subtotal: {format_money(breakdown['subtotal'])}",
+        f"Discount: {format_money(breakdown['discount'])}",
+        f"Tax:      {format_money(breakdown['tax'])}",
+        f"Total:    {format_money(breakdown['total'])}",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def price_changes(store: Store) -> list[dict]:

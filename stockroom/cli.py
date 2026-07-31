@@ -150,6 +150,47 @@ def cmd_catalog_list(store: Store, args) -> int:
     return 0
 
 
+def cmd_set_discount(store: Store, args) -> int:
+    """Handle ``set-discount``: create or replace a category's rule."""
+    store.set_discount(args.category, args.percent)
+    store.save()
+    print(f"discount for {args.category}: {args.percent}%")
+    return 0
+
+
+def cmd_list_discounts(store: Store, args) -> int:
+    """Handle ``list-discounts``: print every discount rule."""
+    for category in sorted(store.discounts):
+        print(f"{category:<16} {store.discounts[category]}%")
+    return 0
+
+
+def cmd_remove_discount(store: Store, args) -> int:
+    """Handle ``remove-discount``: drop a category's rule."""
+    store.remove_discount(args.category)
+    store.save()
+    print(f"removed discount for {args.category}")
+    return 0
+
+
+def cmd_set_tax_rate(store: Store, args) -> int:
+    """Handle ``set-tax-rate``: set the flat tax rate."""
+    store.set_tax_rate(args.percent)
+    store.save()
+    print(f"tax rate: {args.percent}%")
+    return 0
+
+
+def cmd_invoice(store: Store, args) -> int:
+    """Handle ``invoice``: print (and optionally write) an invoice."""
+    text = reports.invoice_text(store, args.id)
+    print(text, end="")
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+    return 0
+
+
 def cmd_backup(store: Store, args) -> int:
     """Handle ``backup``: snapshot the state file."""
     print(store.backup())
@@ -234,6 +275,16 @@ def cmd_report_price_changes(store: Store, args) -> int:
     return 0
 
 
+def cmd_report_revenue(store: Store, args) -> int:
+    """Handle ``report revenue``: what a month's received orders were worth."""
+    revenue = reports.monthly_revenue(store, args.month)
+    for row in revenue["rows"]:
+        print(f"order {row['id']:>4}  {row['sku']:<12} "
+              f"{format_money(row['total'])}")
+    print(f"Total revenue: {format_money(revenue['total'])}")
+    return 0
+
+
 def cmd_report_turnover(store: Store, args) -> int:
     """Handle ``report turnover``: units shipped per category per month."""
     report = reports.turnover(store)
@@ -314,7 +365,8 @@ examples:
 MUTATING_COMMANDS = [
     "add-item", "add-supplier", "receive", "ship", "place-order",
     "receive-order", "cancel-order", "import-csv", "transfer", "ship-order",
-    "catalog-add", "restore", "set-price",
+    "catalog-add", "restore", "set-price", "set-discount",
+    "remove-discount", "set-tax-rate",
 ]
 
 
@@ -411,6 +463,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("supplier")
     p.set_defaults(func=cmd_catalog_list)
 
+    p = sub.add_parser("set-discount", help="set a category's discount")
+    p.add_argument("category")
+    p.add_argument("percent", type=float)
+    p.set_defaults(func=cmd_set_discount)
+
+    p = sub.add_parser("list-discounts", help="print the discount rules")
+    p.set_defaults(func=cmd_list_discounts)
+
+    p = sub.add_parser("remove-discount", help="drop a category's discount")
+    p.add_argument("category")
+    p.set_defaults(func=cmd_remove_discount)
+
+    p = sub.add_parser("set-tax-rate", help="set the flat tax rate")
+    p.add_argument("percent", type=float)
+    p.set_defaults(func=cmd_set_tax_rate)
+
+    p = sub.add_parser("invoice", help="print an order's invoice")
+    p.add_argument("id", type=int)
+    p.add_argument("--output", default=None,
+                   help="also write the invoice to this file")
+    p.set_defaults(func=cmd_invoice)
+
     p = sub.add_parser("backup", help="snapshot the current state")
     p.set_defaults(func=cmd_backup)
 
@@ -436,6 +510,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by-category", action="store_true",
                    help="group the listing by shelf area")
     p.set_defaults(func=cmd_report_low)
+
+    p = report_sub.add_parser("revenue", help="revenue for one month")
+    p.add_argument("month", help="month prefix, e.g. 2026-07")
+    p.set_defaults(func=cmd_report_revenue)
 
     p = report_sub.add_parser("price-changes",
                               help="every recorded price change")

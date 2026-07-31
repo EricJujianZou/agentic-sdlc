@@ -17,14 +17,39 @@ def to_cents(amount) -> int:
     """Convert a dollar amount to whole cents, rounding half up."""
     if isinstance(amount, int):
         return amount * 100
-    quantized = (Decimal(str(amount)) * 100).quantize(Decimal("1"),
-                                                      rounding=ROUND_HALF_UP)
+    value = amount if isinstance(amount, Decimal) else Decimal(str(amount))
+    quantized = (value * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     return int(quantized)
 
 
 def to_dollars(cents: int) -> float:
     """Convert whole cents back to a dollar amount."""
     return int(cents) / 100
+
+
+def format_cents(cents: int) -> str:
+    """Format whole cents as a bare decimal amount, e.g. ``"0.10"``."""
+    sign = "-" if cents < 0 else ""
+    cents = abs(int(cents))
+    return f"{sign}{cents // 100}.{cents % 100:02d}"
+
+
+def parse_money(text) -> int:
+    """Parse a money cell into whole cents.
+
+    Supplier files write prices however they like -- ``3.5``, ``3.50``,
+    ``$3.50``, with stray spaces -- and all of those are fine.  Anything
+    that is not money at all raises ValueError.
+    """
+    if isinstance(text, (int, float)):
+        return to_cents(text)
+    cleaned = str(text).strip().replace("$", "").replace(",", "").strip()
+    if not cleaned:
+        raise ValueError("empty money value")
+    try:
+        return to_cents(Decimal(cleaned))
+    except ArithmeticError as exc:
+        raise ValueError(f"not a money amount: {text!r}") from exc
 
 
 def format_money(amount) -> str:

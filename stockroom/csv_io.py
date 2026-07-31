@@ -4,6 +4,9 @@ The CSV format is one row per item per warehouse, with a header::
 
     sku,name,qty,unit_price,supplier_id,category,warehouse
 
+Prices are written with exactly two decimals and read back from any of
+the spellings suppliers use (``3.5``, ``3.50``, ``$3.50``).
+
 Export writes the current items; import reads a file and merges it into
 the store (existing SKUs are updated in place, new SKUs are added).
 Suppliers named in the file are not created - the supplier_id column is
@@ -19,6 +22,7 @@ room, and one without a ``category`` column leaves items uncategorized.
 import csv
 
 from .models import DEFAULT_CATEGORY, MAIN_WAREHOUSE, Item, canonical_sku
+from .money import format_cents, parse_money
 from .store import Store
 
 FIELDNAMES = ["sku", "name", "qty", "unit_price", "supplier_id", "category",
@@ -47,7 +51,7 @@ def export_items(store: Store, path: str) -> int:
                     "sku": item.sku,
                     "name": item.name,
                     "qty": item.qty_in(warehouse),
-                    "unit_price": item.unit_price,
+                    "unit_price": format_cents(item.unit_price_cents),
                     "supplier_id": item.supplier_id or "",
                     "category": item.category,
                     "warehouse": warehouse,
@@ -74,7 +78,7 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
             # some mix both spellings of one SKU in the same file.
             sku = canonical_sku(row["sku"])
             qty = int(row["qty"])
-            unit_price = float(row["unit_price"])
+            price_cents = parse_money(row["unit_price"])
             supplier_id = row.get("supplier_id") or None
             # Older files have no category and no warehouse column.
             category = row.get("category") or None
@@ -83,7 +87,7 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
                 # Known SKU: refresh the row in place.
                 item = store.items[sku]
                 item.name = row["name"]
-                item.unit_price = unit_price
+                item.unit_price_cents = price_cents
                 item.supplier_id = supplier_id
                 if category:
                     item.category = category
@@ -94,7 +98,7 @@ def import_items(store: Store, path: str, actor: str | None = None) -> int:
                 item = Item(
                     sku=sku,
                     name=row["name"],
-                    unit_price=unit_price,
+                    unit_price_cents=price_cents,
                     supplier_id=supplier_id,
                     category=category or DEFAULT_CATEGORY,
                     last_actor=actor,

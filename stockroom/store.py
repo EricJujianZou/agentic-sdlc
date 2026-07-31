@@ -74,6 +74,10 @@ class Store:
         self.catalogs: dict[str, list[str]] = {}
         # one entry per shipment out of the room: sku, qty, warehouse, date
         self.shipments: list[dict] = []
+        # category -> negotiated discount percent
+        self.discounts: dict[str, float] = {}
+        # odds and ends we keep with the data, such as the tax rate
+        self.settings: dict = {}
 
     # ------------------------------------------------------------------
     # persistence
@@ -108,6 +112,8 @@ class Store:
             for sid, skus in raw.get("catalogs", {}).items()
         }
         self.shipments = [dict(entry) for entry in raw.get("shipments", [])]
+        self.discounts = {c: float(p) for c, p in raw.get("discounts", {}).items()}
+        self.settings = dict(raw.get("settings", {}))
 
     def _raw_state(self) -> dict:
         """The current state as the plain dict we write to disk."""
@@ -118,6 +124,8 @@ class Store:
             "orders": [order.to_dict() for order in self.orders],
             "catalogs": {sid: list(skus) for sid, skus in self.catalogs.items()},
             "shipments": [dict(entry) for entry in self.shipments],
+            "discounts": dict(self.discounts),
+            "settings": dict(self.settings),
         }
 
     def save(self) -> None:
@@ -262,6 +270,40 @@ class Store:
                           date or datetime.date.today().isoformat())
         _record_actor(item, actor)
         return item
+
+    # ------------------------------------------------------------------
+    # discounts and settings
+    # ------------------------------------------------------------------
+
+    def set_discount(self, category: str, percent) -> None:
+        """Create or replace the discount rule for a category."""
+        percent = float(percent)
+        if not 0 <= percent <= 100:
+            raise ValueError(
+                f"discount percent must be between 0 and 100, got {percent}")
+        self.discounts[category] = percent
+
+    def get_discount(self, category: str) -> float:
+        """The discount percent for a category, 0 when there is no rule."""
+        return self.discounts.get(category, 0)
+
+    def remove_discount(self, category: str) -> None:
+        """Delete a category's discount rule."""
+        if category not in self.discounts:
+            raise ValueError(f"no discount rule for {category}")
+        del self.discounts[category]
+
+    @property
+    def tax_rate(self) -> float:
+        """The flat tax rate, as a percent."""
+        return float(self.settings.get("tax_rate", 0))
+
+    def set_tax_rate(self, percent) -> None:
+        """Set the flat tax rate, as a percent."""
+        percent = float(percent)
+        if percent < 0:
+            raise ValueError(f"tax rate cannot be negative, got {percent}")
+        self.settings["tax_rate"] = percent
 
     # ------------------------------------------------------------------
     # suppliers
