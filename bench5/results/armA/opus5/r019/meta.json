@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_ansible__ansible-8127abbc298cabf04aaa89a478fc5e5e3432a6fc-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
+  "model": "opus5",
+  "started_at": "2026-08-01T23:33:53Z",
+  "finished_at": "2026-08-01T23:50:00Z",
+  "turns_estimate": 45,
+  "self_assessment": "All 8 requirements implemented and individually spot-checked; live playbook repro shows workers move from shared session + inherited stdout to own session with fds 0/1/2 on /dev/null; full unit suite delta vs base is -2 failures, 0 new."
+}

@@ -1,0 +1,823 @@
+diff --git a/lib/ansible/cli/scripts/ansible_connection_cli_stub.py b/lib/ansible/cli/scripts/ansible_connection_cli_stub.py
+index 0c8baa9..65e015d 100644
+--- a/lib/ansible/cli/scripts/ansible_connection_cli_stub.py
++++ b/lib/ansible/cli/scripts/ansible_connection_cli_stub.py
+@@ -88,7 +88,7 @@ class ConnectionProcess(object):
+             # find it now that our cwd is /
+             if self.play_context.private_key_file and self.play_context.private_key_file[0] not in '~/':
+                 self.play_context.private_key_file = os.path.join(self.original_path, self.play_context.private_key_file)
+-            self.connection = connection_loader.get(self.play_context.connection, self.play_context, '/dev/null',
++            self.connection = connection_loader.get(self.play_context.connection, self.play_context,
+                                                     task_uuid=self._task_uuid, ansible_playbook_pid=self._ansible_playbook_pid)
+             try:
+                 self.connection.set_options(direct=options)
+diff --git a/lib/ansible/executor/process/worker.py b/lib/ansible/executor/process/worker.py
+index f5e7b97..5461721 100644
+--- a/lib/ansible/executor/process/worker.py
++++ b/lib/ansible/executor/process/worker.py
+@@ -20,15 +20,26 @@ from __future__ import annotations
+ import os
+ import sys
+ import traceback
++import typing as t
+ 
+ from jinja2.exceptions import TemplateNotFound
+ from multiprocessing.queues import Queue
+ 
++from ansible import context
+ from ansible.errors import AnsibleConnectionFailure, AnsibleError
+ from ansible.executor.task_executor import TaskExecutor
++from ansible.executor.task_queue_manager import FinalQueue
++from ansible.inventory.host import Host
++from ansible.module_utils.common.collections import is_sequence
+ from ansible.module_utils.common.text.converters import to_text
++from ansible.parsing.dataloader import DataLoader
++from ansible.playbook.play_context import PlayContext
++from ansible.playbook.task import Task
++from ansible.plugins.loader import init_plugin_loader
++from ansible.utils.context_objects import CLIArgs
+ from ansible.utils.display import Display
+ from ansible.utils.multiprocessing import context as multiprocessing_context
++from ansible.vars.manager import VariableManager
+ 
+ __all__ = ['WorkerProcess']
+ 
+@@ -53,7 +64,20 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+     for reading later.
+     """
+ 
+-    def __init__(self, final_q, task_vars, host, task, play_context, loader, variable_manager, shared_loader_obj, worker_id):
++    def __init__(
++        self,
++        *,
++        final_q: FinalQueue,
++        task_vars: dict[str, t.Any],
++        host: Host,
++        task: Task,
++        play_context: PlayContext,
++        loader: DataLoader,
++        variable_manager: VariableManager,
++        shared_loader_obj: t.Any,
++        worker_id: int,
++        cliargs: CLIArgs,
++    ) -> None:
+ 
+         super(WorkerProcess, self).__init__()
+         # takes a task queue manager as the sole param:
+@@ -73,39 +97,18 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+         self.worker_queue = WorkerQueue(ctx=multiprocessing_context)
+         self.worker_id = worker_id
+ 
+-    def _save_stdin(self):
+-        self._new_stdin = None
+-        try:
+-            if sys.stdin.isatty() and sys.stdin.fileno() is not None:
+-                try:
+-                    self._new_stdin = os.fdopen(os.dup(sys.stdin.fileno()))
+-                except OSError:
+-                    # couldn't dupe stdin, most likely because it's
+-                    # not a valid file descriptor
+-                    pass
+-        except (AttributeError, ValueError):
+-            # couldn't get stdin's fileno
+-            pass
++        self._cliargs = cliargs
+ 
+-        if self._new_stdin is None:
+-            self._new_stdin = open(os.devnull)
+-
+-    def start(self):
++    def start(self) -> None:
+         """
+-        multiprocessing.Process replaces the worker's stdin with a new file
+-        but we wish to preserve it if it is connected to a terminal.
+-        Therefore dup a copy prior to calling the real start(),
+-        ensuring the descriptor is preserved somewhere in the new child, and
+-        make sure it is closed in the parent when start() completes.
++        multiprocessing.Process replaces the worker's stdin with a new file,
++        and the worker detaches from the inherited stdio in ``run``, so there
++        is nothing to preserve here.
+         """
+ 
+-        self._save_stdin()
+         # FUTURE: this lock can be removed once a more generalized pre-fork thread pause is in place
+         with display._lock:
+-            try:
+-                return super(WorkerProcess, self).start()
+-            finally:
+-                self._new_stdin.close()
++            super(WorkerProcess, self).start()
+ 
+     def _hard_exit(self, e):
+         """
+@@ -125,7 +128,34 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+ 
+         os._exit(1)
+ 
+-    def run(self):
++    def _detach(self) -> None:
++        """
++        The intent here is to detach the child process from the inherited stdio fds,
++        including /dev/tty. Children should use Display instead of direct interactions
++        with stdio fds.
++        """
++        try:
++            os.setsid()
++        except OSError:
++            # The process is already a process group leader, there is nothing to detach from.
++            pass
++
++        # Replace the inherited stdio fds with /dev/null, so that neither this process nor
++        # anything it executes can read from or write to the terminal shared with the parent.
++        devnull = os.open(os.devnull, os.O_RDWR)
++        try:
++            for fd in (0, 1, 2):  # stdin, stdout, stderr
++                os.dup2(devnull, fd)
++        finally:
++            if devnull > 2:
++                os.close(devnull)
++
++        # Point the Python level streams at the new fds, dropping any buffered state
++        # carried over from the parent.
++        sys.stdin = open(os.devnull, 'r')
++        sys.stdout = sys.stderr = open(os.devnull, 'w')
++
++    def run(self) -> None:
+         """
+         Wrap _run() to ensure no possibility an errant exception can cause
+         control to return to the StrategyBase task loop, or any other code
+@@ -135,24 +165,27 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+         a try/except added in far-away code can cause a crashed child process
+         to suddenly assume the role and prior state of its parent.
+         """
++        # Set the queue on Display so calls to Display.display are proxied over the queue
++        # This must be done before detaching, as it is the only remaining output channel.
++        display.set_queue(self._final_q)
++
++        self._detach()
++
++        if multiprocessing_context.get_start_method() != 'fork':
++            # This process was not forked, so the global state the worker relies on
++            # was not inherited and has to be recreated here.
++            context.CLIARGS = self._cliargs
++            # Initialize the plugin loader the same way ``CLI.run`` does, since
++            # ``collections_path`` is singular in some contexts.
++            cli_collections_path = context.CLIARGS.get('collections_path') or []
++            if not is_sequence(cli_collections_path):
++                cli_collections_path = [cli_collections_path]
++            init_plugin_loader(cli_collections_path)
++
+         try:
+             return self._run()
+         except BaseException as e:
+             self._hard_exit(e)
+-        finally:
+-            # This is a hack, pure and simple, to work around a potential deadlock
+-            # in ``multiprocessing.Process`` when flushing stdout/stderr during process
+-            # shutdown.
+-            #
+-            # We should no longer have a problem with ``Display``, as it now proxies over
+-            # the queue from a fork. However, to avoid any issues with plugins that may
+-            # be doing their own printing, this has been kept.
+-            #
+-            # This happens at the very end to avoid that deadlock, by simply side
+-            # stepping it. This should not be treated as a long term fix.
+-            #
+-            # TODO: Evaluate migrating away from the ``fork`` multiprocessing start method.
+-            sys.stdout = sys.stderr = open(os.devnull, 'w')
+ 
+     def _run(self):
+         """
+@@ -165,9 +198,6 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+         # pr = cProfile.Profile()
+         # pr.enable()
+ 
+-        # Set the queue on Display so calls to Display.display are proxied over the queue
+-        display.set_queue(self._final_q)
+-
+         global current_worker
+         current_worker = self
+ 
+@@ -179,7 +209,6 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+                 self._task,
+                 self._task_vars,
+                 self._play_context,
+-                self._new_stdin,
+                 self._loader,
+                 self._shared_loader_obj,
+                 self._final_q,
+diff --git a/lib/ansible/executor/task_executor.py b/lib/ansible/executor/task_executor.py
+index 77fae99..f8e9fa9 100644
+--- a/lib/ansible/executor/task_executor.py
++++ b/lib/ansible/executor/task_executor.py
+@@ -92,12 +92,11 @@ class TaskExecutor:
+     class.
+     """
+ 
+-    def __init__(self, host, task, job_vars, play_context, new_stdin, loader, shared_loader_obj, final_q, variable_manager):
++    def __init__(self, host, task, job_vars, play_context, loader, shared_loader_obj, final_q, variable_manager):
+         self._host = host
+         self._task = task
+         self._job_vars = job_vars
+         self._play_context = play_context
+-        self._new_stdin = new_stdin
+         self._loader = loader
+         self._shared_loader_obj = shared_loader_obj
+         self._connection = None
+@@ -992,7 +991,6 @@ class TaskExecutor:
+         connection, plugin_load_context = self._shared_loader_obj.connection_loader.get_with_context(
+             conn_type,
+             self._play_context,
+-            self._new_stdin,
+             task_uuid=self._task._uuid,
+             ansible_playbook_pid=to_text(os.getppid())
+         )
+diff --git a/lib/ansible/executor/task_queue_manager.py b/lib/ansible/executor/task_queue_manager.py
+index d28f963..00f7200 100644
+--- a/lib/ansible/executor/task_queue_manager.py
++++ b/lib/ansible/executor/task_queue_manager.py
+@@ -168,6 +168,15 @@ class TaskQueueManager:
+         # plugins for inter-process locking.
+         self._connection_lockfile = tempfile.TemporaryFile()
+ 
++        # Workers detach from stdio, so make sure the descriptors are not handed to
++        # any process we start, keeping the terminal reserved for the parent process.
++        for stream in (sys.stdin, sys.stdout, sys.stderr):
++            try:
++                os.set_inheritable(stream.fileno(), False)
++            except (AttributeError, OSError, ValueError):
++                # the stream has been replaced by something without a real file descriptor
++                pass
++
+     def _initialize_processes(self, num):
+         self._workers = []
+ 
+diff --git a/lib/ansible/plugins/connection/__init__.py b/lib/ansible/plugins/connection/__init__.py
+index 3743d36..5456074 100644
+--- a/lib/ansible/plugins/connection/__init__.py
++++ b/lib/ansible/plugins/connection/__init__.py
+@@ -6,7 +6,6 @@ from __future__ import annotations
+ 
+ import collections.abc as c
+ import fcntl
+-import io
+ import os
+ import shlex
+ import typing as t
+@@ -35,6 +34,12 @@ P = t.ParamSpec('P')
+ T = t.TypeVar('T')
+ 
+ 
++class ConnectionKwargs(t.TypedDict):
++    task_uuid: str
++    ansible_playbook_pid: str
++    shell: t.NotRequired[ShellBase]
++
++
+ def ensure_connect(
+     func: c.Callable[t.Concatenate[ConnectionBase, P], T],
+ ) -> c.Callable[t.Concatenate[ConnectionBase, P], T]:
+@@ -71,7 +76,6 @@ class ConnectionBase(AnsiblePlugin):
+     def __init__(
+         self,
+         play_context: PlayContext,
+-        new_stdin: io.TextIOWrapper | None = None,
+         shell: ShellBase | None = None,
+         *args: t.Any,
+         **kwargs: t.Any,
+@@ -83,9 +87,6 @@ class ConnectionBase(AnsiblePlugin):
+         if not hasattr(self, '_play_context'):
+             # Backwards compat: self._play_context isn't really needed, using set_options/get_option
+             self._play_context = play_context
+-        # Delete once the deprecation period is over for WorkerProcess._new_stdin
+-        if not hasattr(self, '__new_stdin'):
+-            self.__new_stdin = new_stdin
+         if not hasattr(self, '_display'):
+             # Backwards compat: self._display isn't really needed, just import the global display and use that.
+             self._display = display
+@@ -105,15 +106,6 @@ class ConnectionBase(AnsiblePlugin):
+ 
+         self.become: BecomeBase | None = None
+ 
+-    @property
+-    def _new_stdin(self) -> io.TextIOWrapper | None:
+-        display.deprecated(
+-            "The connection's stdin object is deprecated. "
+-            "Call display.prompt_until(msg) instead.",
+-            version='2.19',
+-        )
+-        return self.__new_stdin
+-
+     def set_become_plugin(self, plugin: BecomeBase) -> None:
+         self.become = plugin
+ 
+@@ -319,17 +311,16 @@ class NetworkConnectionBase(ConnectionBase):
+     def __init__(
+         self,
+         play_context: PlayContext,
+-        new_stdin: io.TextIOWrapper | None = None,
+         *args: t.Any,
+         **kwargs: t.Any,
+     ) -> None:
+-        super(NetworkConnectionBase, self).__init__(play_context, new_stdin, *args, **kwargs)
++        super(NetworkConnectionBase, self).__init__(play_context, *args, **kwargs)
+         self._messages: list[tuple[str, str]] = []
+         self._conn_closed = False
+ 
+         self._network_os = self._play_context.network_os
+ 
+-        self._local = connection_loader.get('local', play_context, '/dev/null')
++        self._local = connection_loader.get('local', play_context)
+         self._local.set_options()
+ 
+         self._sub_plugin: dict[str, t.Any] = {}
+diff --git a/lib/ansible/plugins/strategy/__init__.py b/lib/ansible/plugins/strategy/__init__.py
+index 54721ad..443b96f 100644
+--- a/lib/ansible/plugins/strategy/__init__.py
++++ b/lib/ansible/plugins/strategy/__init__.py
+@@ -19,7 +19,6 @@ from __future__ import annotations
+ 
+ import cmd
+ import functools
+-import os
+ import pprint
+ import queue
+ import sys
+@@ -409,7 +408,16 @@ class StrategyBase:
+ 
+                     # Pass WorkerProcess its strategy worker number so it can send an identifier along with intra-task requests
+                     worker_prc = WorkerProcess(
+-                        self._final_q, task_vars, host, task, play_context, self._loader, self._variable_manager, plugin_loader, self._cur_worker,
++                        final_q=self._final_q,
++                        task_vars=task_vars,
++                        host=host,
++                        task=task,
++                        play_context=play_context,
++                        loader=self._loader,
++                        variable_manager=self._variable_manager,
++                        shared_loader_obj=plugin_loader,
++                        worker_id=self._cur_worker,
++                        cliargs=context.CLIARGS,
+                     )
+                     self._workers[self._cur_worker] = worker_prc
+                     self._tqm.send_callback('v2_runner_on_start', host, task)
+@@ -1068,7 +1076,7 @@ class StrategyBase:
+                 connection = Connection(self._active_connections[target_host])
+                 del self._active_connections[target_host]
+             else:
+-                connection = plugin_loader.connection_loader.get(play_context.connection, play_context, os.devnull)
++                connection = plugin_loader.connection_loader.get(play_context.connection, play_context)
+                 var_options = connection._resolve_option_variables(all_vars, templar)
+                 connection.set_options(task_keys=task.dump_attrs(), var_options=var_options)
+                 play_context.set_attributes_from_plugin(connection)
+diff --git a/test/units/executor/test_task_executor.py b/test/units/executor/test_task_executor.py
+index 8f95d80..2540d2b 100644
+--- a/test/units/executor/test_task_executor.py
++++ b/test/units/executor/test_task_executor.py
+@@ -42,7 +42,6 @@ class TestTaskExecutor(unittest.TestCase):
+         mock_task = MagicMock()
+         mock_play_context = MagicMock()
+         mock_shared_loader = MagicMock()
+-        new_stdin = None
+         job_vars = dict()
+         mock_queue = MagicMock()
+         te = TaskExecutor(
+@@ -50,7 +49,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=mock_task,
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=mock_shared_loader,
+             final_q=mock_queue,
+@@ -70,7 +68,6 @@ class TestTaskExecutor(unittest.TestCase):
+         mock_shared_loader = MagicMock()
+         mock_queue = MagicMock()
+ 
+-        new_stdin = None
+         job_vars = dict()
+ 
+         te = TaskExecutor(
+@@ -78,7 +75,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=mock_task,
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=mock_shared_loader,
+             final_q=mock_queue,
+@@ -101,7 +97,7 @@ class TestTaskExecutor(unittest.TestCase):
+         self.assertIn("failed", res)
+ 
+     def test_task_executor_run_clean_res(self):
+-        te = TaskExecutor(None, MagicMock(), None, None, None, None, None, None, None)
++        te = TaskExecutor(None, MagicMock(), None, None, None, None, None, None)
+         te._get_loop_items = MagicMock(return_value=[1])
+         te._run_loop = MagicMock(
+             return_value=[
+@@ -136,7 +132,6 @@ class TestTaskExecutor(unittest.TestCase):
+         mock_shared_loader = MagicMock()
+         mock_shared_loader.lookup_loader = lookup_loader
+ 
+-        new_stdin = None
+         job_vars = dict()
+         mock_queue = MagicMock()
+ 
+@@ -145,7 +140,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=mock_task,
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=mock_shared_loader,
+             final_q=mock_queue,
+@@ -176,7 +170,6 @@ class TestTaskExecutor(unittest.TestCase):
+         mock_shared_loader = MagicMock()
+         mock_queue = MagicMock()
+ 
+-        new_stdin = None
+         job_vars = dict()
+ 
+         te = TaskExecutor(
+@@ -184,7 +177,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=mock_task,
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=mock_shared_loader,
+             final_q=mock_queue,
+@@ -205,7 +197,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=MagicMock(),
+             job_vars={},
+             play_context=MagicMock(),
+-            new_stdin=None,
+             loader=DictDataLoader({}),
+             shared_loader_obj=MagicMock(),
+             final_q=MagicMock(),
+@@ -242,7 +233,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=MagicMock(),
+             job_vars={},
+             play_context=MagicMock(),
+-            new_stdin=None,
+             loader=DictDataLoader({}),
+             shared_loader_obj=MagicMock(),
+             final_q=MagicMock(),
+@@ -281,7 +271,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=MagicMock(),
+             job_vars={},
+             play_context=MagicMock(),
+-            new_stdin=None,
+             loader=DictDataLoader({}),
+             shared_loader_obj=MagicMock(),
+             final_q=MagicMock(),
+@@ -358,7 +347,6 @@ class TestTaskExecutor(unittest.TestCase):
+         mock_vm.get_delegated_vars_and_hostname.return_value = {}, None
+ 
+         shared_loader = MagicMock()
+-        new_stdin = None
+         job_vars = dict(omit="XXXXXXXXXXXXXXXXXXX")
+ 
+         te = TaskExecutor(
+@@ -366,7 +354,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=mock_task,
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=shared_loader,
+             final_q=mock_queue,
+@@ -415,7 +402,6 @@ class TestTaskExecutor(unittest.TestCase):
+         shared_loader = MagicMock()
+         shared_loader.action_loader = action_loader
+ 
+-        new_stdin = None
+         job_vars = dict(omit="XXXXXXXXXXXXXXXXXXX")
+ 
+         te = TaskExecutor(
+@@ -423,7 +409,6 @@ class TestTaskExecutor(unittest.TestCase):
+             task=mock_task,
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=shared_loader,
+             final_q=mock_queue,
+diff --git a/test/units/plugins/action/test_raw.py b/test/units/plugins/action/test_raw.py
+index df68e9e..5e4e124 100644
+--- a/test/units/plugins/action/test_raw.py
++++ b/test/units/plugins/action/test_raw.py
+@@ -17,8 +17,6 @@
+ 
+ from __future__ import annotations
+ 
+-import os
+-
+ import unittest
+ from unittest.mock import MagicMock, Mock
+ from ansible.plugins.action.raw import ActionModule
+@@ -31,7 +29,7 @@ class TestCopyResultExclude(unittest.TestCase):
+     def setUp(self):
+         self.play_context = Mock()
+         self.play_context.shell = 'sh'
+-        self.connection = connection_loader.get('local', self.play_context, os.devnull)
++        self.connection = connection_loader.get('local', self.play_context)
+ 
+     def tearDown(self):
+         pass
+diff --git a/test/units/plugins/action/test_reboot.py b/test/units/plugins/action/test_reboot.py
+index ba03f3e..6e75597 100644
+--- a/test/units/plugins/action/test_reboot.py
++++ b/test/units/plugins/action/test_reboot.py
+@@ -3,8 +3,6 @@
+ """Tests for the reboot action plugin."""
+ from __future__ import annotations
+ 
+-import os
+-
+ import pytest
+ 
+ from ansible.errors import AnsibleConnectionFailure
+@@ -43,7 +41,7 @@ def play_context(mocker):
+ @pytest.fixture
+ def action_plugin(play_context, module_task):
+     """Initialize an action plugin."""
+-    connection = connection_loader.get('local', play_context, os.devnull)
++    connection = connection_loader.get('local', play_context)
+     loader = None
+     templar = None
+     shared_loader_obj = None
+diff --git a/test/units/plugins/connection/test_paramiko_ssh.py b/test/units/plugins/connection/test_paramiko_ssh.py
+index 708ae74..64fc6cb 100644
+--- a/test/units/plugins/connection/test_paramiko_ssh.py
++++ b/test/units/plugins/connection/test_paramiko_ssh.py
+@@ -18,7 +18,6 @@
+ 
+ from __future__ import annotations
+ 
+-from io import StringIO
+ import pytest
+ 
+ from ansible.plugins.connection import paramiko_ssh as paramiko_ssh_module
+@@ -36,19 +35,14 @@ def play_context():
+     return play_context
+ 
+ 
+-@pytest.fixture()
+-def in_stream():
+-    return StringIO()
+-
+-
+-def test_paramiko_connection_module(play_context, in_stream):
++def test_paramiko_connection_module(play_context):
+     assert isinstance(
+-        connection_loader.get('paramiko_ssh', play_context, in_stream),
++        connection_loader.get('paramiko_ssh', play_context),
+         paramiko_ssh_module.Connection)
+ 
+ 
+-def test_paramiko_connect(play_context, in_stream, mocker):
+-    paramiko_ssh = connection_loader.get('paramiko_ssh', play_context, in_stream)
++def test_paramiko_connect(play_context, mocker):
++    paramiko_ssh = connection_loader.get('paramiko_ssh', play_context)
+     mocker.patch.object(paramiko_ssh, '_connect_uncached')
+     connection = paramiko_ssh._connect()
+ 
+diff --git a/test/units/plugins/connection/test_psrp.py b/test/units/plugins/connection/test_psrp.py
+index fcc5648..549db83 100644
+--- a/test/units/plugins/connection/test_psrp.py
++++ b/test/units/plugins/connection/test_psrp.py
+@@ -8,7 +8,6 @@ import pytest
+ import sys
+ import typing as t
+ 
+-from io import StringIO
+ from unittest.mock import MagicMock
+ 
+ from ansible.playbook.play_context import PlayContext
+@@ -194,9 +193,7 @@ class TestConnectionPSRP(object):
+                              ((o, e) for o, e in OPTIONS_DATA))
+     def test_set_options(self, options, expected):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-
+-        conn = connection_loader.get('psrp', pc, new_stdin)
++        conn = connection_loader.get('psrp', pc)
+         conn.set_options(var_options=options)
+         conn._build_kwargs()
+ 
+diff --git a/test/units/plugins/connection/test_ssh.py b/test/units/plugins/connection/test_ssh.py
+index ad30369..a9065e6 100644
+--- a/test/units/plugins/connection/test_ssh.py
++++ b/test/units/plugins/connection/test_ssh.py
+@@ -18,7 +18,6 @@
+ 
+ from __future__ import annotations
+ 
+-from io import StringIO
+ from selectors import SelectorKey, EVENT_READ
+ import pytest
+ 
+@@ -40,14 +39,11 @@ class TestConnectionBaseClass(unittest.TestCase):
+         play_context.prompt = (
+             '[sudo via ansible, key=ouzmdnewuhucvuaabtjmweasarviygqq] password: '
+         )
+-        in_stream = StringIO()
+-
+-        self.assertIsInstance(ssh.Connection(play_context, in_stream), ssh.Connection)
++        self.assertIsInstance(ssh.Connection(play_context), ssh.Connection)
+ 
+     def test_plugins_connection_ssh_basic(self):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = ssh.Connection(pc, new_stdin)
++        conn = ssh.Connection(pc)
+ 
+         # connect just returns self, so assert that
+         res = conn._connect()
+@@ -58,16 +54,14 @@ class TestConnectionBaseClass(unittest.TestCase):
+ 
+     def test_plugins_connection_ssh__build_command(self):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('ssh', pc, new_stdin)
++        conn = connection_loader.get('ssh', pc)
+         conn.get_option = MagicMock()
+         conn.get_option.return_value = ""
+         conn._build_command('ssh', 'ssh')
+ 
+     def test_plugins_connection_ssh_exec_command(self):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('ssh', pc, new_stdin)
++        conn = connection_loader.get('ssh', pc)
+ 
+         conn._build_command = MagicMock()
+         conn._build_command.return_value = 'ssh something something'
+@@ -81,10 +75,9 @@ class TestConnectionBaseClass(unittest.TestCase):
+ 
+     def test_plugins_connection_ssh__examine_output(self):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+         become_success_token = b'BECOME-SUCCESS-abcdefghijklmnopqrstuvxyz'
+ 
+-        conn = connection_loader.get('ssh', pc, new_stdin)
++        conn = connection_loader.get('ssh', pc)
+         conn.set_become_plugin(become_loader.get('sudo'))
+ 
+         conn.become.check_password_prompt = MagicMock()
+@@ -213,8 +206,7 @@ class TestConnectionBaseClass(unittest.TestCase):
+     @patch('os.path.exists')
+     def test_plugins_connection_ssh_put_file(self, mock_ospe, mock_sleep):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('ssh', pc, new_stdin)
++        conn = connection_loader.get('ssh', pc)
+         conn._build_command = MagicMock()
+         conn._bare_run = MagicMock()
+ 
+@@ -265,8 +257,7 @@ class TestConnectionBaseClass(unittest.TestCase):
+     @patch('time.sleep')
+     def test_plugins_connection_ssh_fetch_file(self, mock_sleep):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('ssh', pc, new_stdin)
++        conn = connection_loader.get('ssh', pc)
+         conn._build_command = MagicMock()
+         conn._bare_run = MagicMock()
+         conn._load_name = 'ssh'
+@@ -331,9 +322,7 @@ class MockSelector(object):
+ @pytest.fixture
+ def mock_run_env(request, mocker):
+     pc = PlayContext()
+-    new_stdin = StringIO()
+-
+-    conn = connection_loader.get('ssh', pc, new_stdin)
++    conn = connection_loader.get('ssh', pc)
+     conn.set_become_plugin(become_loader.get('sudo'))
+     conn._send_initial_data = MagicMock()
+     conn._examine_output = MagicMock()
+diff --git a/test/units/plugins/connection/test_winrm.py b/test/units/plugins/connection/test_winrm.py
+index d11d604..8cf0c84 100644
+--- a/test/units/plugins/connection/test_winrm.py
++++ b/test/units/plugins/connection/test_winrm.py
+@@ -9,8 +9,6 @@ import typing as t
+ 
+ import pytest
+ 
+-from io import StringIO
+-
+ from unittest.mock import MagicMock
+ from ansible.errors import AnsibleConnectionFailure, AnsibleError
+ from ansible.module_utils.common.text.converters import to_bytes
+@@ -206,9 +204,7 @@ class TestConnectionWinRM(object):
+         winrm.HAVE_KERBEROS = kerb
+ 
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         conn.set_options(var_options=options, direct=direct)
+         conn._build_winrm_kwargs()
+ 
+@@ -243,8 +239,7 @@ class TestWinRMKerbAuth(object):
+         monkeypatch.setattr("subprocess.Popen", mock_popen)
+ 
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         conn.set_options(var_options=options)
+         conn._build_winrm_kwargs()
+ 
+@@ -265,8 +260,7 @@ class TestWinRMKerbAuth(object):
+         monkeypatch.setattr("subprocess.Popen", mock_popen)
+ 
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         options = {"_extras": {}, "ansible_winrm_kinit_cmd": "/fake/kinit"}
+         conn.set_options(var_options=options)
+         conn._build_winrm_kwargs()
+@@ -289,8 +283,7 @@ class TestWinRMKerbAuth(object):
+         monkeypatch.setattr("subprocess.Popen", mock_popen)
+ 
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         conn.set_options(var_options={"_extras": {}})
+         conn._build_winrm_kwargs()
+ 
+@@ -310,8 +303,7 @@ class TestWinRMKerbAuth(object):
+         monkeypatch.setattr("subprocess.Popen", mock_popen)
+ 
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         conn.set_options(var_options={"_extras": {}})
+         conn._build_winrm_kwargs()
+ 
+@@ -325,8 +317,7 @@ class TestWinRMKerbAuth(object):
+         requests_exc = pytest.importorskip("requests.exceptions")
+ 
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+ 
+         mock_proto = MagicMock()
+         mock_proto.run_command.side_effect = requests_exc.Timeout("msg")
+@@ -345,8 +336,7 @@ class TestWinRMKerbAuth(object):
+         requests_exc = pytest.importorskip("requests.exceptions")
+ 
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+ 
+         mock_proto = MagicMock()
+         mock_proto.run_command.return_value = "command_id"
+@@ -364,8 +354,7 @@ class TestWinRMKerbAuth(object):
+ 
+     def test_connect_failure_auth_401(self, monkeypatch):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         conn.set_options(var_options={"ansible_winrm_transport": "basic", "_extras": {}})
+ 
+         mock_proto = MagicMock()
+@@ -380,8 +369,7 @@ class TestWinRMKerbAuth(object):
+ 
+     def test_connect_failure_other_exception(self, monkeypatch):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         conn.set_options(var_options={"ansible_winrm_transport": "basic", "_extras": {}})
+ 
+         mock_proto = MagicMock()
+@@ -396,8 +384,7 @@ class TestWinRMKerbAuth(object):
+ 
+     def test_connect_failure_operation_timed_out(self, monkeypatch):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         conn.set_options(var_options={"ansible_winrm_transport": "basic", "_extras": {}})
+ 
+         mock_proto = MagicMock()
+@@ -412,8 +399,7 @@ class TestWinRMKerbAuth(object):
+ 
+     def test_connect_no_transport(self):
+         pc = PlayContext()
+-        new_stdin = StringIO()
+-        conn = connection_loader.get('winrm', pc, new_stdin)
++        conn = connection_loader.get('winrm', pc)
+         conn.set_options(var_options={"_extras": {}})
+         conn._build_winrm_kwargs()
+         conn._winrm_transport = []
