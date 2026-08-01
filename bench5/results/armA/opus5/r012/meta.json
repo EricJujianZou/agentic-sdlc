@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_flipt-io__flipt-e42da21a07a5ae35835ec54f74004ebd58713874",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T16:32:00Z",
+  "finished_at": "2026-08-01T16:44:00Z",
+  "turns_estimate": 30,
+  "self_assessment": "All 8 requirements met; repro (enabled+disabled batch) proven failing at base and passing after, full suite green incl. sqlite storage/db; residual risks: 2 go.sum h1 lines added because the base go.sum is genuinely incomplete under a modern toolchain, ErrDisabled mapped to InvalidArgument in ErrorUnaryInterceptor (unlisted, prevents a status-code regression on single Evaluate), and rpc/flipt.pb.gw.go left on golang/protobuf since grpc-gateway v1.16 requires it."
+}
