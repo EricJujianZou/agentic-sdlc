@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T03:12:15Z",
+  "finished_at": "2026-08-01T03:12:56Z",
+  "turns_estimate": 25,
+  "self_assessment": "Added Digest field to config.Image and models.Image, GetFullName() on config.Image, tightened IsValidImage to require exactly one of Tag/Digest with the exact specified error strings, propagated Digest through scan/base.go's model conversion, switched scan/container.go to GetFullName(), fixed scan/serverapi.go's per-image ServerName to <idx>@<originalServerName> with no tag/digest, and fixed report/report.go's UUID-key naming to use the full image ref (tag or digest, never both) followed by @serverName; go build and go test ./config/... ./scan/... ./report/... all pass (models/... test failure is a pre-existing go-vet incompatibility in untouched library.go, unrelated to this change)."
+}
