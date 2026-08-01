@@ -1,0 +1,143 @@
+diff --git a/res/css/_components.scss b/res/css/_components.scss
+index 7e69d2b..f88cc72 100644
+--- a/res/css/_components.scss
++++ b/res/css/_components.scss
+@@ -83,6 +83,7 @@
+ @import "./views/avatars/_DecoratedRoomAvatar.scss";
+ @import "./views/avatars/_WidgetAvatar.scss";
+ @import "./views/beta/_BetaCard.scss";
++@import "./views/buttons/_Cancel.scss";
+ @import "./views/context_menus/_CallContextMenu.scss";
+ @import "./views/context_menus/_DeviceContextMenu.scss";
+ @import "./views/context_menus/_IconizedContextMenu.scss";
+diff --git a/res/css/views/buttons/_Cancel.scss b/res/css/views/buttons/_Cancel.scss
+new file mode 100644
+index 0000000..822b1a1
+--- /dev/null
++++ b/res/css/views/buttons/_Cancel.scss
+@@ -0,0 +1,30 @@
++/*
++Copyright 2022 The Matrix.org Foundation C.I.C.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++.mx_CancelButton {
++    width: var(--size);
++    height: var(--size);
++    mask-image: url('$(res)/img/cancel.svg');
++    mask-repeat: no-repeat;
++    mask-size: contain;
++    mask-position: center;
++    background-color: $secondary-content;
++    cursor: pointer;
++
++    &:hover {
++        background-color: $primary-content;
++    }
++}
+diff --git a/res/css/views/rooms/_MessageComposer.scss b/res/css/views/rooms/_MessageComposer.scss
+index 9619bad..ba7e69e 100644
+--- a/res/css/views/rooms/_MessageComposer.scss
++++ b/res/css/views/rooms/_MessageComposer.scss
+@@ -43,8 +43,9 @@ limitations under the License.
+     height: 31px;
+ }
+ 
+-.mx_MessageComposer_roomReplaced_header {
++.mx_MessageComposer_replaced_valign p {
+     font-weight: bold;
++    margin: 0;
+ }
+ 
+ .mx_MessageComposer_autocomplete_wrapper {
+diff --git a/src/components/views/buttons/Cancel.tsx b/src/components/views/buttons/Cancel.tsx
+new file mode 100644
+index 0000000..3eb5dc8
+--- /dev/null
++++ b/src/components/views/buttons/Cancel.tsx
+@@ -0,0 +1,36 @@
++/*
++Copyright 2022 The Matrix.org Foundation C.I.C.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++import React, { ComponentProps } from "react";
++import classNames from "classnames";
++
++import AccessibleButton from "../elements/AccessibleButton";
++
++type Props = ComponentProps<typeof AccessibleButton> & {
++    size?: string;
++};
++
++export function CancelButton({ size = "16", className, ...props }: Props): JSX.Element {
++    return <AccessibleButton
++        {...props}
++        className={classNames("mx_CancelButton", className)}
++        style={{
++            "--size": `${size}px`,
++        } as React.CSSProperties}
++    />;
++}
++
++export default CancelButton;
+diff --git a/src/components/views/rooms/MessageComposer.tsx b/src/components/views/rooms/MessageComposer.tsx
+index 0791258..1e43f28 100644
+--- a/src/components/views/rooms/MessageComposer.tsx
++++ b/src/components/views/rooms/MessageComposer.tsx
+@@ -401,9 +401,9 @@ export default class MessageComposer extends React.Component<IProps, IState> {
+                     <img className="mx_MessageComposer_roomReplaced_icon"
+                         src={require("../../../../res/img/room_replaced.svg").default}
+                     />
+-                    <span className="mx_MessageComposer_roomReplaced_header">
++                    <p>
+                         { _t("This room has been replaced and is no longer active.") }
+-                    </span><br />
++                    </p>
+                     { continuesLink }
+                 </div>
+             </div>);
+diff --git a/src/components/views/rooms/ReplyPreview.tsx b/src/components/views/rooms/ReplyPreview.tsx
+index 611c58f..f3fe431 100644
+--- a/src/components/views/rooms/ReplyPreview.tsx
++++ b/src/components/views/rooms/ReplyPreview.tsx
+@@ -22,7 +22,7 @@ import { _t } from '../../../languageHandler';
+ import { RoomPermalinkCreator } from "../../../utils/permalinks/Permalinks";
+ import ReplyTile from './ReplyTile';
+ import RoomContext, { TimelineRenderingType } from '../../../contexts/RoomContext';
+-import AccessibleButton from "../elements/AccessibleButton";
++import { CancelButton } from "../buttons/Cancel";
+ 
+ function cancelQuoting(context: TimelineRenderingType) {
+     dis.dispatch({
+@@ -47,7 +47,7 @@ export default class ReplyPreview extends React.Component<IProps> {
+             <div className="mx_ReplyPreview_section">
+                 <div className="mx_ReplyPreview_header">
+                     <span>{ _t('Replying') }</span>
+-                    <AccessibleButton
++                    <CancelButton
+                         className="mx_ReplyPreview_header_cancel"
+                         onClick={() => cancelQuoting(this.context.timelineRenderingType)}
+                     />

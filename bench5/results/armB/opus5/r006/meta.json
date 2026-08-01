@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_element-hq__element-web-f14374a51c153f64f313243f2df6ea4971db4e15",
+  "model": "opus5",
+  "started_at": "2026-08-01T04:53:33Z",
+  "finished_at": "2026-08-01T04:56:36Z",
+  "self_assessment": "Tombstone notice in MessageComposer now uses a semantic <p> instead of span.mx_MessageComposer_roomReplaced_header (CSS retargeted accordingly); added reusable CancelButton at src/components/views/buttons/Cancel.tsx wrapping AccessibleButton with a size prop (default 16) exposed as a --size CSS custom property, plus its stylesheet registered in _components.scss, and wired it into ReplyPreview. NOT test-verified: the proxy blocks codeload.github.com so yarn install fails on the matrix-analytics-events git dependency and element-web's jest suite cannot run in this environment."
+}
