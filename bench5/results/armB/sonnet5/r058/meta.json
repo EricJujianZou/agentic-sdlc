@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_ansible__ansible-d30fc6c0b359f631130b0e979d9a78a7b3747d48-v1055803c3a812189a1133297f7f5468579283f86",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T08:29:21Z",
+  "finished_at": "2026-08-01T08:37:06Z",
+  "self_assessment": "Implemented and manually verified end-to-end (build+install round trip, plus direct _is_child_path unit checks) that internal dir/file symlinks are written as tar symlink entries with correct relative linkname, external symlinks fall back to copied-content regular files (dir symlinks outside the tree are still skipped with a warning as before), _walk no longer recurses into symlinked directories, _tarfile_extract/_get_tar_file_member now yield (TarInfo, stream) tuples, and install_artifact uses new _extract_tar_dir/_extract_tar_file to recreate symlinks on disk only when _is_child_path confirms the target resolves inside the destination (falling back to an empty regular file/directory otherwise); did not fuzz adversarial tar inputs (e.g. absolute or deeply-relative linkname attacks, hardlinks, or case-insensitive filesystems) beyond the traversal-escape checks in _is_child_path, and 3 pre-existing unit tests (test_build_copy_symlink_target_inside_collection, test_build_with_symlink_inside_collection, test_get_tar_file_member) now fail because they assert the old copy-not-symlink / single-object-return behavior that this feature intentionally replaces -- all other galaxy unit tests (144) and galaxy CLI tests (19) pass."
+}

@@ -1,0 +1,48 @@
+diff --git a/src/controllers/write/users.js b/src/controllers/write/users.js
+index 8b7e483ba2..5246581c63 100644
+--- a/src/controllers/write/users.js
++++ b/src/controllers/write/users.js
+@@ -44,7 +44,8 @@ Users.exists = async (req, res) => {
+ };
+ 
+ Users.get = async (req, res) => {
+-	helpers.formatApiResponse(200, res, await user.getUserData(req.params.uid));
++	const userData = await user.getUserData(req.params.uid);
++	helpers.formatApiResponse(200, res, await user.hidePrivateData(userData, req.uid));
+ };
+ 
+ Users.update = async (req, res) => {
+diff --git a/src/user/data.js b/src/user/data.js
+index 7b80bb1ee1..50496be165 100644
+--- a/src/user/data.js
++++ b/src/user/data.js
+@@ -301,6 +301,29 @@ module.exports = function (User) {
+ 		}
+ 	};
+ 
++	User.hidePrivateData = async function (userData, callerUID) {
++		const isSelf = parseInt(callerUID, 10) === parseInt(userData.uid, 10);
++		const [isAdmin, isGlobalModerator] = await Promise.all([
++			User.isAdministrator(callerUID),
++			User.isGlobalModerator(callerUID),
++		]);
++
++		const data = { ...userData };
++		if (isSelf || isAdmin || isGlobalModerator) {
++			return data;
++		}
++
++		const settings = await User.getSettings(userData.uid);
++		if (!settings.showemail || meta.config.hideEmail) {
++			data.email = '';
++		}
++		if (!settings.showfullname || meta.config.hideFullname) {
++			data.fullname = '';
++		}
++
++		return data;
++	};
++
+ 	User.incrementUserFieldBy = async function (uid, field, value) {
+ 		return await incrDecrUserFieldBy(uid, field, value, 'increment');
+ 	};

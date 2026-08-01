@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-1be7de788a444f6255e89c10ef6aa608550604a8-v29f82c9cf21d57b242f8d8b0e541525d259e2d63",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T08:05:00Z",
+  "finished_at": "2026-08-01T08:36:23Z",
+  "self_assessment": "Ported the already-correct add_db_name/expand_record implementations from openlibrary/catalog/utils into merge_marc.py (re-exporting from utils to avoid duplication), added a new threshold_match(e1, e2, threshold, debug) that expands raw records internally and runs the existing level1/level2 cascade, and made editions_match(rec, existing, threshold=875, debug=False) delegate to it so a raw, non-pre-expanded rec is accepted while staying backward compatible with already-expanded inputs (detected via absence of a 'title' key) and with attempt_merge; all 64 existing tests in test_merge_marc.py and test_utils.py pass (1 pre-existing xfail unaffected), plus manual checks for the 875/515 thresholds, None/empty authors, and publish_country validity, but I could not run add_book/tests/test_match.py (which exercises the add_book.match wrapper against a mock_site Thing) because that pulls in a much heavier dependency chain (eventer, full DB mocks) not feasible to install quickly, so that path is unverified beyond code review confirming it is unaffected since add_book/match.py itself was left untouched."
+}

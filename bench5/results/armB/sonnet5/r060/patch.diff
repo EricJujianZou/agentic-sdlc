@@ -1,0 +1,39 @@
+diff --git a/qutebrowser/utils/utils.py b/qutebrowser/utils/utils.py
+index 9fc8e1abc..dea88f72b 100644
+--- a/qutebrowser/utils/utils.py
++++ b/qutebrowser/utils/utils.py
+@@ -777,16 +777,21 @@ def libgl_workaround() -> None:
+ 
+ def parse_duration(duration: str) -> int:
+     """Parse duration in format XhYmZs into milliseconds duration."""
+-    has_only_valid_chars = re.match("^([0-9]+[shm]?){1,3}$", duration)
+-    if not has_only_valid_chars:
+-        return -1
+-    if re.match("^[0-9]+$", duration):
+-        seconds = int(duration)
+-    else:
+-        match = re.search("([0-9]+)s", duration)
+-        seconds = match.group(1) if match else 0
+-    match = re.search("([0-9]+)m", duration)
+-    minutes = match.group(1) if match else 0
+-    match = re.search("([0-9]+)h", duration)
+-    hours = match.group(1) if match else 0
+-    return (int(seconds) + int(minutes) * 60 + int(hours) * 3600) * 1000
++    if duration.isdigit():
++        return int(duration)
++
++    match = re.fullmatch(
++        r'(?:(?P<hours>\d+(?:\.\d+)?)h)?\s*'
++        r'(?:(?P<minutes>\d+(?:\.\d+)?)m)?\s*'
++        r'(?:(?P<seconds>\d+(?:\.\d+)?)s)?',
++        duration,
++    )
++    if match is None or not any(match.groups()):
++        raise ValueError(f"Invalid duration: {duration!r}")
++
++    parts = match.groupdict(default="0")
++    hours = float(parts['hours'])
++    minutes = float(parts['minutes'])
++    seconds = float(parts['seconds'])
++
++    return int((hours * 3600 + minutes * 60 + seconds) * 1000)
