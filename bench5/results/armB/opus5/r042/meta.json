@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-8659668177f1feb65963db7a967347a79c5f9c40",
+  "model": "opus5",
+  "started_at": "2026-08-01T07:29:01Z",
+  "finished_at": "2026-08-01T07:43:01Z",
+  "self_assessment": "All six VulnInfos filters (FilterByCvssOver, FilterByConfidenceOver, FilterIgnoreCves, FilterUnfixed, FilterIgnorePkgs, FindScoredVulns) now return (VulnInfos, int), the second value being the number of CVEs the filter excluded, computed as len(v) - len(filtered); the early-return paths (FilterUnfixed with ignoreUnfixed false, FilterIgnorePkgs with no compilable regexps) return the input unchanged with a count of 0. Detect now logs the total detected CVE count per target up front and, for each enabled rule only, applies the filter and logs the server/container name, the number filtered and the criterion: --cvss-over=<value>, --ignore-unfixed, --confidence-over=<value>, ignoreCves=<list>, ignorePkgsRegexp=<list> and --ignore-unscored-cves. Rules that are not configured are now skipped entirely rather than being applied as no-ops, which is what makes the per-rule counts meaningful. Verified: go build ./... clean, ./detector and ./reporter pass, ./models passes after temporarily adapting its five filter call sites to the two-value form (reverted, so the patch carries no test changes), and a scratch test confirmed the counts for every filter including the two zero-count early-return paths."
+}
