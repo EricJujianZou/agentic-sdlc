@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:30:00Z",
+  "finished_at": "2026-08-01T07:48:39Z",
+  "self_assessment": "Renamed CpeNameMatch to CpeVersionMatch, added CpeVendorProductMatch (score 10), wired IsJvn-based confidence selection into DetectCpeURIsCves via a derived isJvn(detail) helper (NvdJSON nil and Jvn non-nil, since go-cve-dictionary's CveDetail has no literal IsJvn field), updated the TUI template to render 'score / method', and made SortByConfident sort primarily by numeric Score (falling back to the existing SortOrder tiebreak); build, vet, and the full test suite (including models/detector/tui) pass, though I could not verify against a live JVN-populated go-cve-dictionary DB so the isJvn heuristic is inferred from the vendored library's schema rather than an explicit field."
+}

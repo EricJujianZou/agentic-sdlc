@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-8659668177f1feb65963db7a967347a79c5f9c40",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:43:41Z",
+  "finished_at": "2026-08-01T07:46:56Z",
+  "self_assessment": "Confident: all six filter functions now return (VulnInfos, int), Detect logs a pre-filter detected-CVE count plus a structured target=/filter=/value=/filtered= line per enabled filter (cvss-over, ignore-unfixed, confidence-over, ignoreCves, ignorePkgsRegexp, ignore-unscored-cves), all call sites (detector.go and the pre-existing unit tests, the only other callers found via git grep) were updated, and go build/vet/test all pass cleanly on the non-scanner build (the scanner-tag build error is pre-existing and unrelated, verified via git stash)."
+}
