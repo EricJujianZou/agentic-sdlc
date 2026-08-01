@@ -287,3 +287,28 @@ See `probe/README.md`: gold files named verbatim in the issue text are
 excluded from scoring (inference != memorization); high-probe = either
 model reaches probe_recall >= 0.5 on scorable files; primary analysis
 repeated excluding high-probe instances.
+
+## 2026-08-01 — Arm B GRADED (official harness, local, serial per-patch)
+
+All 120 arm-B patches graded via `grade_batch.py --arm-branch` (one
+harness invocation per patch, per-patch image pull + post-use rmi).
+Integrity: 120/120 genuine grades — every entry has a parsed test list;
+zero `no output.json` infra-fails; every FAIL is a real test failure
+(most are near-misses: e.g. 217/218, 41/42 needed tests passing).
+
+| cell | pass | rate |
+|------|------|------|
+| OB (`armB/opus5`)  | 52/60 | 86.7% |
+| SB (`armB/sonnet5`) | 48/60 | 80.0% |
+
+Within-arm-B model contrast (same 60 instances, paired): discordant
+pairs 5 vs 9 — OB-only fails at ranks {12,13,14,23,32}, SB-only fails
+at {2,5,18,19,22,26,36,45,51}; both fail at {11,48,54}. Opus +4
+instances over Sonnet; McNemar on 14 discordant pairs is far from
+significant on its own — the pre-registered primary contrast remains
+arm-vs-arm within model, pending arm A.
+
+Notable: the one-continuous-session bare arm scores ~80-87% at ~4.5
+min/instance — far above the pilot fresh-session rates on the same
+stratum. Grades: `bench5/results/main_armB_grades.json`; raw outputs
+`SWE-bench_Pro-os/bench5_eval/out_main/<iid>/armB_*_output.json`.
