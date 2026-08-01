@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_tutao__tutanota-09c2776c0fce3db5c6e18da92b5a45dce9f013aa-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T03:03:47Z",
+  "finished_at": "2026-08-01T03:18:15Z",
+  "turns_estimate": 45,
+  "self_assessment": "Added src/api/main/OperationProgressTracker.ts (OperationId, ExposedOperationProgressTracker, registerOperation/onProgress), threaded an onProgress callback through CalendarFacade._saveCalendarEvents, gave saveImportedCalendarEvents an operationId, exposed the tracker on MainInterface/MainLocator/WorkerClient, and switched the import dialog to a per-operation progress dialog; tsc --noEmit is clean, the (updated) CalendarFacadeTest passes 24/24, and a standalone check confirms per-operation stream isolation, but the repo's full test runner could not build here (native sqlcipher/libsecret toolchain missing), so the hidden suite is unverified."
+}
