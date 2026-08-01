@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-2923cbc645fbc7a37d50398eb2ab8febda8c3264",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:12:12Z",
+  "finished_at": "2026-08-01T07:19:52Z",
+  "self_assessment": "Implemented all requirement bullets (CentOS Stream detection as streamN, MajorVersion stream-prefix parsing, CentOS Stream 8 EOL date, OVAL/Gost release normalization, rhelDownStreamOSVersionToRHEL->rhelRebuildOSVersionToRHEL rename in all sites/tests, Alma added to needs-restart branch) and verified with go build/vet and full existing test suite passing, but had no gold patch or hidden tests to confirm the exact expected shape of the new normalization helpers."
+}

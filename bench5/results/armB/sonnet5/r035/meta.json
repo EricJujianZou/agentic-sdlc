@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_flipt-io__flipt-b4bb5e13006a729bc0eed8fe6ea18cff54acdacb",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:12:37Z",
+  "finished_at": "2026-08-01T07:19:43Z",
+  "self_assessment": "Added OCI ManifestVersion config field with default 1.1 and exact validation error, added WithManifestVersion functional option in internal/oci/file.go and wired it through both call sites (cmd/flipt/bundle.go and internal/storage/fs/store/store.go); go build, go vet, and go test ./internal/config/... ./internal/oci/... all pass, though I could not verify against a real AWS ECR registry."
+}

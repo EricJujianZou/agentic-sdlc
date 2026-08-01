@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-25858f9f0c165df25742acf8309ce909773f0cdd-v13642507b4fc1f8d234172bf8129942da2c2ca26",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:12:26Z",
+  "finished_at": "2026-08-01T07:17:38Z",
+  "self_assessment": "Extracted SolrUpdateState, load_config, get/set_solr_base_url, get/set_solr_next, solr_update, and solr_insert_documents verbatim into openlibrary/solr/utils.py, rewired update_work.py/update_edition.py/index_subjects.py to import from it (breaking the update_edition<->update_work circular-import workaround), confirmed both target modules import cleanly, and all 72 tests under openlibrary/tests/solr/ (including all solr_update success/503/offline/invalid-request/partial-failure/other-error-status cases) pass unmodified."
+}

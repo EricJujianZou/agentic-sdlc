@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-308a35d6999427c02b1dbf5211c033ad3b352556-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T06:55:00Z",
+  "finished_at": "2026-08-01T07:24:18Z",
+  "self_assessment": "Merged ListMixin into List (moved to openlibrary/core/lists/model.py, now inheriting core.models.Thing via a one-directional import to avoid the original circular dependency), generalized get_owner()'s key parsing and added an explicit None fallback, added register_models() in lists/model.py that registers List under /type/list and ListChangeset (lazily imported from upstream/models.py) under 'lists', updated all references (core/models.py, plugins/upstream/models.py, plugins/openlibrary/lists.py, tests/core/test_models.py), and verified via both required sanity imports plus a full pytest run (1530 passed, 0 failures, only pre-existing unrelated collection/isolation issues) that nothing regressed."
+}
