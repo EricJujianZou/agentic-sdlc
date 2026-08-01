@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_protonmail__webclients-ac23d1efa1a6ab7e62724779317ba44c28d78cfd",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T08:06:21Z",
+  "finished_at": "2026-08-01T08:11:19Z",
+  "self_assessment": "Added an optional cancellationContext option to subscriptionExpires() in packages/components/containers/payments/subscription/helpers/payment.ts that forces active-term-only expiration (ignoring UpcomingSubscription) whenever cancellationContext is true or the active term's Renew is already Disabled, and wired it into the three cancellation-flow screens that previously read UpcomingSubscription.PeriodEnd/subscription.PeriodEnd directly (cancellationFlow/config/b2cCommonConfig.tsx, b2bCommonConfig.tsx, and cancelSubscription/CancelSubscriptionModal.tsx), updating one existing test that encoded the old buggy behavior and adding new unit tests for the option; verified logic by manual trace against existing mocks (subscriptionMock/upcomingSubscriptionMock) since yarn install was skipped due to only ~3.7GB free disk in this sandbox, so tests were not actually executed."
+}
