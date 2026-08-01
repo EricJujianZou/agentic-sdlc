@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_flipt-io__flipt-1dceb5edf3fa8f39495b939ef9cc0c3dd38fa17d",
+  "model": "opus5",
+  "started_at": "2026-08-01T07:47:10Z",
+  "finished_at": "2026-08-01T08:00:10Z",
+  "self_assessment": "audit.Rule gained SegmentOperator string with the json tag segment_operator,omitempty and audit.RolloutSegment gained Operator string with operator,omitempty. NewRule keeps copying the deprecated single SegmentKey, then when the proto carries SegmentKeys it uses the lone entry as-is for one segment, or joins them with commas and records r.SegmentOperator.String() in SegmentOperator for several - so a single-segment rule never emits an operator. NewRollout does the same for the segment branch of the rollout: one key is copied straight through, multiple keys are comma-joined into Segment.Key with Segment.Operator set from the proto operator, while threshold rollouts are untouched. Verified: go build ./... clean, gofmt clean, ./internal/server/... all pass, and a scratch test confirmed each case - deprecated single key, single SegmentKeys entry (no operator emitted), multiple keys joined as s1,s2 with AND_SEGMENT_OPERATOR / OR_SEGMENT_OPERATOR, the omitempty behaviour on both new fields in the marshalled JSON, and that threshold rollouts still produce no Segment. Note: the environment's disk filled up mid-task from accumulated Go build cache; I freed it with go clean -cache, which does not affect the patch."
+}
