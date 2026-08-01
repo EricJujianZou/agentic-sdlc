@@ -13,8 +13,10 @@
   path now, not fallback. Monitor is async: ScheduleWakeup ~30-90s after each
   call instead of polling; results land as task-notification reminders.
 - JS monorepos: don't assume `yarn install` fails -- try it before diff-only
-  review. It rewrites `yarn.lock` with no real changes -- exclude it
-  (`git diff -- . ':!yarn.lock'`).
+  review. It rewrites `yarn.lock` with no real changes -- exclude it, combined
+  with the test-file exclude in one `git diff`: `git diff -- . ':!yarn.lock'
+  ':!*.test.ts'` (webclients instance r018: gold-patch diff jumped from
+  ~370 to ~2150 lines until both excludes were applied together).
 - A fresh full clone can still lack `base_commit` (`fatal: reference is not
   a tree`) -- fix: `git fetch origin <sha> && git checkout FETCH_HEAD`.
 - **`instance_id` often embeds the exact upstream fix commit hash** (9/9
