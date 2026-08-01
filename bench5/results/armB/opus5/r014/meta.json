@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_ansible__ansible-b8025ac160146319d2b875be3366b60c852dd35d-v0f01c69f1e2528b935359cfe578530722bca2c59",
+  "model": "opus5",
+  "started_at": "2026-08-01T05:34:48Z",
+  "finished_at": "2026-08-01T05:41:03Z",
+  "self_assessment": "Hoisted get_ca_certs(cafile=None) and make_context(cafile, cadata, ciphers, validate_certs=True) to module level in module_utils/urls.py; SSLValidationHandler now delegates to them and carries a ciphers attribute. make_context is the single interface for SSL setup: it validates ciphers is a list (clear TypeError otherwise), applies them with set_ciphers, and for validate_certs=False sets OP_NO_SSLv2/OP_NO_SSLv3 with check_hostname False before CERT_NONE. ciphers is threaded explicitly (defaulting to None, never omitted) through maybe_add_ssl_handler, Request.__init__/open, open_url, fetch_url and fetch_file, and exposed as a list/elements=str option on get_url, uri and lookup('url') with docs. Verified: ciphers=['ECDHE-RSA-AES128-SHA256'] narrows the TLS1.2 cipher list to exactly that one (default is 14), an invalid cipher raises SSLError, a bare string is rejected, and no-validate contexts keep CERT_NONE + SSLv3 excluded. Of 6 failing url unit tests, 1 (channel_binding) fails identically on the clean base and the other 5 fail only because they assert call kwargs without the new ciphers=None - exactly the propagation the requirements mandate."
+}
