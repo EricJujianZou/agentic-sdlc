@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_protonmail__webclients-4817fe14e1356789c90165c2a53f6a043c2c5f83",
+  "model": "opus5",
+  "started_at": "2026-08-01T05:53:51Z",
+  "finished_at": "2026-08-01T05:58:23Z",
+  "self_assessment": "getProtonSignature now takes userSettings and calls getProtonMailSignature({isReferralProgramLinkEnabled: true, referralProgramUserLink}) only when mailSettings.PMSignatureReferralLink is truthy and userSettings.Referral?.Link is a non-empty string, otherwise returning the standard signature (and still empty when PMSignature is 0). userSettings is threaded through the whole pipeline: templateBuilder, insertSignature, changeSignature, textToHtml (plus its replaceSignature/attachSignature helpers), plainTextToHTML, generateBlockquote and createNewDraft, and down through the components - Composer and SelectSender via useUserSettings, ComposerContent and EditorWrapper as a new prop, useDraft for both createNewDraft call sites, and EOComposer via a new eoDefaultUserSettings constant exposing Referral: undefined. Verified: tsc over every changed file is free of arity/type errors (it caught one missed plainTextToHTML call site, now fixed), and the referral decision logic was exercised across all six enabled/disabled/empty-link/no-Referral/PMSignature-off combinations. Jest could not be run - the proxy blocks codeload.github.com so workspace deps cannot be installed."
+}
