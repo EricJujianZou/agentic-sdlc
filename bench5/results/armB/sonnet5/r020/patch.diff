@@ -1,0 +1,16 @@
+diff --git a/src/user/data.js b/src/user/data.js
+index bccea4c373..d2f9e197be 100644
+--- a/src/user/data.js
++++ b/src/user/data.js
+@@ -272,6 +272,11 @@ module.exports = function (User) {
+ 		}
+ 	}
+ 
++	User.getIconBackgrounds = async function (uid = 0) {
++		const result = await plugins.hooks.fire('filter:user.getIconBackgrounds', { uid: uid, iconBackgrounds: iconBackgrounds.slice() });
++		return result.iconBackgrounds;
++	};
++
+ 	User.getDefaultAvatar = function () {
+ 		if (!meta.config.defaultAvatar) {
+ 			return '';

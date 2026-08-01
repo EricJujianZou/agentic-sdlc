@@ -1,0 +1,351 @@
+diff --git a/lib/ansible/executor/process/worker.py b/lib/ansible/executor/process/worker.py
+index f5e7b979f4..dd71f2f217 100644
+--- a/lib/ansible/executor/process/worker.py
++++ b/lib/ansible/executor/process/worker.py
+@@ -20,16 +20,28 @@ from __future__ import annotations
+ import os
+ import sys
+ import traceback
++import typing as t
+ 
+ from jinja2.exceptions import TemplateNotFound
+ from multiprocessing.queues import Queue
+ 
++from ansible import context
+ from ansible.errors import AnsibleConnectionFailure, AnsibleError
+ from ansible.executor.task_executor import TaskExecutor
++from ansible.module_utils.common.collections import is_sequence
+ from ansible.module_utils.common.text.converters import to_text
++from ansible.plugins.loader import init_plugin_loader
+ from ansible.utils.display import Display
+ from ansible.utils.multiprocessing import context as multiprocessing_context
+ 
++if t.TYPE_CHECKING:
++    from ansible.executor.task_queue_manager import FinalQueue
++    from ansible.inventory.host import Host
++    from ansible.parsing.dataloader import DataLoader
++    from ansible.playbook.play_context import PlayContext
++    from ansible.playbook.task import Task
++    from ansible.vars.manager import VariableManager
++
+ __all__ = ['WorkerProcess']
+ 
+ display = Display()
+@@ -53,7 +65,19 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+     for reading later.
+     """
+ 
+-    def __init__(self, final_q, task_vars, host, task, play_context, loader, variable_manager, shared_loader_obj, worker_id):
++    def __init__(
++        self,
++        *,
++        final_q: FinalQueue,
++        task_vars: dict[str, t.Any],
++        host: Host,
++        task: Task,
++        play_context: PlayContext,
++        loader: DataLoader,
++        variable_manager: VariableManager,
++        shared_loader_obj: t.Any,
++        worker_id: int,
++    ) -> None:
+ 
+         super(WorkerProcess, self).__init__()
+         # takes a task queue manager as the sole param:
+@@ -65,47 +89,27 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+         self._loader = loader
+         self._variable_manager = variable_manager
+         self._shared_loader_obj = shared_loader_obj
++        self.worker_id = worker_id
+ 
+         # NOTE: this works due to fork, if switching to threads this should change to per thread storage of temp files
+         # clear var to ensure we only delete files for this child
+         self._loader._tempfiles = set()
+ 
+         self.worker_queue = WorkerQueue(ctx=multiprocessing_context)
+-        self.worker_id = worker_id
+-
+-    def _save_stdin(self):
+-        self._new_stdin = None
+-        try:
+-            if sys.stdin.isatty() and sys.stdin.fileno() is not None:
+-                try:
+-                    self._new_stdin = os.fdopen(os.dup(sys.stdin.fileno()))
+-                except OSError:
+-                    # couldn't dupe stdin, most likely because it's
+-                    # not a valid file descriptor
+-                    pass
+-        except (AttributeError, ValueError):
+-            # couldn't get stdin's fileno
+-            pass
+ 
+-        if self._new_stdin is None:
+-            self._new_stdin = open(os.devnull)
++        # Capture the parsed CLI args from the parent process so they can be re-applied in the
++        # child if the multiprocessing start method does not inherit interpreter state (eg,
++        # anything other than 'fork'); see `run()`.
++        self._cli_args = context.CLIARGS
+ 
+-    def start(self):
++    def start(self) -> None:
+         """
+-        multiprocessing.Process replaces the worker's stdin with a new file
+-        but we wish to preserve it if it is connected to a terminal.
+-        Therefore dup a copy prior to calling the real start(),
+-        ensuring the descriptor is preserved somewhere in the new child, and
+-        make sure it is closed in the parent when start() completes.
++        multiprocessing.Process.start() is wrapped here to hold the display lock across the
++        fork/spawn of the child process.
+         """
+-
+-        self._save_stdin()
+         # FUTURE: this lock can be removed once a more generalized pre-fork thread pause is in place
+         with display._lock:
+-            try:
+-                return super(WorkerProcess, self).start()
+-            finally:
+-                self._new_stdin.close()
++            super(WorkerProcess, self).start()
+ 
+     def _hard_exit(self, e):
+         """
+@@ -125,7 +129,33 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+ 
+         os._exit(1)
+ 
+-    def run(self):
++    def _detach(self) -> None:
++        """
++        Detach the worker process from the parent's controlling terminal and any inherited
++        standard input, output, and error streams, and place it in its own session/process
++        group. This ensures the worker cannot read from or write directly to a terminal the
++        parent may be attached to, and that it does not receive signals (eg SIGINT) targeted
++        at the parent's process group.
++
++        All output from this point forward must be routed through the display queue (or other
++        controlled/logging channels), never directly to stdio.
++        """
++        # Start a new session, detaching from any controlling terminal and the parent's
++        # process group.
++        os.setsid()
++
++        # Redirect the standard file descriptors to /dev/null so nothing this worker (or any
++        # code/plugin it calls) does can accidentally read from or write to the terminal.
++        devnull_fd = os.open(os.devnull, os.O_RDWR)
++        try:
++            os.dup2(devnull_fd, 0)
++            os.dup2(devnull_fd, 1)
++            os.dup2(devnull_fd, 2)
++        finally:
++            if devnull_fd > 2:
++                os.close(devnull_fd)
++
++    def run(self) -> None:
+         """
+         Wrap _run() to ensure no possibility an errant exception can cause
+         control to return to the StrategyBase task loop, or any other code
+@@ -135,6 +165,26 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+         a try/except added in far-away code can cause a crashed child process
+         to suddenly assume the role and prior state of its parent.
+         """
++        # Set the queue on Display so calls to Display.display are proxied over the queue.
++        # This must happen before detaching from stdio below, so that any display output
++        # generated from this point forward is routed over the queue instead of being lost.
++        display.set_queue(self._final_q)
++
++        # Fully detach from the parent's standard I/O before doing anything else, so this
++        # worker cannot interact with (or be interfered with by) the controlling terminal.
++        self._detach()
++
++        if multiprocessing_context.get_start_method() != 'fork':
++            # Start methods other than 'fork' (eg 'spawn') do not inherit interpreter state
++            # from the parent process, so the parsed CLI args and the plugin loader's
++            # collection path configuration must be explicitly re-applied here.
++            context.CLIARGS = self._cli_args
++            cli_collections_path = context.CLIARGS.get('collections_path') or []
++            if not is_sequence(cli_collections_path):
++                # In some contexts ``collections_path`` is singular
++                cli_collections_path = [cli_collections_path]
++            init_plugin_loader(cli_collections_path)
++
+         try:
+             return self._run()
+         except BaseException as e:
+@@ -165,9 +215,6 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+         # pr = cProfile.Profile()
+         # pr.enable()
+ 
+-        # Set the queue on Display so calls to Display.display are proxied over the queue
+-        display.set_queue(self._final_q)
+-
+         global current_worker
+         current_worker = self
+ 
+@@ -179,7 +226,7 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
+                 self._task,
+                 self._task_vars,
+                 self._play_context,
+-                self._new_stdin,
++                None,
+                 self._loader,
+                 self._shared_loader_obj,
+                 self._final_q,
+diff --git a/lib/ansible/executor/task_executor.py b/lib/ansible/executor/task_executor.py
+index 77fae99af3..445cb6bb8f 100644
+--- a/lib/ansible/executor/task_executor.py
++++ b/lib/ansible/executor/task_executor.py
+@@ -25,6 +25,7 @@ from ansible.module_utils.six import string_types
+ from ansible.playbook.conditional import Conditional
+ from ansible.playbook.task import Task
+ from ansible.plugins import get_plugin_class
++from ansible.plugins.connection import ConnectionKwargs
+ from ansible.plugins.loader import become_loader, cliconf_loader, connection_loader, httpapi_loader, netconf_loader, terminal_loader
+ from ansible.template import Templar
+ from ansible.utils.collection_loader import AnsibleCollectionConfig
+@@ -97,7 +98,8 @@ class TaskExecutor:
+         self._task = task
+         self._job_vars = job_vars
+         self._play_context = play_context
+-        self._new_stdin = new_stdin
++        # `new_stdin` is accepted for backwards compatibility with existing callers, but is unused:
++        # connections are no longer initialized with it (see `_get_connection` and `ConnectionKwargs`).
+         self._loader = loader
+         self._shared_loader_obj = shared_loader_obj
+         self._connection = None
+@@ -989,12 +991,14 @@ class TaskExecutor:
+         # (really paramiko), eventually this should move to task object itself.
+         conn_type = self._play_context.connection
+ 
++        connection_kwargs: ConnectionKwargs = {
++            'task_uuid': self._task._uuid,
++            'ansible_playbook_pid': to_text(os.getppid()),
++        }
+         connection, plugin_load_context = self._shared_loader_obj.connection_loader.get_with_context(
+             conn_type,
+             self._play_context,
+-            self._new_stdin,
+-            task_uuid=self._task._uuid,
+-            ansible_playbook_pid=to_text(os.getppid())
++            **connection_kwargs
+         )
+ 
+         if not connection:
+diff --git a/lib/ansible/executor/task_queue_manager.py b/lib/ansible/executor/task_queue_manager.py
+index d28f963aea..9260d215b8 100644
+--- a/lib/ansible/executor/task_queue_manager.py
++++ b/lib/ansible/executor/task_queue_manager.py
+@@ -130,6 +130,17 @@ class TaskQueueManager:
+ 
+     def __init__(self, inventory, variable_manager, loader, passwords, stdout_callback=None, run_additional_callbacks=True, run_tree=False, forks=None):
+ 
++        # Prevent stdin/stdout/stderr from being inherited by child (worker) processes, so
++        # workers cannot read from or write directly to whatever terminal this process may be
++        # attached to; all worker output is routed over the display queue instead.
++        for stream in (sys.stdin, sys.stdout, sys.stderr):
++            try:
++                os.set_inheritable(stream.fileno(), False)
++            except (AttributeError, OSError, ValueError):
++                # stream may not have a real fd (eg it's been replaced/mocked), or the
++                # platform may not support changing fd inheritability; nothing we can do.
++                pass
++
+         self._inventory = inventory
+         self._variable_manager = variable_manager
+         self._loader = loader
+diff --git a/lib/ansible/plugins/connection/__init__.py b/lib/ansible/plugins/connection/__init__.py
+index 3743d3601e..0934dde910 100644
+--- a/lib/ansible/plugins/connection/__init__.py
++++ b/lib/ansible/plugins/connection/__init__.py
+@@ -6,7 +6,6 @@ from __future__ import annotations
+ 
+ import collections.abc as c
+ import fcntl
+-import io
+ import os
+ import shlex
+ import typing as t
+@@ -35,6 +34,13 @@ P = t.ParamSpec('P')
+ T = t.TypeVar('T')
+ 
+ 
++class ConnectionKwargs(t.TypedDict):
++    """Keyword arguments accepted when constructing a connection plugin instance via the connection loader."""
++    task_uuid: str
++    ansible_playbook_pid: str
++    shell: t.NotRequired[ShellBase]
++
++
+ def ensure_connect(
+     func: c.Callable[t.Concatenate[ConnectionBase, P], T],
+ ) -> c.Callable[t.Concatenate[ConnectionBase, P], T]:
+@@ -71,9 +77,8 @@ class ConnectionBase(AnsiblePlugin):
+     def __init__(
+         self,
+         play_context: PlayContext,
+-        new_stdin: io.TextIOWrapper | None = None,
+-        shell: ShellBase | None = None,
+         *args: t.Any,
++        shell: ShellBase | None = None,
+         **kwargs: t.Any,
+     ) -> None:
+ 
+@@ -83,9 +88,6 @@ class ConnectionBase(AnsiblePlugin):
+         if not hasattr(self, '_play_context'):
+             # Backwards compat: self._play_context isn't really needed, using set_options/get_option
+             self._play_context = play_context
+-        # Delete once the deprecation period is over for WorkerProcess._new_stdin
+-        if not hasattr(self, '__new_stdin'):
+-            self.__new_stdin = new_stdin
+         if not hasattr(self, '_display'):
+             # Backwards compat: self._display isn't really needed, just import the global display and use that.
+             self._display = display
+@@ -105,15 +107,6 @@ class ConnectionBase(AnsiblePlugin):
+ 
+         self.become: BecomeBase | None = None
+ 
+-    @property
+-    def _new_stdin(self) -> io.TextIOWrapper | None:
+-        display.deprecated(
+-            "The connection's stdin object is deprecated. "
+-            "Call display.prompt_until(msg) instead.",
+-            version='2.19',
+-        )
+-        return self.__new_stdin
+-
+     def set_become_plugin(self, plugin: BecomeBase) -> None:
+         self.become = plugin
+ 
+@@ -319,11 +312,10 @@ class NetworkConnectionBase(ConnectionBase):
+     def __init__(
+         self,
+         play_context: PlayContext,
+-        new_stdin: io.TextIOWrapper | None = None,
+         *args: t.Any,
+         **kwargs: t.Any,
+     ) -> None:
+-        super(NetworkConnectionBase, self).__init__(play_context, new_stdin, *args, **kwargs)
++        super(NetworkConnectionBase, self).__init__(play_context, *args, **kwargs)
+         self._messages: list[tuple[str, str]] = []
+         self._conn_closed = False
+ 
+diff --git a/lib/ansible/plugins/strategy/__init__.py b/lib/ansible/plugins/strategy/__init__.py
+index 54721ad874..6aaaff7a34 100644
+--- a/lib/ansible/plugins/strategy/__init__.py
++++ b/lib/ansible/plugins/strategy/__init__.py
+@@ -409,7 +409,15 @@ class StrategyBase:
+ 
+                     # Pass WorkerProcess its strategy worker number so it can send an identifier along with intra-task requests
+                     worker_prc = WorkerProcess(
+-                        self._final_q, task_vars, host, task, play_context, self._loader, self._variable_manager, plugin_loader, self._cur_worker,
++                        final_q=self._final_q,
++                        task_vars=task_vars,
++                        host=host,
++                        task=task,
++                        play_context=play_context,
++                        loader=self._loader,
++                        variable_manager=self._variable_manager,
++                        shared_loader_obj=plugin_loader,
++                        worker_id=self._cur_worker,
+                     )
+                     self._workers[self._cur_worker] = worker_prc
+                     self._tqm.send_callback('v2_runner_on_start', host, task)

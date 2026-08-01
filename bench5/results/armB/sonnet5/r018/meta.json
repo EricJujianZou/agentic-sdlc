@@ -1,0 +1,7 @@
+{
+    "instance_id": "instance_protonmail__webclients-4817fe14e1356789c90165c2a53f6a043c2c5f83",
+    "model": "claude-sonnet-5",
+    "started_at": "2026-08-01T05:45:09Z",
+    "finished_at": "2026-08-01T06:11:32Z",
+    "self_assessment": "Implemented getProtonSignature/templateBuilder/insertSignature/changeSignature with the exact referral-link gating and no-duplication behavior specified, embedding the URL as a single clickable <a> for HTML and a hidden raw-text line that survives plain-text export (verified with ad hoc tests and tsc --noEmit, both clean, plus the full pre-existing messageSignature/messageDraft/textToHtml Jest suites passing including all 32 snapshots), and propagated userSettings through generateBlockquote/createNewDraft/textToHtml/plainTextToHTML and the composer component chain (Composer/ComposerContent/EditorWrapper/SelectSender) plus a new eoDefaultUserSettings and useGetUserSettings hook for the draft pipeline; the one deliberately underspecified area is the 'swap referral signature when active sender changes' requirement, which I wired to recompute from current mailSettings/userSettings on sender change but could not make genuinely sender-dependent since referral eligibility is a global (not per-address) setting in this codebase's data model."
+}
