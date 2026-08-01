@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_qutebrowser__qutebrowser-6b320dc18662580e1313d2548fdd6231d2a97e6d-v363c8a7e5ccdf6968fc7ab84a2053ac78036691d",
+  "model": "opus5",
+  "started_at": "2026-08-01T04:57:02Z",
+  "finished_at": "2026-08-01T04:59:31Z",
+  "self_assessment": "_parse_value now takes the component kind and scales hue by 359 (others 255); to_py dispatches through a converters map keyed on rgb/rgba/hsv/hsva, validating the function name and that the component count equals len(kind), zipping kind chars to values so hue is identified. Verified directly against PyQt5: hsv(100%,100%,100%) now yields hue 359 (was 254) and hsv(10%,...) yields 35; RGB/A percentage behaviour is byte-identical to the base commit; all malformed inputs (wrong arity, unknown function) raise ValidationError. The repo's own pytest suite cannot run here (2019-era conftest is incompatible with modern pytest hookspecs)."
+}
