@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-aaea15e516ece43978cf98e09e52080478b1d39f",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T06:40:00Z",
+  "finished_at": "2026-08-01T06:59:32Z",
+  "self_assessment": "Confident: searchCache now takes the map directly with a plain two-value lookup, FillWordPress reads ignoreInactive from the per-server WordPressConf (wired through report.go's DetectWordPressCves/WordPressOption instead of the global CLI-only c.Conf.WpIgnoreInactive), and removeInactives (already Status-field-based) is now actually reachable via that per-server flag; build, vet, and the wordpress/report/models package tests all pass."
+}
