@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_element-hq__element-web-9a31cd0fa849da810b4fac6c6c015145e850b282-vnan",
+  "model": "opus5",
+  "started_at": "2026-08-01T06:26:41Z",
+  "finished_at": "2026-08-01T06:48:41Z",
+  "self_assessment": "JoinRuleSettings: extracted the ad-hoc RoomUpgradeWarningDialog creation into a single upgradeRequiredDialog(targetVersion, description?) helper (keeping the Upgrading room / Loading new room / Sending invites... / Updating spaces... progress messages and the post-upgrade ViewRoom + open_room_settings dispatches), added a feature_ask_to_join-gated JoinRule.Knock option shown when the room version supports knock (PreferredRoomVersions.KnockRooms) or promptUpgrade is set - in the latter case with the 'Upgrade required' pill - and routed both Knock and Restricted through that helper when the version is too old. RoomUpgradeWarningDialog: replaced the isPrivate heuristic with the actual joinRule, gating the invite toggle and the opts.invite flag on Invite-or-Knock and picking the title via a switch (private / public / 'Upgrade room' fallback). Added the 'People cannot join unless access is granted.' and 'Upgrade room' i18n keys and moved 'Ask to join' to its new first-use position. Verified: standalone tsc over both changed files reports exactly the same 27 pre-existing errors as the clean base (all from unresolved node_modules), so nothing new was introduced; jest could not be run because matrix-js-sdk is a github: dependency and the proxy blocks codeload.github.com, so yarn install fails."
+}
