@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_NodeBB__NodeBB-04998908ba6721d64eba79ae3b65a351dcfbc5b5-vnan",
+    "model": "opus5",
+    "started_at": "2026-08-01T14:33:32Z",
+    "finished_at": "2026-08-01T14:58:30Z",
+    "turns_estimate": 60,
+    "self_assessment": "Added db.mget(keys) to all three adapters (redis client.mget; mongo $in on _key with the data/value fallback; postgres UNNEST WITH ORDINALITY + LEFT JOIN legacy_object_live/legacy_string), order-preserving with explicit nulls. confirm:<code> now stores an `expires` ms timestamp instead of pexpire TTLs on either key; isValidationPending/getValidationExpiry/canSendValidation read it; new getEmailForValidation(uid) falls back from the user hash to the confirm obj (uid-matched, expired or not); ACP validateEmail/sendValidationEmail use it; deleteAccount calls expireValidation; loadUserInfo attaches email:pending/email:expired via a getConfirmObjs() helper (mget -> getObjects, indexed by position) and the ACP OpenAPI schema declares them. Verified on a real redis AND a real postgres: 6-case scratch repro fails 6/6 before and passes 6/6 after; test/database.js 284 passing on both backends; test/user/emails.js 20 passing on both; full suite 4166 passing with failures matching the 47-failure sandbox baseline (all ECONNRESET/proxy flakiness); eslint clean. Mongo mget is review-verified only (no mongod/docker in the sandbox). Deliberately dropped an ACP template/en-GB badge for the new flags: new en-GB keys break test/i18n.js key parity across all 47 language files (upstream syncs those via Transifex), and the UI render is not in the Requirements list."
+}

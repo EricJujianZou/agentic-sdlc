@@ -1,0 +1,336 @@
+diff --git a/public/openapi/components/schemas/UserObject.yaml b/public/openapi/components/schemas/UserObject.yaml
+index 3b40834..82eb963 100644
+--- a/public/openapi/components/schemas/UserObject.yaml
++++ b/public/openapi/components/schemas/UserObject.yaml
+@@ -675,6 +675,14 @@ UserObjectACP:
+       type: number
+       description: Whether the user has confirmed their email address or not
+       example: 1
++    'email:pending':
++      type: boolean
++      description: Whether the user has an email confirmation that has not yet expired
++      example: false
++    'email:expired':
++      type: boolean
++      description: Whether the user has an email confirmation that has expired
++      example: false
+     'icon:text':
+       type: string
+       description: A single-letter representation of a username. This is used in the auto-generated icon given to users without an avatar
+diff --git a/src/controllers/admin/users.js b/src/controllers/admin/users.js
+index d6166bc..eb2069c 100644
+--- a/src/controllers/admin/users.js
++++ b/src/controllers/admin/users.js
+@@ -164,10 +164,21 @@ async function loadUserInfo(callerUid, uids) {
+ 	async function getIPs() {
+ 		return await Promise.all(uids.map(uid => db.getSortedSetRevRange(`uid:${uid}:ip`, 0, -1)));
+ 	}
+-	const [isAdmin, userData, lastonline, ips] = await Promise.all([
++	async function getConfirmObjs() {
++		const codes = await db.mget(uids.map(uid => `confirm:byUid:${uid}`));
++		const confirmCodes = codes.filter(Boolean);
++		const confirmObjs = await db.getObjects(confirmCodes.map(code => `confirm:${code}`));
++		const map = {};
++		confirmCodes.forEach((code, index) => {
++			map[code] = confirmObjs[index];
++		});
++		return codes.map(code => (code ? map[code] : null));
++	}
++	const [isAdmin, userData, lastonline, confirmObjs, ips] = await Promise.all([
+ 		user.isAdministrator(uids),
+ 		user.getUsersWithFields(uids, userFields, callerUid),
+ 		db.sortedSetScores('users:online', uids),
++		getConfirmObjs(),
+ 		getIPs(),
+ 	]);
+ 	userData.forEach((user, index) => {
+@@ -179,6 +190,10 @@ async function loadUserInfo(callerUid, uids) {
+ 			user.lastonlineISO = utils.toISOString(timestamp);
+ 			user.ips = ips[index];
+ 			user.ip = ips[index] && ips[index][0] ? ips[index][0] : null;
++			const confirmObj = confirmObjs[index];
++			const expires = confirmObj ? parseInt(confirmObj.expires, 10) : 0;
++			user['email:pending'] = !!confirmObj && Date.now() < expires;
++			user['email:expired'] = !!confirmObj && Date.now() >= expires;
+ 		}
+ 	});
+ 	return userData;
+diff --git a/src/database/mongo/main.js b/src/database/mongo/main.js
+index e7b961a..b0930e6 100644
+--- a/src/database/mongo/main.js
++++ b/src/database/mongo/main.js
+@@ -77,6 +77,28 @@ module.exports = function (module) {
+ 		return value;
+ 	};
+ 
++	module.mget = async function (keys) {
++		if (!keys || !Array.isArray(keys) || !keys.length) {
++			return [];
++		}
++
++		const data = await module.client.collection('objects').find(
++			{ _key: { $in: keys } }, { projection: { _id: 0 } }
++		).toArray();
++
++		const map = {};
++		data.forEach((d) => {
++			// fallback to old field name 'value' for backwards compatibility #6340
++			if (d.hasOwnProperty('data')) {
++				map[d._key] = d.data;
++			} else if (d.hasOwnProperty('value')) {
++				map[d._key] = d.value;
++			}
++		});
++
++		return keys.map(k => (map.hasOwnProperty(k) ? map[k] : null));
++	};
++
+ 	module.set = async function (key, value) {
+ 		if (!key) {
+ 			return;
+diff --git a/src/database/postgres/main.js b/src/database/postgres/main.js
+index ebb2c7a..513f82e 100644
+--- a/src/database/postgres/main.js
++++ b/src/database/postgres/main.js
+@@ -119,6 +119,28 @@ SELECT s."data" t
+ 		return res.rows.length ? res.rows[0].t : null;
+ 	};
+ 
++	module.mget = async function (keys) {
++		if (!keys || !Array.isArray(keys) || !keys.length) {
++			return [];
++		}
++
++		const res = await module.pool.query({
++			name: 'mget',
++			text: `
++SELECT s."data" t
++  FROM UNNEST($1::TEXT[]) WITH ORDINALITY k("_key", i)
++  LEFT OUTER JOIN "legacy_object_live" o
++               ON o."_key" = k."_key"
++  LEFT OUTER JOIN "legacy_string" s
++               ON o."_key" = s."_key"
++              AND o."type" = s."type"
++ ORDER BY k.i ASC`,
++			values: [keys],
++		});
++
++		return res.rows.map(row => (row.t === undefined ? null : row.t));
++	};
++
+ 	module.set = async function (key, value) {
+ 		if (!key) {
+ 			return;
+diff --git a/src/database/redis/main.js b/src/database/redis/main.js
+index fcb1284..c2e030b 100644
+--- a/src/database/redis/main.js
++++ b/src/database/redis/main.js
+@@ -60,6 +60,13 @@ module.exports = function (module) {
+ 		return await module.client.get(key);
+ 	};
+ 
++	module.mget = async function (keys) {
++		if (!keys || !Array.isArray(keys) || !keys.length) {
++			return [];
++		}
++		return await module.client.mget(keys);
++	};
++
+ 	module.set = async function (key, value) {
+ 		await module.client.set(key, value);
+ 	};
+diff --git a/src/socket.io/admin/user.js b/src/socket.io/admin/user.js
+index 00c0a57..5ad5dcd 100644
+--- a/src/socket.io/admin/user.js
++++ b/src/socket.io/admin/user.js
+@@ -65,6 +65,10 @@ User.validateEmail = async function (socket, uids) {
+ 	}
+ 
+ 	for (const uid of uids) {
++		const email = await user.email.getEmailForValidation(uid);
++		if (email) {
++			await user.setUserField(uid, 'email', email);
++		}
+ 		await user.email.confirmByUid(uid);
+ 	}
+ };
+@@ -77,7 +81,8 @@ User.sendValidationEmail = async function (socket, uids) {
+ 	const failed = [];
+ 	let errorLogged = false;
+ 	await async.eachLimit(uids, 50, async (uid) => {
+-		await user.email.sendValidationEmail(uid, { force: true }).catch((err) => {
++		const email = await user.email.getEmailForValidation(uid);
++		await user.email.sendValidationEmail(uid, { email, force: true }).catch((err) => {
+ 			if (!errorLogged) {
+ 				winston.error(`[user.create] Validation email failed to send\n[emailer.send] ${err.stack}`);
+ 				errorLogged = true;
+diff --git a/src/user/delete.js b/src/user/delete.js
+index 938e109..4cc574c 100644
+--- a/src/user/delete.js
++++ b/src/user/delete.js
+@@ -149,6 +149,7 @@ module.exports = function (User) {
+ 			groups.leaveAllGroups(uid),
+ 			flags.resolveFlag('user', uid, uid),
+ 			User.reset.cleanByUid(uid),
++			User.email.expireValidation(uid),
+ 		]);
+ 		await db.deleteAll([`followers:${uid}`, `following:${uid}`, `user:${uid}`]);
+ 		delete deletesInProgress[uid];
+diff --git a/src/user/email.js b/src/user/email.js
+index 9b51b43..866e923 100644
+--- a/src/user/email.js
++++ b/src/user/email.js
+@@ -44,20 +44,27 @@ UserEmail.remove = async function (uid, sessionId) {
+ 	]);
+ };
+ 
+-UserEmail.isValidationPending = async (uid, email) => {
++async function getConfirmObj(uid) {
+ 	const code = await db.get(`confirm:byUid:${uid}`);
+-
+-	if (email) {
+-		const confirmObj = await db.getObject(`confirm:${code}`);
+-		return !!(confirmObj && email === confirmObj.email);
++	if (!code) {
++		return null;
+ 	}
+ 
+-	return !!code;
++	return await db.getObject(`confirm:${code}`);
++}
++
++UserEmail.isValidationPending = async (uid, email) => {
++	const confirmObj = await getConfirmObj(uid);
++	return !!(
++		confirmObj &&
++		Date.now() < parseInt(confirmObj.expires, 10) &&
++		(!email || email === confirmObj.email)
++	);
+ };
+ 
+ UserEmail.getValidationExpiry = async (uid) => {
+-	const pending = await UserEmail.isValidationPending(uid);
+-	return pending ? db.pttl(`confirm:byUid:${uid}`) : null;
++	const confirmObj = await getConfirmObj(uid);
++	return confirmObj ? Math.max(0, parseInt(confirmObj.expires, 10) - Date.now()) : null;
+ };
+ 
+ UserEmail.expireValidation = async (uid) => {
+@@ -68,6 +75,23 @@ UserEmail.expireValidation = async (uid) => {
+ 	]);
+ };
+ 
++// the email an admin action (force validate, re-send validation email) should
++// act on: the one in the user hash, or failing that, the one attached to the
++// user's confirmation, expired or not
++UserEmail.getEmailForValidation = async (uid) => {
++	const email = await user.getUserField(uid, 'email');
++	if (email) {
++		return email;
++	}
++
++	const confirmObj = await getConfirmObj(uid);
++	if (confirmObj && confirmObj.email && parseInt(confirmObj.uid, 10) === parseInt(uid, 10)) {
++		return confirmObj.email;
++	}
++
++	return null;
++};
++
+ UserEmail.canSendValidation = async (uid, email) => {
+ 	const pending = await UserEmail.isValidationPending(uid, email);
+ 	if (!pending) {
+@@ -78,7 +102,7 @@ UserEmail.canSendValidation = async (uid, email) => {
+ 	const max = meta.config.emailConfirmExpiry * 60 * 60 * 1000;
+ 	const interval = meta.config.emailConfirmInterval * 60 * 1000;
+ 
+-	return ttl + interval < max;
++	return (ttl || Date.now()) + interval < max;
+ };
+ 
+ UserEmail.sendValidationEmail = async function (uid, options) {
+@@ -134,13 +158,14 @@ UserEmail.sendValidationEmail = async function (uid, options) {
+ 
+ 	await UserEmail.expireValidation(uid);
+ 	await db.set(`confirm:byUid:${uid}`, confirm_code);
+-	await db.pexpire(`confirm:byUid:${uid}`, emailConfirmExpiry * 60 * 60 * 1000);
+ 
++	// expiry is tracked in the confirmation object itself, so that an expired
++	// confirmation can still be inspected (and its email recovered) afterwards
+ 	await db.setObject(`confirm:${confirm_code}`, {
+ 		email: options.email.toLowerCase(),
+ 		uid: uid,
++		expires: Date.now() + (emailConfirmExpiry * 60 * 60 * 1000),
+ 	});
+-	await db.pexpire(`confirm:${confirm_code}`, emailConfirmExpiry * 60 * 60 * 1000);
+ 
+ 	winston.verbose(`[user/email] Validation email for uid ${uid} sent to ${options.email}`);
+ 	events.log({
+diff --git a/test/database/keys.js b/test/database/keys.js
+index 3941edb..084cce4 100644
+--- a/test/database/keys.js
++++ b/test/database/keys.js
+@@ -35,6 +35,16 @@ describe('Key methods', () => {
+ 		});
+ 	});
+ 
++	it('should get multiple keys in order, with null for missing keys', async () => {
++		await db.set('testKey2', 'testValue2');
++		const values = await db.mget(['testKey2', 'doesnotexist', 'testKey']);
++		assert.deepStrictEqual(values, ['testValue2', null, 'testValue']);
++	});
++
++	it('should return an empty array if no keys are passed to mget', async () => {
++		assert.deepStrictEqual(await db.mget([]), []);
++	});
++
+ 	it('should return true if key exist', (done) => {
+ 		db.exists('testKey', function (err, exists) {
+ 			assert.ifError(err);
+diff --git a/test/user/emails.js b/test/user/emails.js
+index e378fb6..65c7f89 100644
+--- a/test/user/emails.js
++++ b/test/user/emails.js
+@@ -130,12 +130,41 @@ describe('email confirmation (library methods)', () => {
+ 			await user.email.sendValidationEmail(uid, {
+ 				email,
+ 			});
+-			await db.pexpire(`confirm:byUid:${uid}`, 1000);
++			const code = await db.get(`confirm:byUid:${uid}`);
++			await db.setObjectField(`confirm:${code}`, 'expires', Date.now() + 1000);
+ 			const ok = await user.email.canSendValidation(uid, email);
+ 
+ 			assert(ok);
+ 		});
+ 	});
++
++	describe('getEmailForValidation', () => {
++		it('should return null if no email is set and no validation is pending', async () => {
++			assert.strictEqual(await user.email.getEmailForValidation(uid), null);
++		});
++
++		it('should return the email in the user hash if set', async () => {
++			await user.setUserField(uid, 'email', 'test@example.org');
++			assert.strictEqual(await user.email.getEmailForValidation(uid), 'test@example.org');
++		});
++
++		it('should fall back to the email in a pending confirmation', async () => {
++			const email = 'test@example.org';
++			await user.email.sendValidationEmail(uid, { email });
++
++			assert.strictEqual(await user.email.getEmailForValidation(uid), email);
++		});
++
++		it('should fall back to the email in an expired confirmation', async () => {
++			const email = 'test@example.org';
++			await user.email.sendValidationEmail(uid, { email });
++			const code = await db.get(`confirm:byUid:${uid}`);
++			await db.setObjectField(`confirm:${code}`, 'expires', Date.now() - 1000);
++
++			assert.strictEqual(await user.email.isValidationPending(uid), false);
++			assert.strictEqual(await user.email.getEmailForValidation(uid), email);
++		});
++	});
+ });
+ 
+ describe('email confirmation (v3 api)', () => {
