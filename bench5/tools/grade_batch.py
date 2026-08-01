@@ -111,18 +111,30 @@ def main():
               encoding="utf-8") as f:
         json.dump(patches, f)
 
-    cmd = (f"cd '{HARNESS_WSL}' && python3 swe_bench_pro_eval.py "
-           f"--raw_sample_path {samples_rel} --patch_path {patches_rel} "
-           f"--output_dir {args.eval_dir} --scripts_dir run_scripts "
-           f"--dockerhub_username jefzda --use_local_docker --num_workers 1"
-           + (" --redo" if args.redo else ""))
-    print("running harness (this can take ~5-10 min per patch)...")
-    r = subprocess.run(["wsl", "-d", "Ubuntu", "--", "bash", "-lc", cmd],
-                       capture_output=True, text=True, encoding="utf-8",
-                       errors="replace")
-    print(r.stdout[-3000:])
-    if r.returncode != 0:
-        print("HARNESS STDERR:", r.stderr[-2000:])
+    # One harness invocation PER PATCH: the Docker Desktop WSL socket
+    # intermittently drops mid-batch (first eval of an invocation always
+    # succeeds, later ones die with FileNotFoundError on the socket), so
+    # every eval runs as the first of its own invocation, preceded by a
+    # socket-health wait.
+    for i, patch_sample in enumerate(patches):
+        single_rel = f"bench5_eval/patch_single_{tag}.json"
+        with open(os.path.join(HARNESS_WIN, single_rel), "w", newline="\n",
+                  encoding="utf-8") as f:
+            json.dump([patch_sample], f)
+        wait = ("n=0; until docker ps >/dev/null 2>&1; do sleep 10; n=$((n+1)); "
+                "if [ $n -gt 30 ]; then echo SOCKET-WAIT-TIMEOUT; break; fi; done")
+        cmd = (f"{wait}; cd '{HARNESS_WSL}' && python3 swe_bench_pro_eval.py "
+               f"--raw_sample_path {samples_rel} --patch_path {single_rel} "
+               f"--output_dir {args.eval_dir} --scripts_dir run_scripts "
+               f"--dockerhub_username jefzda --use_local_docker --num_workers 1"
+               + (" --redo" if args.redo else ""))
+        print(f"[{i+1}/{len(patches)}] grading {patch_sample['prefix']}...", flush=True)
+        r = subprocess.run(["wsl", "-d", "Ubuntu", "--", "bash", "-lc", cmd],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace")
+        print(r.stdout[-600:], flush=True)
+        if r.returncode != 0:
+            print("HARNESS STDERR:", r.stderr[-800:], flush=True)
 
     # per-prefix verdicts: recompute from per-instance outputs (prefix-keyed)
     verdicts = {}
