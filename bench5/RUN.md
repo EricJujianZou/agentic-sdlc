@@ -259,6 +259,28 @@ from the first missing result. Pilot2 straggler relaunches (opus r005,
 sonnet r017) remain in flight; their grades append to the pilot table
 and cannot change gate outcomes.
 
+## 2026-08-01 — Arm B COMPLETE (both cells, ONE session each)
+
+- SB (`armB-sonnet5`): all 60 results in one continuous session,
+  04:10->08:37 UTC (~4.4h), 18 batch commits. No successor needed.
+- OB (`armB-opus5`): all 60 in one session, 04:10->08:52 UTC (~4.7h),
+  62 commits. No successor needed.
+- The continuity amendment's successor mechanism was never exercised —
+  replicate 1's arm B is the pure one-continuous-session treatment after
+  all.
+- Striking process contrast (pre-grading): ~4.5 min/instance in-session
+  vs 25-90 min/instance for the same models on overlapping instances as
+  fresh bare sessions (pilot2). Whether that speed cost correctness is
+  exactly what grading will show.
+
+Grading infra note: local grading paused ~14:30-19:00 UTC — the docker
+WSL VHDX grew to 135GB (pull accumulation; rmi frees space inside the VM
+but the VHDX never shrinks) and C: hit 2GB free. Owner approved deleting
+docker_data.vhdx (fresh docker data disk; owner's unrelated local docker
+data lost with consent; eval outputs unaffected, they live on the
+Windows filesystem). grade_batch now pulls per-patch and removes each
+image after its last use, bounding disk. Cloud cells were unaffected.
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are

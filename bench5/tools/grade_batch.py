@@ -119,22 +119,25 @@ def main():
         print("nothing to grade")
         return
 
-    # Pre-pull eval images via docker CLI: the harness's SDK pull fails
-    # silently on large images and grades become "no output.json".
     import sys
     sys.path.insert(0, HARNESS_WIN)
     from helper_code.image_uri import get_dockerhub_image_uri
-    for iid, row in rows.items():
-        uri = get_dockerhub_image_uri(iid, "jefzda", row["repo"])
+
+    def pull_image(iid, repo):
+        # CLI pull (SDK pull fails silently on large images). Per-patch,
+        # not batched: pulling everything upfront overflows the disk.
+        uri = get_dockerhub_image_uri(iid, "jefzda", repo)
         for attempt in (1, 2):
-            r = subprocess.run(["docker", "pull", "-q", uri],
-                               capture_output=True, text=True, timeout=3600)
-            if r.returncode == 0:
-                print(f"pulled {uri.split(':')[1][:60]}")
-                break
-            print(f"pull attempt {attempt} failed for {iid[:50]}: {r.stderr[:200]}")
-        else:
-            print(f"GIVING UP on image for {iid[:60]} - will grade as infra-fail")
+            try:
+                r = subprocess.run(["docker", "pull", "-q", uri],
+                                   capture_output=True, text=True, timeout=3600)
+                if r.returncode == 0:
+                    return uri
+                print(f"pull attempt {attempt} failed: {r.stderr[:200]}", flush=True)
+            except subprocess.TimeoutExpired:
+                print(f"pull attempt {attempt} timed out for {iid[:50]}", flush=True)
+        print(f"GIVING UP on image for {iid[:60]}", flush=True)
+        return None
 
     eval_dir_win = os.path.join(HARNESS_WIN, "bench5_eval")
     os.makedirs(eval_dir_win, exist_ok=True)
@@ -154,7 +157,14 @@ def main():
     # succeeds, later ones die with FileNotFoundError on the socket), so
     # every eval runs as the first of its own invocation, preceded by a
     # socket-health wait.
+    # remaining uses of each image in this batch (for post-grade cleanup)
+    remaining = {}
+    for p in patches:
+        remaining[p["instance_id"]] = remaining.get(p["instance_id"], 0) + 1
+
     for i, patch_sample in enumerate(patches):
+        iid_cur = patch_sample["instance_id"]
+        uri = pull_image(iid_cur, rows[iid_cur]["repo"])
         single_rel = f"bench5_eval/patch_single_{tag}.json"
         with open(os.path.join(HARNESS_WIN, single_rel), "w", newline="\n",
                   encoding="utf-8") as f:
@@ -173,6 +183,9 @@ def main():
         print(r.stdout[-600:], flush=True)
         if r.returncode != 0:
             print("HARNESS STDERR:", r.stderr[-800:], flush=True)
+        remaining[iid_cur] -= 1
+        if uri and remaining[iid_cur] == 0 and not args.keep_images:
+            subprocess.run(["docker", "rmi", uri], capture_output=True, text=True)
 
     # per-prefix verdicts: recompute from per-instance outputs (prefix-keyed)
     verdicts = {}
