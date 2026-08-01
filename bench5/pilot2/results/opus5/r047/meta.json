@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-436341a4a522dc83eb8bddd1164b764c8dd6bc45",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T03:04:55Z",
+  "finished_at": "2026-08-01T03:20:42Z",
+  "turns_estimate": 30,
+  "self_assessment": "Confident on the Windows KB additions (KB ids and order reproduce the requirement lists exactly, build+tests green) and on Fedora 37/38/40 and macOS 11/15; least sure about the SUSE Enterprise \"13\"/\"14\" entries, since no such SLES releases exist and the requirement's dates (2026-04-30 / 2028-11-30) match FreeBSD 13/14 vendor timelines, so I applied both readings."
+}
