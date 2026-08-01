@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_flipt-io__flipt-b433bd05ce405837804693bebd5f4b88d87133c8",
+  "model": "sonnet5",
+  "started_at": "2026-08-01T07:50:00Z",
+  "finished_at": "2026-08-01T08:18:35Z",
+  "turns_estimate": 20,
+  "self_assessment": "Renamed tracing.backend/TracingBackend to tracing.exporter/TracingExporter, added TracingOTLP with OTLPTracingConfig (Endpoint defaulting to localhost:4317), wired an otlptracegrpc exporter case into internal/cmd/grpc.go, updated the jaeger.enabled legacy shim and deprecation message to reference tracing.exporter, updated JSON/CUE schemas and default.yml/DEPRECATIONS.md examples, and updated existing config tests/testdata (plus a new otlp.yml case) to match; go build/vet and go test ./internal/config/... all pass."
+}

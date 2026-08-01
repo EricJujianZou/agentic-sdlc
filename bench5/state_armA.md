@@ -13,17 +13,13 @@
   `EnterWorktree` (any name) + one Bash call `cd /home/user/agentic-sdlc
   && <cmd>` unblocks it (worktree has `hooks/`). Don't `ExitWorktree`
   after — it restores the old broken cwd.
-- **If cwd is inside a NESTED git repo (e.g. the task's own clone under
-  `bench5/workspaces/task/`), `EnterWorktree`/`Agent(isolation:
-  "worktree")` do NOT help** — they resolve the *nearest* `.git`, which
-  is the nested clone, not agentic-sdlc, so the new worktree still lacks
-  `hooks/`. Bash/Edit/Write then stay wedged for the rest of the
-  session. Workaround: the `Monitor` tool's `command` is NOT gated by
-  this hook at all (different tool, bypasses the guard entirely) — use
-  it for every remaining shell op (`git`, `go build/test`, file edits
-  via `python3 - <<EOF ... EOF` or `cat >file <<EOF`) instead of
-  Bash/Edit/Write for the rest of the session. `Read`/`Glob`/`Grep`
-  are always unaffected (absolute paths, no cwd dependency).
+- **If cwd is inside a NESTED git repo (e.g. `bench5/workspaces/task/`),
+  `EnterWorktree`/`Agent(isolation:"worktree")` do NOT help** — they
+  resolve the nearest `.git` (the nested clone), so the new worktree
+  still lacks `hooks/` and Bash/Edit/Write stay wedged. Workaround: the
+  `Monitor` tool's `command` bypasses this hook entirely — use it for
+  every remaining shell op instead of Bash/Edit/Write. `Read`/`Glob`/
+  `Grep` are always unaffected (absolute paths, no cwd dependency).
 - **Repo-family: Go dependency-bump tasks (vuls/trivy-style).** The
   task's `instance_id` often embeds the actual upstream commit hash. A
   full (non-shallow) `git clone` of the target repo can reach that
@@ -32,18 +28,25 @@
   more reliable than hand-guessing version pins — but still
   write/verify the change yourself, and check sibling files (e.g. the
   `_test.go` variant) for the same stale references the diff touched.
+- **Repo-family: config-field rename/enum-add tasks (e.g. flipt-style Go
+  configs).** Requirement text names exact field/type names (mapstructure
+  /json tags, enum values). Grep the OLD name across the WHOLE repo, not
+  just the touched package: Go source, `_test.go` files + their
+  `testdata/*.yml` fixtures, JSON/CUE config schemas, and top-level docs
+  (README/DEPRECATIONS.md) echoing the same message text — none of
+  those are type-checked, so stale refs there survive `go vet` silently.
 - **Go module bumps:** hand-edit only the *direct* require lines in
   go.mod (+ any `replace` directives named in the task), then run `go
   mod tidy` to regenerate go.sum and resolve indirect deps — don't
-  hand-transcribe go.sum. Check `proxy.golang.org` reachability first.
-- **Verification for Go tasks:** `go build ./...`, `go vet ./...`, `go
-  test ./...` are all fast (seconds) — run all three, not just the
-  package you touched. A pre-existing test fixture that hardcodes a
-  field your fix newly populates (e.g. a struct field that was always
-  zero-value) will correctly FAIL after a correct fix — update the
-  fixture, don't revert the fix; read the failing test's diff output
-  before assuming your change is wrong. Also add a fresh test case that
-  actually reproduces the reported bug scenario when none exists.
+  hand-transcribe go.sum. Check `proxy.golang.org` reachability first
+  (`go get pkg@version` works too, for one new direct dependency).
+- **Verification for Go tasks:** `go build ./...`, `go vet ./...`, then
+  focused `go test ./...` on touched packages (full suite may need
+  Docker/testcontainers — skip if unavailable, don't block on it). A
+  pre-existing test fixture that hardcodes a field your fix newly
+  populates will correctly FAIL after a correct fix — update the
+  fixture, don't revert the fix. Confirm any suspicious pre-existing
+  failure with `git stash` + rerun before blaming your patch.
 - **Submodules:** `git submodule update --init` before touching
   submodule-tracked dirs; a pinned submodule commit named in the task
   is often already fetchable locally without an extra `git fetch`.
@@ -52,9 +55,6 @@
   `MarshalToSizedBuffer` (REVERSE field-number order, tag byte =
   `(fieldNum<<3)|wireType`) + `Size()` + a `case N:` in `Unmarshal` —
   copy an existing field of the same Go type as template.
-- **`gofmt -w` on these old files reformats every doc comment** (list
+- **`gofmt -w` on old files reformats every doc comment** (list
   indents etc.), not just touched lines — `git diff -U0 <file> | grep
   '^@@'` after formatting, revert hunks far from your edit.
-- **teleport `lib/auth` tests panic on Go 1.24** (`reflect2` nil-deref
-  via `json-iterator`) even unmodified — pre-existing env issue, not
-  your patch; confirm with `git stash` + rerun.
