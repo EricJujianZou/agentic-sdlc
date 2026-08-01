@@ -1,0 +1,47 @@
+diff --git a/src/user/data.js b/src/user/data.js
+--- a/src/user/data.js
++++ b/src/user/data.js
+@@ -140,6 +140,28 @@ module.exports = function (User) {
+ 	User.getUsersData = async function (uids) {
+ 		return await User.getUsersFields(uids, []);
+ 	};
++
++	User.hidePrivateData = async function (userData, callerUID) {
++		const _userData = { ...userData };
++		const isSelf = parseInt(callerUID, 10) === parseInt(_userData.uid, 10);
++
++		const [isAdmin, isGlobalModerator, userSettings] = await Promise.all([
++			User.isAdministrator(callerUID),
++			User.isGlobalModerator(callerUID),
++			User.getSettings(_userData.uid),
++		]);
++
++		if (!isSelf && !isAdmin && !isGlobalModerator) {
++			if (!userSettings.showemail || meta.config.hideEmail) {
++				_userData.email = '';
++			}
++			if (!userSettings.showfullname || meta.config.hideFullname) {
++				_userData.fullname = '';
++			}
++		}
++
++		return _userData;
++	};
+
+ 	async function modifyUserData(users, requestedFields, fieldsToRemove) {
+ 		let uidToSettings = {};
+diff --git a/src/controllers/write/users.js b/src/controllers/write/users.js
+--- a/src/controllers/write/users.js
++++ b/src/controllers/write/users.js
+@@ -43,9 +43,10 @@ Users.exists = async (req, res) => {
+ 	helpers.formatApiResponse(200, res);
+ };
+
+ Users.get = async (req, res) => {
+-	helpers.formatApiResponse(200, res, await user.getUserData(req.params.uid));
++	const userData = await user.getUserData(req.params.uid);
++	helpers.formatApiResponse(200, res, await user.hidePrivateData(userData, req.uid));
+ };
+
+ Users.update = async (req, res) => {
+ 	const userObj = await api.users.update(req, { ...req.body, uid: req.params.uid });
