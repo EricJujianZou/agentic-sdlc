@@ -1,0 +1,83 @@
+{
+ "bench5/pilot2-sonnet5-r029": {
+  "pass": true,
+  "n_needed": 180,
+  "n_passed_needed": 180,
+  "status": "collected",
+  "instance_id": "instance_NodeBB__NodeBB-bd80d36e0dcf78cd4360791a82966078b3a07712-v4fbcfae8b15e4ce5d132c408bca69ebb9cf146ed",
+  "prefix": "bench5_pilot2-sonnet5-r029",
+  "meta": {
+   "instance_id": "instance_NodeBB__NodeBB-bd80d36e0dcf78cd4360791a82966078b3a07712-v4fbcfae8b15e4ce5d132c408bca69ebb9cf146ed",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-08-01T03:03:04Z",
+   "finished_at": "2026-08-01T03:14:34Z",
+   "turns_estimate": 45,
+   "self_assessment": "Fixed src/middleware/user.js's registrationComplete: both the no-session-registration branch (which previously redirected unconfirmed non-admin users to /me/edit/email for every route, including /confirm/*) and the session-registration branch (which only exact-matched /register/complete, not /confirm/*) now share one 'exempt' check for paths ending in /edit/email or starting with /confirm/, and both redirect to /register/complete when not exempt; could not run the project's mocha+MongoDB suite in this sandboxed environment, so verification is by static/logical review of the middleware and its callers only, not by executing tests."
+  },
+  "patch_bytes": 1669
+ },
+ "bench5/pilot2-sonnet5-r041": {
+  "pass": false,
+  "note": "no output.json",
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "prefix": "bench5_pilot2-sonnet5-r041",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-08-01T03:13:14Z",
+   "finished_at": "2026-08-01T03:14:45Z",
+   "turns_estimate": 30,
+   "self_assessment": "Confident: renamed CpeNameMatch to CpeVersionMatch, added CpeVendorProductMatch(10) selected via NvdJSON==nil in DetectCpeURIsCves, switched sort to numeric score, updated TUI to score/method, and full test suite passes."
+  },
+  "patch_bytes": 4351
+ },
+ "bench5/pilot2-sonnet5-r053": {
+  "pass": false,
+  "note": "no output.json",
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+  "prefix": "bench5_pilot2-sonnet5-r053",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-08-01T03:12:15Z",
+   "finished_at": "2026-08-01T03:12:56Z",
+   "turns_estimate": 25,
+   "self_assessment": "Added Digest field to config.Image and models.Image, GetFullName() on config.Image, tightened IsValidImage to require exactly one of Tag/Digest with the exact specified error strings, propagated Digest through scan/base.go's model conversion, switched scan/container.go to GetFullName(), fixed scan/serverapi.go's per-image ServerName to <idx>@<originalServerName> with no tag/digest, and fixed report/report.go's UUID-key naming to use the full image ref (tag or digest, never both) followed by @serverName; go build and go test ./config/... ./scan/... ./report/... all pass (models/... test failure is a pre-existing go-vet incompatibility in untouched library.go, unrelated to this change)."
+  },
+  "patch_bytes": 4404
+ },
+ "bench5/pilot2-opus5-r053": {
+  "pass": false,
+  "note": "no output.json",
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+  "prefix": "bench5_pilot2-opus5-r053",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:04:58Z",
+   "finished_at": "2026-08-01T03:11:46Z",
+   "turns_estimate": 28,
+   "self_assessment": "Implemented all stated requirements (config.Image.Digest + GetFullName, three exact IsValidImage errors, models.Image.Digest, Digest propagation in scan/base.go, GetFullName for the scan domain and detection log, index@server naming in serverapi.go, full-reference@server in report.go); go build clean and all package tests pass except models.TestScan, which fails identically on the untouched base commit because it needs network."
+  },
+  "patch_bytes": 4731
+ },
+ "bench5/pilot2-opus5-r059": {
+  "pass": false,
+  "note": "no output.json",
+  "status": "collected",
+  "instance_id": "instance_NodeBB__NodeBB-97c8569a798075c50e93e585ac741ab55cb7c28b-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+  "prefix": "bench5_pilot2-opus5-r059",
+  "meta": {
+   "instance_id": "instance_NodeBB__NodeBB-97c8569a798075c50e93e585ac741ab55cb7c28b-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:05:35Z",
+   "finished_at": "2026-08-01T03:13:40Z",
+   "turns_estimate": 34,
+   "self_assessment": "Added User.hidePrivateData(userData, callerUID) in src/user/data.js (non-mutating copy; self/admin/global-mod bypass; email gated on showemail + meta.config.hideEmail, fullname on showfullname + meta.config.hideFullname, hidden as empty strings) and applied it in Users.get in src/controllers/write/users.js; mirrors the existing accounts/helpers.js semantics and passes 14 stubbed-dependency branch tests, but NodeBB's real suite needs a live database so it was not run here."
+  },
+  "patch_bytes": 1639
+ }
+}

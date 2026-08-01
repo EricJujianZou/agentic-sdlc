@@ -1,0 +1,223 @@
+{
+ "bench5/pilot2-sonnet5-r041": {
+  "pass": true,
+  "n_needed": 2,
+  "n_passed_needed": 2,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "prefix": "bench5_pilot2-sonnet5-r041",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-08-01T03:13:14Z",
+   "finished_at": "2026-08-01T03:14:45Z",
+   "turns_estimate": 30,
+   "self_assessment": "Confident: renamed CpeNameMatch to CpeVersionMatch, added CpeVendorProductMatch(10) selected via NvdJSON==nil in DetectCpeURIsCves, switched sort to numeric score, updated TUI to score/method, and full test suite passes."
+  },
+  "patch_bytes": 4351
+ },
+ "bench5/pilot2-sonnet5-r053": {
+  "pass": true,
+  "n_needed": 6,
+  "n_passed_needed": 6,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+  "prefix": "bench5_pilot2-sonnet5-r053",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-08-01T03:12:15Z",
+   "finished_at": "2026-08-01T03:12:56Z",
+   "turns_estimate": 25,
+   "self_assessment": "Added Digest field to config.Image and models.Image, GetFullName() on config.Image, tightened IsValidImage to require exactly one of Tag/Digest with the exact specified error strings, propagated Digest through scan/base.go's model conversion, switched scan/container.go to GetFullName(), fixed scan/serverapi.go's per-image ServerName to <idx>@<originalServerName> with no tag/digest, and fixed report/report.go's UUID-key naming to use the full image ref (tag or digest, never both) followed by @serverName; go build and go test ./config/... ./scan/... ./report/... all pass (models/... test failure is a pre-existing go-vet incompatibility in untouched library.go, unrelated to this change)."
+  },
+  "patch_bytes": 4404
+ },
+ "bench5/pilot2-opus5-r053": {
+  "pass": true,
+  "n_needed": 6,
+  "n_passed_needed": 6,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+  "prefix": "bench5_pilot2-opus5-r053",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:04:58Z",
+   "finished_at": "2026-08-01T03:11:46Z",
+   "turns_estimate": 28,
+   "self_assessment": "Implemented all stated requirements (config.Image.Digest + GetFullName, three exact IsValidImage errors, models.Image.Digest, Digest propagation in scan/base.go, GetFullName for the scan domain and detection log, index@server naming in serverapi.go, full-reference@server in report.go); go build clean and all package tests pass except models.TestScan, which fails identically on the untouched base commit because it needs network."
+  },
+  "patch_bytes": 4731
+ },
+ "bench5/pilot2-opus5-r059": {
+  "pass": true,
+  "n_needed": 198,
+  "n_passed_needed": 198,
+  "status": "collected",
+  "instance_id": "instance_NodeBB__NodeBB-97c8569a798075c50e93e585ac741ab55cb7c28b-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+  "prefix": "bench5_pilot2-opus5-r059",
+  "meta": {
+   "instance_id": "instance_NodeBB__NodeBB-97c8569a798075c50e93e585ac741ab55cb7c28b-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:05:35Z",
+   "finished_at": "2026-08-01T03:13:40Z",
+   "turns_estimate": 34,
+   "self_assessment": "Added User.hidePrivateData(userData, callerUID) in src/user/data.js (non-mutating copy; self/admin/global-mod bypass; email gated on showemail + meta.config.hideEmail, fullname on showfullname + meta.config.hideFullname, hidden as empty strings) and applied it in Users.get in src/controllers/write/users.js; mirrors the existing accounts/helpers.js semantics and passes 14 stubbed-dependency branch tests, but NodeBB's real suite needs a live database so it was not run here."
+  },
+  "patch_bytes": 1639
+ },
+ "bench5/pilot2-sonnet5-r011": {
+  "pass": false,
+  "n_needed": 1,
+  "n_passed_needed": 0,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+  "prefix": "bench5_pilot2-sonnet5-r011",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-08-01T03:02:06Z",
+   "finished_at": "2026-08-01T03:17:31Z",
+   "turns_estimate": 45,
+   "self_assessment": "Added the KEV/CISAKEV/VulnCheckKEV/VulnCheckXDB/VulnCheckReportedExploitation models, VulnInfo.KEVs field, ScanResult.FormatKEVCveSummary, KEV sorting in SortForJSONOutput, and rewired detector.FillWithKEVuln (bumping go-kev to v0.2.0 for VulnCheck support) to populate it from both CISA and VulnCheck sources; full repo builds and existing tests pass, but I could not run the hidden grading tests to confirm exact expected behavior/field-mapping choices."
+  },
+  "patch_bytes": 15410
+ },
+ "bench5/pilot2-opus5-r011": {
+  "pass": false,
+  "n_needed": 1,
+  "n_passed_needed": 0,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+  "prefix": "bench5_pilot2-opus5-r011",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:02:09Z",
+   "finished_at": "2026-08-01T03:17:41Z",
+   "turns_estimate": 40,
+   "self_assessment": "Added first-class KEV types (KEVType/KEV/CISAKEV/VulnCheckKEV/VulnCheckXDB/VulnCheckReportedExploitation) plus VulnInfo.KEVs, FormatKEVCveSummary, KEV sorting in SortForJSONOutput, and rewrote FillWithKEVuln over go-kev v0.2.0's CISA+VulnCheck Response (bumped go.mod, required for the VulnCheck models); repo builds, go vet clean, full go test ./... green, but JSON tag names and the go-kev version pin are guesses that could diverge from the frozen tests."
+  },
+  "patch_bytes": 19324
+ },
+ "bench5/pilot2-opus5-r017": {
+  "pass": true,
+  "n_needed": 16,
+  "n_passed_needed": 16,
+  "status": "collected",
+  "instance_id": "instance_ansible__ansible-984216f52e76b904e5b0fa0fb956ab4f1e0a7751-v1055803c3a812189a1133297f7f5468579283f86",
+  "prefix": "bench5_pilot2-opus5-r017",
+  "meta": {
+   "instance_id": "instance_ansible__ansible-984216f52e76b904e5b0fa0fb956ab4f1e0a7751-v1055803c3a812189a1133297f7f5468579283f86",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:04:51Z",
+   "finished_at": "2026-08-01T03:20:03Z",
+   "turns_estimate": 42,
+   "self_assessment": "Implemented all 12 requirements (AnsiblePluginError hierarchy, get_with_context/get_with_context_result, tombstone -> AnsiblePluginRemovedError, Display.get_deprecation_message, and the task_executor/action/template consumers); full test/units diff vs base shows zero new failures and a 28-check behavioral script passes, but I kept TAGGED_VERSION_RE parsing as a back-compat shim rather than converting the ~38 legacy tagged call sites, so wording for those may differ from the reference patch."
+  },
+  "patch_bytes": 23449
+ },
+ "bench5/pilot2-opus5-r023": {
+  "pass": true,
+  "n_needed": 1,
+  "n_passed_needed": 1,
+  "status": "collected",
+  "instance_id": "instance_tutao__tutanota-09c2776c0fce3db5c6e18da92b5a45dce9f013aa-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+  "prefix": "bench5_pilot2-opus5-r023",
+  "meta": {
+   "instance_id": "instance_tutao__tutanota-09c2776c0fce3db5c6e18da92b5a45dce9f013aa-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:03:47Z",
+   "finished_at": "2026-08-01T03:18:15Z",
+   "turns_estimate": 45,
+   "self_assessment": "Added src/api/main/OperationProgressTracker.ts (OperationId, ExposedOperationProgressTracker, registerOperation/onProgress), threaded an onProgress callback through CalendarFacade._saveCalendarEvents, gave saveImportedCalendarEvents an operationId, exposed the tracker on MainInterface/MainLocator/WorkerClient, and switched the import dialog to a per-operation progress dialog; tsc --noEmit is clean, the (updated) CalendarFacadeTest passes 24/24, and a standalone check confirms per-operation stream isolation, but the repo's full test runner could not build here (native sqlcipher/libsecret toolchain missing), so the hidden suite is unverified."
+  },
+  "patch_bytes": 15837
+ },
+ "bench5/pilot2-sonnet5-r035": {
+  "pass": true,
+  "n_needed": 1,
+  "n_passed_needed": 1,
+  "status": "collected",
+  "instance_id": "instance_flipt-io__flipt-b4bb5e13006a729bc0eed8fe6ea18cff54acdacb",
+  "prefix": "bench5_pilot2-sonnet5-r035",
+  "meta": {
+   "instance_id": "instance_flipt-io__flipt-b4bb5e13006a729bc0eed8fe6ea18cff54acdacb",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-08-01T03:07:13Z",
+   "finished_at": "2026-08-01T03:16:46Z",
+   "turns_estimate": 45,
+   "self_assessment": "Added configurable oci.manifest_version (1.0/1.1, default 1.1, validated) and wired it through WithManifestVersion into bundle building; all touched packages build and existing/new tests pass."
+  },
+  "patch_bytes": 9260
+ },
+ "bench5/pilot2-opus5-r035": {
+  "pass": true,
+  "n_needed": 1,
+  "n_passed_needed": 1,
+  "status": "collected",
+  "instance_id": "instance_flipt-io__flipt-b4bb5e13006a729bc0eed8fe6ea18cff54acdacb",
+  "prefix": "bench5_pilot2-opus5-r035",
+  "meta": {
+   "instance_id": "instance_flipt-io__flipt-b4bb5e13006a729bc0eed8fe6ea18cff54acdacb",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:04:06Z",
+   "finished_at": "2026-08-01T03:16:33Z",
+   "turns_estimate": 40,
+   "self_assessment": "Confident on the core change (WithManifestVersion option, config manifest_version field with 1.1 default and exact validation error, wiring at both store construction sites); main residual risk is guessing the gold fixture details \u2014 whether oci_provided.yml carries manifest_version \"1.0\" and the exact name/type used for the config field."
+  },
+  "patch_bytes": 10054
+ },
+ "bench5/pilot2-opus5-r041": {
+  "pass": false,
+  "n_needed": 2,
+  "n_passed_needed": 1,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "prefix": "bench5_pilot2-opus5-r041",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:04:00Z",
+   "finished_at": "2026-08-01T03:16:44Z",
+   "turns_estimate": 30,
+   "self_assessment": "Renamed CpeNameMatch to CpeVersionMatch, added CpeVendorProductMatch (score 10), made DetectCpeURIsCves pick it when detail.IsJvn(), switched SortByConfident to numeric score (desc), and made the TUI render score / method; required bumping go-cve-dictionary 0.15.14 -> 0.6.0 (the release that added IsJvn() and JVN-only CPE matching). go build ./... and go test ./... pass; main residual risk is whether the graded tests expect the SortOrder field to have been dropped."
+  },
+  "patch_bytes": 6229
+ },
+ "bench5/pilot2-sonnet5-r047": {
+  "pass": true,
+  "n_needed": 97,
+  "n_passed_needed": 97,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-436341a4a522dc83eb8bddd1164b764c8dd6bc45",
+  "prefix": "bench5_pilot2-sonnet5-r047",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-436341a4a522dc83eb8bddd1164b764c8dd6bc45",
+   "model": "claude-sonnet-5",
+   "started_at": "2026-08-01T03:04:30Z",
+   "finished_at": "2026-08-01T03:20:49Z",
+   "turns_estimate": 70,
+   "self_assessment": "Confident: config/os.go and scanner/windows.go changes match every stated requirement, package builds cleanly, and updated config/scanner unit tests (including new synthetic-high-build cases) pass; KB revision numbers were sourced from Microsoft's official per-update support pages via web search, not from the repo's later history."
+  },
+  "patch_bytes": 14202
+ },
+ "bench5/pilot2-opus5-r047": {
+  "pass": true,
+  "n_needed": 97,
+  "n_passed_needed": 97,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-436341a4a522dc83eb8bddd1164b764c8dd6bc45",
+  "prefix": "bench5_pilot2-opus5-r047",
+  "meta": {
+   "instance_id": "instance_future-architect__vuls-436341a4a522dc83eb8bddd1164b764c8dd6bc45",
+   "model": "claude-opus-5",
+   "started_at": "2026-08-01T03:04:55Z",
+   "finished_at": "2026-08-01T03:20:42Z",
+   "turns_estimate": 30,
+   "self_assessment": "Confident on the Windows KB additions (KB ids and order reproduce the requirement lists exactly, build+tests green) and on Fedora 37/38/40 and macOS 11/15; least sure about the SUSE Enterprise \"13\"/\"14\" entries, since no such SLES releases exist and the requirement's dates (2026-04-30 / 2028-11-30) match FreeBSD 13/14 vendor timelines, so I applied both readings."
+  },
+  "patch_bytes": 15720
+ }
+}

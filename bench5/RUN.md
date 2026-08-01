@@ -201,6 +201,47 @@ scaffolding. Session count per arm-B cell is reported as a process
 metric. An arm-B session that dies mid-INSTANCE gets that instance
 re-done by the successor (patch not yet pushed = not done).
 
+## 2026-08-01 — Pilot2 verdict (gate 5, v2 battery): GATES PASSED
+
+20 sessions on decile ranks of the N=60 run set. 18/20 graded when both
+gates became mathematically decided; 2 silent-death stragglers (opus
+r005, sonnet r017) relaunched per protocol, grades to be appended (they
+cannot change any gate).
+
+| rank | instance (repo) | sonnet-5 | opus-5 |
+|---|---|---|---|
+| r005 | ansible | F 1/2 | (relaunch pending) |
+| r011 | vuls | F 0/1 | F 0/1 |
+| r017 | ansible | (relaunch pending) | P 16/16 |
+| r023 | tutanota | P 1/1 | P 1/1 |
+| r029 | NodeBB | P 180/180 | P 180/180 |
+| r035 | flipt | P 1/1 | P 1/1 |
+| r041 | vuls | P 2/2 | F 1/2 |
+| r047 | vuls | P 97/97 | P 97/97 |
+| r053 | vuls | P 6/6 | P 6/6 |
+| r059 | NodeBB | P 198/198 | P 198/198 |
+
+**Sonnet 5: 7/9 graded (min 7/10 = 70%). Opus 5: 7/9 graded (max 8/10 =
+80%).**
+
+1. Floor (Sonnet > 30%): **PASSED** (>= 70%).
+2. Ceiling (Opus < 90%): **PASSED** (<= 80%).
+3. Timing: fire->push mostly 25-55 min (median ~40 min), two silent
+   deaths. N=60 pre-commitment stands; arm-B continuity amendment (block
+   sessions) stands.
+
+The v2 battery discriminates: both models sit mid-range with per-instance
+disagreements in both directions (sonnet-only pass r041; opus-only pass
+r017 pending sonnet's relaunch). Main run is GO under the owner's
+delegation (recommended-option autonomy).
+
+Grading engineering note: even at 10GB WSL the docker socket drops after
+the first eval of a multi-eval harness invocation (later evals die with
+FileNotFoundError; first always succeeds). Grading now runs ONE harness
+invocation per patch with a socket-health wait between (grade_batch.py
+serial mode, commit 1bbd8d5). All "no output.json" pseudo-fails were
+re-run to genuine grades; nothing was scored from an infra failure.
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are
