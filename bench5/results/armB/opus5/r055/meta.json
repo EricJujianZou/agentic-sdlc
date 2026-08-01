@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_element-hq__element-web-f3534b42df3dcfe36dc48bddbf14034085af6d30-vnan",
+  "model": "opus5",
+  "started_at": "2026-08-01T08:17:45Z",
+  "finished_at": "2026-08-01T08:29:45Z",
+  "self_assessment": "textForMemberEvent's join-to-join branch gained a first case for events where the display name and the avatar both change: it returns the single translatable message '%(oldDisplayName)s changed their display name and profile picture', with oldDisplayName taken from prevContent.displayname and passed through removeDirectionOverrideChars like the neighbouring cases. It is guarded on both display names being present and different plus prevContent.avatar_url !== content.avatar_url, so it only fires for a genuine combined change and every existing branch falls through unchanged. The string was added once to src/i18n/strings/en_EN.json with exactly that literal. Verified by extracting the real join branch out of the modified TextForEvent.tsx and running it with a recording _t: the combined case produces the new sentence, the six pre-existing messages (changed display name to, set their display name to, removed their display name, changed/set/removed profile picture) are byte-identical, direction override characters are stripped from the old name, and the English bundle contains exactly one entry mentioning 'display name and profile picture'. Standalone tsc reports no new errors. jest could not run because matrix-js-sdk is a github: dependency and the proxy blocks codeload.github.com."
+}
