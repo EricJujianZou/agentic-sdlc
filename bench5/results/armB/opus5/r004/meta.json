@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_flipt-io__flipt-b433bd05ce405837804693bebd5f4b88d87133c8",
+  "model": "opus5",
+  "started_at": "2026-08-01T04:36:17Z",
+  "finished_at": "2026-08-01T04:42:14Z",
+  "self_assessment": "Renamed TracingBackend->TracingExporter and tracing.backend->tracing.exporter, added TracingOTLP enum value and OTLPTracingConfig{Endpoint} defaulting to localhost:4317, wired otlptracegrpc exporter in internal/cmd/grpc.go, updated JSON+CUE schemas, deprecation message/doc and config fixtures. Verified: with the test file mechanically renamed to the new symbols plus the OTLP default added to its expected structs, the whole internal/config suite passes."
+}
