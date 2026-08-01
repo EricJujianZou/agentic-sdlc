@@ -1,0 +1,31 @@
+diff --git a/src/middleware/user.js b/src/middleware/user.js
+index 57c1db8296..5281c4d3ea 100644
+--- a/src/middleware/user.js
++++ b/src/middleware/user.js
+@@ -239,6 +239,12 @@ module.exports = function (middleware) {
+ 		 */
+ 		const path = req.path.startsWith('/api/') ? req.path.replace('/api', '') : req.path;
+ 
++		// The confirmation link is never gated; otherwise the user can never satisfy
++		// the email requirement that is being enforced below.
++		if (path.startsWith('/confirm/')) {
++			return setImmediate(next);
++		}
++
+ 		if (!req.session.hasOwnProperty('registration')) {
+ 			if (req.uid && !path.endsWith('/edit/email')) {
+ 				const [confirmed, isAdmin] = await Promise.all([
+@@ -246,7 +252,12 @@ module.exports = function (middleware) {
+ 					user.isAdministrator(req.uid),
+ 				]);
+ 				if (meta.config.requireEmailAddress && !confirmed && !isAdmin) {
+-					controllers.helpers.redirect(res, '/me/edit/email');
++					// Send them straight to the interstitial, and seed the registration
++					// data it needs so that /register/complete is reachable (otherwise
++					// the redirect target would bounce right back through here).
++					req.session.registration = { uid: req.uid, updateEmail: true };
++					controllers.helpers.redirect(res, '/register/complete');
++					return;
+ 				}
+ 			}
+ 
