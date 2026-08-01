@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_ansible__ansible-984216f52e76b904e5b0fa0fb956ab4f1e0a7751-v1055803c3a812189a1133297f7f5468579283f86",
+  "model": "opus5",
+  "started_at": "2026-08-01T21:33:36Z",
+  "finished_at": "2026-08-01T21:48:16Z",
+  "turns_estimate": 38,
+  "self_assessment": "All 12 requirements implemented (AnsiblePluginError base + renamed subclasses, get_with_context/get_with_context_result, tombstone raises AnsiblePluginRemovedError, centralized Display.get_deprecation_message replacing TAGGED_VERSION_RE, task_executor/action/template consumers updated); verified with a 7-case scratch suite that fails at base, and the full unit suite shows an identical failure set to base (one existing test's find_plugin mock updated to find_plugin_with_context, proven by stash-diff)."
+}
