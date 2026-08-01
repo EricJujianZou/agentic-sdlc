@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_element-hq__element-web-8f3c8b35153d2227af45f32e46bd1e15bd60b71f-vnan",
+  "model": "opus5",
+  "started_at": "2026-08-01T05:31:49Z",
+  "finished_at": "2026-08-01T05:34:22Z",
+  "self_assessment": "Deleted src/accessibility/roving/RovingAccessibleTooltipButton.tsx and its re-export from RovingTabIndex.tsx, and replaced every usage with RovingAccessibleButton across UserMenu, DownloadActionButton, MessageActionBar, WidgetPip, EventTileThreadToolbar, ExtraTile and MessageComposerFormatBar. ExtraTile no longer switches components on isMinimized; it always renders RovingAccessibleButton and passes disableTooltip={!isMinimized} alongside the existing title, preserving the previous tooltip behaviour and aria-label semantics (AccessibleButton already sets aria-label from title). No references to the removed symbol remain anywhere in src/ or test/. Verified by tsc over each changed file: no unresolved-export errors. The jest suite could not be run - the proxy blocks codeload.github.com so yarn install fails on element-web's git dependency."
+}
