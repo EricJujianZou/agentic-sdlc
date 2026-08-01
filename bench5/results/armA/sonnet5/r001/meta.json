@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-139f3a81b66c47e6d8f70ce6c4afe7a9196a6ea8",
+  "model": "sonnet5",
+  "started_at": "2026-08-01T04:35:00Z",
+  "finished_at": "2026-08-01T05:19:16Z",
+  "turns_estimate": 25,
+  "self_assessment": "Applied the fanal->trivy/pkg/fanal import migration, PNPM/.NET analyzer registrations, db.NewClient/DetectVulnerabilities signature changes, GNUmakefile LIBS, go.mod/go.sum via go mod tidy, and integration submodule bump; build, vet, and full test suite all pass."
+}
