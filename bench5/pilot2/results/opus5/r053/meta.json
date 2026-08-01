@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T03:04:58Z",
+  "finished_at": "2026-08-01T03:11:46Z",
+  "turns_estimate": 28,
+  "self_assessment": "Implemented all stated requirements (config.Image.Digest + GetFullName, three exact IsValidImage errors, models.Image.Digest, Digest propagation in scan/base.go, GetFullName for the scan domain and detection log, index@server naming in serverapi.go, full-reference@server in report.go); go build clean and all package tests pass except models.TestScan, which fails identically on the untouched base commit because it needs network."
+}
