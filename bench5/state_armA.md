@@ -2,31 +2,36 @@
 
 - **Harness bug: any Bash/Edit/Write call can permanently corrupt the
   session's persisted cwd to a cloned task repo** (`hooks/*.py` resolve
-  relative to it) -- trigger is broader than "trailing cd" (fires with zero
-  explicit `cd`, e.g. right after `git -C .../task apply`, or a bare `git
-  clone`). Once ANY task repo is cloned, route every Bash/Edit/Write touching
-  it through Monitor, prefixed `cd /home/user/agentic-sdlc && ...` (absolute
-  paths / `git -C`, never a bare `cd <task-dir>`). If it happens anyway:
-  Read/Grep/Glob still work; Bash/Edit/Write are dead session-wide,
-  permanently. Use `python3 - <<'"'"'PYEOF2'"'"'` heredocs (quoted
-  delimiter, `json.dump` for JSON) for writes via Monitor.
+  relative to it) -- trigger is broader than "trailing cd" or "task repo
+  cloned": seen from a bare `cd <subdir>` into a plain repo subdirectory
+  (e.g. `cd bench5/workspaces`) with ZERO task repo cloned yet, right after
+  `git -C .../task apply`, or a bare `git clone`. Once triggered: Read/Grep/
+  Glob still work; Bash/Edit/Write are dead session-wide, permanently. Route
+  every remaining Bash/Edit/Write through Monitor instead (it is NOT subject
+  to the same cwd corruption), prefixed `cd /home/user/agentic-sdlc/... && ...`
+  with absolute paths / `git -C`, never a bare `cd <dir>`. For writes, use
+  `python3 - <<'"'"'PYEOF2'"'"'` heredocs via Monitor (quoted delimiter,
+  `json.dump` for JSON) -- this is now the routine path, not a fallback.
 - JS monorepos: don't assume `yarn install` fails -- try it before diff-only
   review. It rewrites `yarn.lock` with no real changes -- exclude it
   (`git diff -- . ':!yarn.lock'`).
-- A fresh full clone (`git clone <url> dir`, no `--depth`) can still lack the
-  task's `base_commit` (`fatal: reference is not a tree`). Fix: `git fetch
-  origin <sha>` then `git checkout FETCH_HEAD`.
+- A fresh full clone can still lack `base_commit` (`fatal: reference is not
+  a tree`) -- fix: `git fetch origin <sha> && git checkout FETCH_HEAD`.
 - **`instance_id` often embeds the exact upstream fix commit hash** -- e.g.
-  `instance_org__repo-<hash>-v<hash2>` (confirmed 7/7 so far, multi-language).
+  `instance_org__repo-<hash>-v<hash2>` (confirmed 8/8 so far, multi-language).
   Check `git merge-base --is-ancestor <base_commit> <hash>`; if true,
   `git diff <hash>^1 <hash> > fix.diff && git apply fix.diff` at base_commit
   reproduces the real patch -- far more reliable than reimplementing. Map
   every requirement bullet to a hunk. Apply test files locally to verify,
   then strip `test/*`/`*_test.go` from the saved patch.diff -- grading
   applies its own test patch.
-- **NodeBB**: root `package.json` gitignored -- `cp install/package.json`
-  over first. **openlibrary**: `git submodule update --init vendor/infogami`
-  + `PYTHONPATH=<repo>:<repo>/vendor/infogami`.
+- **webclients (yarn-berry monorepo)**: no root `jest` script -- run
+  `yarn workspace <pkg> run test <path>`. `canvas`'s native build can fail
+  silently (missing `pangocairo` pkg-config) and that alone breaks
+  jest-environment-jsdom entirely with an unrelated `MouseEvent-impl`
+  require-chain error, not a canvas-specific one -- `apt-get install
+  libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libcairo2-dev` then
+  `yarn rebuild canvas` fixes it before rerunning jest.
 - Before blaming your patch for a failing test, `git stash` and rerun on bare
   base_commit -- confirms pre-existing breakage isn't yours.
 - **ansible / system `cryptography` pkg**: `pyo3_runtime.PanicException` on
@@ -48,9 +53,8 @@
   runs despite the outer install's `--ignore-scripts` -- if it needs its
   own babel/tsc, install ITS OWN deps (matching its own lockfile) first.
 - **Uncaught `ECONNRESET` during yarn "Fetching packages"** (not a specific
-  403) often isn't fixed by retrying yarn (confirmed failing identically
-  4x) -- fall back to `npm install --no-audit --no-fund --legacy-peer-deps`.
-  Also set `CYPRESS_INSTALL_BINARY=0` (or similar) to dodge the same
-  symptom on huge unrelated binary downloads. An interrupted install can
-  leave `node_modules` with partial extracts causing `ENOTEMPTY` on retry --
-  `rm -rf node_modules` first.
+  403) often isn't fixed by retrying yarn -- fall back to `npm install
+  --no-audit --no-fund --legacy-peer-deps`. Set `CYPRESS_INSTALL_BINARY=0`
+  (or similar) to dodge huge unrelated binary downloads. An interrupted
+  install can leave `node_modules` with partial extracts (`ENOTEMPTY` on
+  retry) -- `rm -rf node_modules` first.
