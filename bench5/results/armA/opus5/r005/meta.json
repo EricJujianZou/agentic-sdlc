@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_ansible__ansible-811093f0225caa4dd33890933150a81c6a6d5226-v1055803c3a812189a1133297f7f5468579283f86",
+  "model": "opus5",
+  "started_at": "2026-08-01T09:34:07Z",
+  "finished_at": "2026-08-01T10:12:00Z",
+  "turns_estimate": 48,
+  "self_assessment": "Moved handler execution into a dedicated IteratingStates.HANDLERS iterator phase (HostState.handlers/cur_handlers_task/pre_flushing_run_state/update_handlers, FailedStates.HANDLERS, clear_host_errors, get_state_for_host, host_states, all_tasks via new Block.get_tasks), rewrote linear _get_next_task_lockstep around all_tasks/uuid + _in_handlers, deleted run_handlers/_do_handler_run machinery, added when-conditional flush_handlers, meta-as-handler (flush_handlers rejected), force_handlers compile() blocks, Task.copy uuid, Handler.remove_host; all 627 relevant unit tests and the handlers/blocks/meta_tasks/strategy_*/any_errors_fatal/handler_race/include_import/roles integration suites pass."
+}
