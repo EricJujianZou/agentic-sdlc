@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_flipt-io__flipt-b4bb5e13006a729bc0eed8fe6ea18cff54acdacb",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T03:04:06Z",
+  "finished_at": "2026-08-01T03:16:33Z",
+  "turns_estimate": 40,
+  "self_assessment": "Confident on the core change (WithManifestVersion option, config manifest_version field with 1.1 default and exact validation error, wiring at both store construction sites); main residual risk is guessing the gold fixture details — whether oci_provided.yml carries manifest_version \"1.0\" and the exact name/type used for the config field."
+}
