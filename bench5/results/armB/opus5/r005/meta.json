@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_ansible__ansible-811093f0225caa4dd33890933150a81c6a6d5226-v1055803c3a812189a1133297f7f5468579283f86",
+  "model": "opus5",
+  "started_at": "2026-08-01T04:42:38Z",
+  "finished_at": "2026-08-01T04:53:17Z",
+  "self_assessment": "PARTIAL. Implemented: IteratingStates.HANDLERS/FailedStates.HANDLERS; HostState.handlers/cur_handlers_task/pre_flushing_run_state/update_handlers incl. __str__/__eq__/copy; PlayIterator.host_states property, get_state_for_host, clear_host_errors, all_tasks, handlers; Block.get_tasks(); Task.copy() preserves _uuid; Handler.remove_host(); Play.compile() force_handlers flush_block-in-always with implicit meta noop; meta flush_handlers now supports when and raises if used as a handler; linear _get_next_task_lockstep rewritten around all_tasks/cur_task with a separate handlers lockstep path; legacy run_handlers no longer invoked from cleanup. Verified: 356 executor+playbook unit tests pass and the full unit suite matches the clean-base baseline exactly (163F/1586P), so no regressions. NOT fully correct: in a 2-host playbook handlers still execute per host rather than in strict lockstep (one host advances past the flush before the other runs its handlers), and handler task-start callbacks now render as TASK rather than RUNNING HANDLER."
+}

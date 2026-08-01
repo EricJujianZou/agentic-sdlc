@@ -1,0 +1,591 @@
+diff --git a/lib/ansible/executor/play_iterator.py b/lib/ansible/executor/play_iterator.py
+index db76417..56f8d91 100644
+--- a/lib/ansible/executor/play_iterator.py
++++ b/lib/ansible/executor/play_iterator.py
+@@ -42,7 +42,8 @@ class IteratingStates(IntEnum):
+     TASKS = 1
+     RESCUE = 2
+     ALWAYS = 3
+-    COMPLETE = 4
++    HANDLERS = 4
++    COMPLETE = 5
+ 
+ 
+ class FailedStates(IntFlag):
+@@ -51,18 +52,23 @@ class FailedStates(IntFlag):
+     TASKS = 2
+     RESCUE = 4
+     ALWAYS = 8
++    HANDLERS = 16
+ 
+ 
+ class HostState:
+     def __init__(self, blocks):
+         self._blocks = blocks[:]
++        self.handlers = []
+ 
+         self.cur_block = 0
+         self.cur_regular_task = 0
+         self.cur_rescue_task = 0
+         self.cur_always_task = 0
++        self.cur_handlers_task = 0
+         self.run_state = IteratingStates.SETUP
+         self.fail_state = FailedStates.NONE
++        self.pre_flushing_run_state = None
++        self.update_handlers = True
+         self.pending_setup = False
+         self.tasks_child_state = None
+         self.rescue_child_state = None
+@@ -74,14 +80,19 @@ class HostState:
+         return "HostState(%r)" % self._blocks
+ 
+     def __str__(self):
+-        return ("HOST STATE: block=%d, task=%d, rescue=%d, always=%d, run_state=%s, fail_state=%s, pending_setup=%s, tasks child state? (%s), "
+-                "rescue child state? (%s), always child state? (%s), did rescue? %s, did start at task? %s" % (
++        return ("HOST STATE: block=%d, task=%d, rescue=%d, always=%d, handlers=%d, run_state=%s, fail_state=%s, "
++                "pre_flushing_run_state=%s, update_handlers=%s, pending_setup=%s, "
++                "tasks child state? (%s), rescue child state? (%s), always child state? (%s), "
++                "did rescue? %s, did start at task? %s" % (
+                     self.cur_block,
+                     self.cur_regular_task,
+                     self.cur_rescue_task,
+                     self.cur_always_task,
++                    self.cur_handlers_task,
+                     self.run_state,
+                     self.fail_state,
++                    self.pre_flushing_run_state,
++                    self.update_handlers,
+                     self.pending_setup,
+                     self.tasks_child_state,
+                     self.rescue_child_state,
+@@ -94,9 +105,9 @@ class HostState:
+         if not isinstance(other, HostState):
+             return False
+ 
+-        for attr in ('_blocks', 'cur_block', 'cur_regular_task', 'cur_rescue_task', 'cur_always_task',
+-                     'run_state', 'fail_state', 'pending_setup',
+-                     'tasks_child_state', 'rescue_child_state', 'always_child_state'):
++        for attr in ('_blocks', 'handlers', 'cur_block', 'cur_regular_task', 'cur_rescue_task', 'cur_always_task',
++                     'cur_handlers_task', 'run_state', 'fail_state', 'pre_flushing_run_state', 'update_handlers',
++                     'pending_setup', 'tasks_child_state', 'rescue_child_state', 'always_child_state'):
+             if getattr(self, attr) != getattr(other, attr):
+                 return False
+ 
+@@ -107,12 +118,16 @@ class HostState:
+ 
+     def copy(self):
+         new_state = HostState(self._blocks)
++        new_state.handlers = self.handlers[:]
+         new_state.cur_block = self.cur_block
+         new_state.cur_regular_task = self.cur_regular_task
+         new_state.cur_rescue_task = self.cur_rescue_task
+         new_state.cur_always_task = self.cur_always_task
++        new_state.cur_handlers_task = self.cur_handlers_task
+         new_state.run_state = self.run_state
+         new_state.fail_state = self.fail_state
++        new_state.pre_flushing_run_state = self.pre_flushing_run_state
++        new_state.update_handlers = self.update_handlers
+         new_state.pending_setup = self.pending_setup
+         new_state.did_rescue = self.did_rescue
+         new_state.did_start_at_task = self.did_start_at_task
+@@ -168,6 +183,14 @@ class PlayIterator:
+             if new_block.has_tasks():
+                 self._blocks.append(new_block)
+ 
++        self.handlers = [h for b in self._play.handlers for h in b.block]
++
++        # a flattened list of all tasks in the play, used by strategies (linear
++        # in particular) to keep hosts in lockstep across the same task
++        self.all_tasks = []
++        for block in self._blocks:
++            self.all_tasks.extend(block.get_tasks())
++
+         self._host_states = {}
+         start_at_matched = False
+         batch = inventory.get_hosts(self._play.hosts, order=self._play.order)
+@@ -199,6 +222,14 @@ class PlayIterator:
+             play_context.start_at_task = None
+ 
+         self.end_play = False
++        self.cur_task = 0
++
++    @property
++    def host_states(self):
++        return self._host_states
++
++    def get_state_for_host(self, hostname: str) -> HostState:
++        return self._host_states[hostname]
+ 
+     def get_host_state(self, host):
+         # Since we're using the PlayIterator to carry forward failed hosts,
+@@ -401,6 +432,31 @@ class PlayIterator:
+                             task = None
+                         state.cur_always_task += 1
+ 
++            elif state.run_state == IteratingStates.HANDLERS:
++                if state.update_handlers:
++                    # reset handlers for HostState since handlers from include_tasks
++                    # might be there from previous flush
++                    state.handlers = self.handlers[:]
++                    state.update_handlers = False
++                    state.cur_handlers_task = 0
++
++                if state.fail_state & FailedStates.HANDLERS == FailedStates.HANDLERS:
++                    state.update_handlers = True
++                    state.run_state = IteratingStates.COMPLETE
++                else:
++                    while True:
++                        try:
++                            task = state.handlers[state.cur_handlers_task]
++                        except IndexError:
++                            task = None
++                            state.run_state = state.pre_flushing_run_state
++                            state.update_handlers = True
++                            break
++                        else:
++                            state.cur_handlers_task += 1
++                            if task.is_host_notified(host):
++                                break
++
+             elif state.run_state == IteratingStates.COMPLETE:
+                 return (state, None)
+ 
+@@ -440,6 +496,15 @@ class PlayIterator:
+             else:
+                 state.fail_state |= FailedStates.ALWAYS
+                 state.run_state = IteratingStates.COMPLETE
++        elif state.run_state == IteratingStates.HANDLERS:
++            state.fail_state |= FailedStates.HANDLERS
++            state.update_handlers = True
++            if state._blocks[state.cur_block].rescue:
++                state.run_state = IteratingStates.RESCUE
++            elif state._blocks[state.cur_block].always:
++                state.run_state = IteratingStates.ALWAYS
++            else:
++                state.run_state = IteratingStates.COMPLETE
+         return state
+ 
+     def mark_host_failed(self, host):
+@@ -450,6 +515,19 @@ class PlayIterator:
+         self.set_state_for_host(host.name, s)
+         self._play._removed_hosts.append(host.name)
+ 
++    def clear_host_errors(self, host):
++        self._clear_state_errors(self.get_state_for_host(host.name))
++
++    def _clear_state_errors(self, state: HostState) -> None:
++        state.fail_state = FailedStates.NONE
++
++        if state.tasks_child_state is not None:
++            self._clear_state_errors(state.tasks_child_state)
++        elif state.rescue_child_state is not None:
++            self._clear_state_errors(state.rescue_child_state)
++        elif state.always_child_state is not None:
++            self._clear_state_errors(state.always_child_state)
++
+     def get_failed_hosts(self):
+         return dict((host, True) for (host, state) in self._host_states.items() if self._check_failed_state(state))
+ 
+diff --git a/lib/ansible/playbook/block.py b/lib/ansible/playbook/block.py
+index 45f7a38..958a46c 100644
+--- a/lib/ansible/playbook/block.py
++++ b/lib/ansible/playbook/block.py
+@@ -390,6 +390,24 @@ class Block(Base, Conditional, CollectionSearch, Taggable):
+     def has_tasks(self):
+         return len(self.block) > 0 or len(self.rescue) > 0 or len(self.always) > 0
+ 
++    def get_tasks(self):
++        def evaluate_and_append_task(target):
++            tmp_list = []
++            for task in target:
++                if isinstance(task, Block):
++                    tmp_list.extend(evaluate_block(task))
++                else:
++                    tmp_list.append(task)
++            return tmp_list
++
++        def evaluate_block(block):
++            rv = evaluate_and_append_task(block.block)
++            rv.extend(evaluate_and_append_task(block.rescue))
++            rv.extend(evaluate_and_append_task(block.always))
++            return rv
++
++        return evaluate_block(self)
++
+     def get_include_params(self):
+         if self._parent:
+             return self._parent.get_include_params()
+diff --git a/lib/ansible/playbook/handler.py b/lib/ansible/playbook/handler.py
+index 9ad8c8a..675eecb 100644
+--- a/lib/ansible/playbook/handler.py
++++ b/lib/ansible/playbook/handler.py
+@@ -50,6 +50,9 @@ class Handler(Task):
+             return True
+         return False
+ 
++    def remove_host(self, host):
++        self.notified_hosts = [h for h in self.notified_hosts if h != host]
++
+     def is_host_notified(self, host):
+         return host in self.notified_hosts
+ 
+diff --git a/lib/ansible/playbook/play.py b/lib/ansible/playbook/play.py
+index fb6fdd8..ce746f4 100644
+--- a/lib/ansible/playbook/play.py
++++ b/lib/ansible/playbook/play.py
+@@ -32,6 +32,7 @@ from ansible.playbook.collectionsearch import CollectionSearch
+ from ansible.playbook.helpers import load_list_of_blocks, load_list_of_roles
+ from ansible.playbook.role import Role
+ from ansible.playbook.taggable import Taggable
++from ansible.playbook.task import Task
+ from ansible.vars.manager import preprocess_vars
+ from ansible.utils.display import Display
+ 
+@@ -288,26 +289,55 @@ class Play(Base, Taggable, CollectionSearch):
+ 
+         # create a block containing a single flush handlers meta
+         # task, so we can be sure to run handlers at certain points
+-        # of the playbook execution
+-        flush_block = Block.load(
+-            data={'meta': 'flush_handlers'},
+-            play=self,
+-            variable_manager=self._variable_manager,
+-            loader=self._loader
+-        )
++        # of the playbook execution. Each flush point gets its own block so
++        # that the tasks are distinguishable by uuid, which the linear
++        # strategy relies on to keep hosts in lockstep.
++        def _build_flush_block():
++            block = Block.load(
++                data={'meta': 'flush_handlers'},
++                play=self,
++                variable_manager=self._variable_manager,
++                loader=self._loader
++            )
++            for task in block.block:
++                task.implicit = True
++            return block
+ 
+-        for task in flush_block.block:
+-            task.implicit = True
++        flush_block = _build_flush_block()
+ 
+         block_list = []
++        if self.force_handlers:
++            noop_task = Task()
++            noop_task.action = 'meta'
++            noop_task.args['_raw_params'] = 'noop'
++            noop_task.implicit = True
++            noop_task.set_loader(self._loader)
++
++            b = Block(play=self)
++            b.block = self.pre_tasks or [noop_task]
++            b.always = [flush_block]
++            block_list.append(b)
++
++            tasks = self._compile_roles() + self.tasks
++            b = Block(play=self)
++            b.block = tasks or [noop_task]
++            b.always = [_build_flush_block()]
++            block_list.append(b)
++
++            b = Block(play=self)
++            b.block = self.post_tasks or [noop_task]
++            b.always = [_build_flush_block()]
++            block_list.append(b)
++
++            return block_list
+ 
+         block_list.extend(self.pre_tasks)
+         block_list.append(flush_block)
+         block_list.extend(self._compile_roles())
+         block_list.extend(self.tasks)
+-        block_list.append(flush_block)
++        block_list.append(_build_flush_block())
+         block_list.extend(self.post_tasks)
+-        block_list.append(flush_block)
++        block_list.append(_build_flush_block())
+ 
+         return block_list
+ 
+diff --git a/lib/ansible/playbook/task.py b/lib/ansible/playbook/task.py
+index bb8b651..1a130a1 100644
+--- a/lib/ansible/playbook/task.py
++++ b/lib/ansible/playbook/task.py
+@@ -394,6 +394,7 @@ class Task(Base, Conditional, Taggable, CollectionSearch):
+ 
+         new_me.implicit = self.implicit
+         new_me.resolved_action = self.resolved_action
++        new_me._uuid = self._uuid
+ 
+         return new_me
+ 
+diff --git a/lib/ansible/plugins/strategy/__init__.py b/lib/ansible/plugins/strategy/__init__.py
+index f33a612..7a92354 100644
+--- a/lib/ansible/plugins/strategy/__init__.py
++++ b/lib/ansible/plugins/strategy/__init__.py
+@@ -313,18 +313,12 @@ class StrategyBase:
+                 except KeyError:
+                     iterator.get_next_task_for_host(self._inventory.get_host(host))
+ 
+-        # save the failed/unreachable hosts, as the run_handlers()
+-        # method will clear that information during its execution
++        # Handlers are no longer run here. They are executed by the iterator as a
++        # dedicated IteratingStates.HANDLERS phase, triggered by the implicit
++        # `meta: flush_handlers` tasks the play compiles in.
+         failed_hosts = iterator.get_failed_hosts()
+         unreachable_hosts = self._tqm._unreachable_hosts.keys()
+ 
+-        display.debug("running handlers")
+-        handler_result = self.run_handlers(iterator, play_context)
+-        if isinstance(handler_result, bool) and not handler_result:
+-            result |= self._tqm.RUN_ERROR
+-        elif not handler_result:
+-            result |= handler_result
+-
+         # now update with the hosts (if any) that failed or were
+         # unreachable during the handler execution phase
+         failed_hosts = set(failed_hosts).union(iterator.get_failed_hosts())
+@@ -1113,16 +1107,23 @@ class StrategyBase:
+         self._tqm.send_callback('v2_playbook_on_task_start', task, is_conditional=False)
+ 
+         # These don't support "when" conditionals
+-        if meta_action in ('noop', 'flush_handlers', 'refresh_inventory', 'reset_connection') and task.when:
++        if meta_action in ('noop', 'refresh_inventory', 'reset_connection') and task.when:
+             self._cond_not_supported_warn(meta_action)
+ 
+         if meta_action == 'noop':
+             msg = "noop"
+         elif meta_action == 'flush_handlers':
+-            self._flushed_hosts[target_host] = True
+-            self.run_handlers(iterator, play_context)
+-            self._flushed_hosts[target_host] = False
+-            msg = "ran handlers"
++            if _evaluate_conditional(target_host):
++                host_state = iterator.get_state_for_host(target_host.name)
++                if host_state.run_state == IteratingStates.HANDLERS:
++                    raise AnsibleError('flush_handlers cannot be used as a handler')
++                if target_host.name not in self._tqm._unreachable_hosts:
++                    host_state.pre_flushing_run_state = host_state.run_state
++                    host_state.run_state = IteratingStates.HANDLERS
++                msg = "triggered running handlers for %s" % target_host.name
++            else:
++                skipped = True
++                skip_reason += ', not running handlers for %s' % target_host.name
+         elif meta_action == 'refresh_inventory':
+             self._inventory.refresh_inventory()
+             self._set_hosts_cache(iterator._play)
+@@ -1141,7 +1142,7 @@ class StrategyBase:
+                 for host in self._inventory.get_hosts(iterator._play.hosts):
+                     self._tqm._failed_hosts.pop(host.name, False)
+                     self._tqm._unreachable_hosts.pop(host.name, False)
+-                    iterator.set_fail_state_for_host(host.name, FailedStates.NONE)
++                    iterator.clear_host_errors(host)
+                 msg = "cleared host errors"
+             else:
+                 skipped = True
+diff --git a/lib/ansible/plugins/strategy/linear.py b/lib/ansible/plugins/strategy/linear.py
+index d90d347..96e9954 100644
+--- a/lib/ansible/plugins/strategy/linear.py
++++ b/lib/ansible/plugins/strategy/linear.py
+@@ -36,6 +36,7 @@ from ansible.errors import AnsibleError, AnsibleAssertionError, AnsibleParserErr
+ from ansible.executor.play_iterator import IteratingStates, FailedStates
+ from ansible.module_utils._text import to_text
+ from ansible.playbook.block import Block
++from ansible.playbook.handler import Handler
+ from ansible.playbook.included_file import IncludedFile
+ from ansible.playbook.task import Task
+ from ansible.plugins.loader import action_loader
+@@ -85,117 +86,81 @@ class StrategyModule(StrategyBase):
+         be a noop task to keep the iterator in lock step across
+         all hosts.
+         '''
+-
+         noop_task = Task()
+         noop_task.action = 'meta'
+         noop_task.args['_raw_params'] = 'noop'
+         noop_task.implicit = True
+         noop_task.set_loader(iterator._play._loader)
+ 
+-        host_tasks = {}
+-        display.debug("building list of next tasks for hosts")
++        state_task_per_host = {}
+         for host in hosts:
+-            host_tasks[host.name] = iterator.get_next_task_for_host(host, peek=True)
+-        display.debug("done building task lists")
+-
+-        num_setups = 0
+-        num_tasks = 0
+-        num_rescue = 0
+-        num_always = 0
+-
+-        display.debug("counting tasks in each state of execution")
+-        host_tasks_to_run = [(host, state_task)
+-                             for host, state_task in host_tasks.items()
+-                             if state_task and state_task[1]]
+-
+-        if host_tasks_to_run:
++            state, task = iterator.get_next_task_for_host(host, peek=True)
++            if task is not None:
++                state_task_per_host[host] = state, task
++
++        if not state_task_per_host:
++            return [(h, None) for h in hosts]
++
++        if all(iterator.get_state_for_host(host.name).run_state == IteratingStates.HANDLERS
++               for host in state_task_per_host):
++            # Handlers are not part of iterator.all_tasks, so they cannot be kept
++            # in lockstep by walking that list. Instead sync on the handler index
++            # within the handlers phase, which also keeps `serial` batches correct.
++            lowest_cur_handler = min(
++                iterator.get_state_for_host(host.name).cur_handlers_task
++                for host in state_task_per_host
++            )
++
++            host_tasks = []
++            for host in hosts:
++                if host not in state_task_per_host:
++                    host_tasks.append((host, noop_task))
++                    continue
++                state, task = state_task_per_host[host]
++                if iterator.get_state_for_host(host.name).cur_handlers_task == lowest_cur_handler:
++                    iterator.set_state_for_host(host.name, state)
++                    host_tasks.append((host, task))
++                else:
++                    host_tasks.append((host, noop_task))
++            return host_tasks
++
++        # Walk the flattened list of all tasks in the play until we reach a task
++        # that at least one host is ready to run. Hosts whose next task is that
++        # exact task run it, every other host gets a noop so the batch stays in
++        # lockstep. Task identity is by _uuid, which Task.copy() preserves.
++        task_uuids = {t._uuid for s, t in state_task_per_host.values()}
++        loop_cnt = 0
++        cur_task = None
++        while loop_cnt <= 1:
+             try:
+-                lowest_cur_block = min(
+-                    (iterator.get_active_state(s).cur_block for h, (s, t) in host_tasks_to_run
+-                     if s.run_state != IteratingStates.COMPLETE))
+-            except ValueError:
+-                lowest_cur_block = None
++                cur_task = iterator.all_tasks[iterator.cur_task]
++            except IndexError:
++                # wrap around; tasks may have been added dynamically by includes
++                iterator.cur_task = 0
++                loop_cnt += 1
++            else:
++                iterator.cur_task += 1
++                if cur_task._uuid in task_uuids:
++                    break
+         else:
+-            # empty host_tasks_to_run will just run till the end of the function
+-            # without ever touching lowest_cur_block
+-            lowest_cur_block = None
+-
+-        for (k, v) in host_tasks_to_run:
+-            (s, t) = v
++            raise AnsibleAssertionError(
++                'BUG: There seems to be a mismatch between tasks in PlayIterator and HostStates.'
++            )
+ 
+-            s = iterator.get_active_state(s)
+-            if s.cur_block > lowest_cur_block:
+-                # Not the current block, ignore it
++        host_tasks = []
++        for host in hosts:
++            if host not in state_task_per_host:
++                host_tasks.append((host, noop_task))
+                 continue
++            state, task = state_task_per_host[host]
++            if cur_task._uuid == task._uuid:
++                iterator.set_state_for_host(host.name, state)
++                host_tasks.append((host, task))
++            else:
++                host_tasks.append((host, noop_task))
++
++        return host_tasks
+ 
+-            if s.run_state == IteratingStates.SETUP:
+-                num_setups += 1
+-            elif s.run_state == IteratingStates.TASKS:
+-                num_tasks += 1
+-            elif s.run_state == IteratingStates.RESCUE:
+-                num_rescue += 1
+-            elif s.run_state == IteratingStates.ALWAYS:
+-                num_always += 1
+-        display.debug("done counting tasks in each state of execution:\n\tnum_setups: %s\n\tnum_tasks: %s\n\tnum_rescue: %s\n\tnum_always: %s" % (num_setups,
+-                                                                                                                                                  num_tasks,
+-                                                                                                                                                  num_rescue,
+-                                                                                                                                                  num_always))
+-
+-        def _advance_selected_hosts(hosts, cur_block, cur_state):
+-            '''
+-            This helper returns the task for all hosts in the requested
+-            state, otherwise they get a noop dummy task. This also advances
+-            the state of the host, since the given states are determined
+-            while using peek=True.
+-            '''
+-            # we return the values in the order they were originally
+-            # specified in the given hosts array
+-            rvals = []
+-            display.debug("starting to advance hosts")
+-            for host in hosts:
+-                host_state_task = host_tasks.get(host.name)
+-                if host_state_task is None:
+-                    continue
+-                (state, task) = host_state_task
+-                s = iterator.get_active_state(state)
+-                if task is None:
+-                    continue
+-                if s.run_state == cur_state and s.cur_block == cur_block:
+-                    iterator.set_state_for_host(host.name, state)
+-                    rvals.append((host, task))
+-                else:
+-                    rvals.append((host, noop_task))
+-            display.debug("done advancing hosts to next task")
+-            return rvals
+-
+-        # if any hosts are in SETUP, return the setup task
+-        # while all other hosts get a noop
+-        if num_setups:
+-            display.debug("advancing hosts in SETUP")
+-            return _advance_selected_hosts(hosts, lowest_cur_block, IteratingStates.SETUP)
+-
+-        # if any hosts are in TASKS, return the next normal
+-        # task for these hosts, while all other hosts get a noop
+-        if num_tasks:
+-            display.debug("advancing hosts in TASKS")
+-            return _advance_selected_hosts(hosts, lowest_cur_block, IteratingStates.TASKS)
+-
+-        # if any hosts are in RESCUE, return the next rescue
+-        # task for these hosts, while all other hosts get a noop
+-        if num_rescue:
+-            display.debug("advancing hosts in RESCUE")
+-            return _advance_selected_hosts(hosts, lowest_cur_block, IteratingStates.RESCUE)
+-
+-        # if any hosts are in ALWAYS, return the next always
+-        # task for these hosts, while all other hosts get a noop
+-        if num_always:
+-            display.debug("advancing hosts in ALWAYS")
+-            return _advance_selected_hosts(hosts, lowest_cur_block, IteratingStates.ALWAYS)
+-
+-        # at this point, everything must be COMPLETE, so we
+-        # return None for all hosts in the list
+-        display.debug("all hosts are done, so returning None's for all hosts")
+-        return [(host, None) for host in hosts]
+ 
+     def run(self, iterator, play_context):
+         '''
+@@ -310,6 +275,11 @@ class StrategyModule(StrategyBase):
+                             callback_sent = True
+                             display.debug("sending task start callback")
+ 
++                        if isinstance(task, Handler):
++                            # the handler is being run for this host now, so drop the
++                            # notification to keep later flushes from re-running it
++                            task.remove_host(host)
++
+                         self._blocked_hosts[host.get_name()] = True
+                         self._queue_task(host, task, task_vars, play_context)
+                         del task_vars
