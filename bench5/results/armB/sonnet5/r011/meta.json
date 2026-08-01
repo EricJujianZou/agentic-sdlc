@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T05:09:48Z",
+  "finished_at": "2026-08-01T05:22:12Z",
+  "self_assessment": "Implemented the KEV/CISAKEV/VulnCheckKEV/VulnCheckXDB/VulnCheckReportedExploitation structs and KEVType constants in a new models/kev.go, added VulnInfo.KEVs, ScanResult.FormatKEVCveSummary, KEVs sorting in SortForJSONOutput, and rewrote detector.FillWithKEVuln to populate KEVs from both CISA and VulnCheck sources (bumping github.com/vulsio/go-kev to v0.2.0 for VulnCheck support, replacing the old AlertDict.CISA-only path); go build/vet and go test ./models/... and ./detector/... all pass, though field/behavior details (e.g. omitempty JSON tags, exact DueDate zero-value normalization) are best-effort inferred from the issue text since no gold patch was consulted."
+}

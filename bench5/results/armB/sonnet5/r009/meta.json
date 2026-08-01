@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-d109cc7e6e161170391f98f9a6fa1d02534c18e4-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T05:09:41Z",
+  "finished_at": "2026-08-01T05:30:25Z",
+  "self_assessment": "Implemented AnnotatedSeedDict/AnnotatedSeed/AnnotatedSeedThing and Seed.from_json/to_db/to_json exactly per the interface in model.py, wired notes-aware key-only equality through add_seed/remove_seed/_index_of_seed/get_seeds, updated normalize_input_seed and the edit.html template plus Solr list indexing, and verified via unit tests (existing suite green except one pre-existing unrelated flaky test) and ad-hoc round-trip tests I wrote and then removed; some peripheral seed-consuming call sites (e.g. embed.html) were left untouched and could still mishandle annotated seeds."
+}
