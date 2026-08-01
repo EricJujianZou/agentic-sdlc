@@ -1,0 +1,1704 @@
+diff --git a/internal/cmd/grpc.go b/internal/cmd/grpc.go
+index 172ceb15..47efccd9 100644
+--- a/internal/cmd/grpc.go
++++ b/internal/cmd/grpc.go
+@@ -483,11 +483,6 @@ func NewGRPCServer(
+ 		logger.Info("authorization middleware enabled")
+ 	}
+ 
+-	// cache must come after authn and authz interceptors
+-	if cfg.Cache.Enabled && cacher != nil {
+-		interceptors = append(interceptors, middlewaregrpc.CacheUnaryInterceptor(cacher, logger))
+-	}
+-
+ 	grpcOpts := []grpc.ServerOption{
+ 		grpc.ChainUnaryInterceptor(interceptors...),
+ 		grpc.KeepaliveParams(keepalive.ServerParameters{
+diff --git a/internal/server/middleware/grpc/middleware.go b/internal/server/middleware/grpc/middleware.go
+index 88330dd5..909b981c 100644
+--- a/internal/server/middleware/grpc/middleware.go
++++ b/internal/server/middleware/grpc/middleware.go
+@@ -10,7 +10,6 @@ import (
+ 	"github.com/blang/semver/v4"
+ 	"github.com/gofrs/uuid"
+ 	errs "go.flipt.io/flipt/errors"
+-	"go.flipt.io/flipt/internal/cache"
+ 	"go.flipt.io/flipt/internal/server/analytics"
+ 	"go.flipt.io/flipt/internal/server/audit"
+ 	"go.flipt.io/flipt/internal/server/authn"
+@@ -25,7 +24,6 @@ import (
+ 	"google.golang.org/grpc/codes"
+ 	"google.golang.org/grpc/metadata"
+ 	"google.golang.org/grpc/status"
+-	"google.golang.org/protobuf/proto"
+ )
+ 
+ // ValidationUnaryInterceptor validates incoming requests
+@@ -237,194 +235,6 @@ func EvaluationUnaryInterceptor(analyticsEnabled bool) grpc.UnaryServerIntercept
+ 	}
+ }
+ 
+-var (
+-	legacyEvalCachePrefix evaluationCacheKey[*flipt.EvaluationRequest]      = "ev1"
+-	newEvalCachePrefix    evaluationCacheKey[*evaluation.EvaluationRequest] = "ev2"
+-)
+-
+-// CacheUnaryInterceptor caches the response of a request if the request is cacheable.
+-// TODO: we could clean this up by using generics in 1.18+ to avoid the type switch/duplicate code.
+-func CacheUnaryInterceptor(cache cache.Cacher, logger *zap.Logger) grpc.UnaryServerInterceptor {
+-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+-		if cache == nil {
+-			return handler(ctx, req)
+-		}
+-
+-		switch r := req.(type) {
+-		case *flipt.EvaluationRequest:
+-			key, err := legacyEvalCachePrefix.Key(r)
+-			if err != nil {
+-				logger.Error("getting cache key", zap.Error(err))
+-				return handler(ctx, req)
+-			}
+-
+-			cached, ok, err := cache.Get(ctx, key)
+-			if err != nil {
+-				// if error, log and without cache
+-				logger.Error("getting from cache", zap.Error(err))
+-				return handler(ctx, req)
+-			}
+-
+-			if ok {
+-				resp := &flipt.EvaluationResponse{}
+-				if err := proto.Unmarshal(cached, resp); err != nil {
+-					logger.Error("unmarshalling from cache", zap.Error(err))
+-					return handler(ctx, req)
+-				}
+-
+-				logger.Debug("evaluate cache hit", zap.Stringer("response", resp))
+-				return resp, nil
+-			}
+-
+-			logger.Debug("evaluate cache miss")
+-			resp, err := handler(ctx, req)
+-			if err != nil {
+-				return resp, err
+-			}
+-
+-			// marshal response
+-			data, merr := proto.Marshal(resp.(*flipt.EvaluationResponse))
+-			if merr != nil {
+-				logger.Error("marshalling for cache", zap.Error(err))
+-				return resp, err
+-			}
+-
+-			// set in cache
+-			if cerr := cache.Set(ctx, key, data); cerr != nil {
+-				logger.Error("setting in cache", zap.Error(err))
+-			}
+-
+-			return resp, err
+-
+-		case *flipt.GetFlagRequest:
+-			key := flagCacheKey(r.GetNamespaceKey(), r.GetKey())
+-
+-			cached, ok, err := cache.Get(ctx, key)
+-			if err != nil {
+-				// if error, log and continue without cache
+-				logger.Error("getting from cache", zap.Error(err))
+-				return handler(ctx, req)
+-			}
+-
+-			if ok {
+-				// if cached, return it
+-				flag := &flipt.Flag{}
+-				if err := proto.Unmarshal(cached, flag); err != nil {
+-					logger.Error("unmarshalling from cache", zap.Error(err))
+-					return handler(ctx, req)
+-				}
+-
+-				logger.Debug("flag cache hit", zap.Stringer("flag", flag))
+-				return flag, nil
+-			}
+-
+-			logger.Debug("flag cache miss")
+-			resp, err := handler(ctx, req)
+-			if err != nil {
+-				return nil, err
+-			}
+-
+-			// marshal response
+-			data, merr := proto.Marshal(resp.(*flipt.Flag))
+-			if merr != nil {
+-				logger.Error("marshalling for cache", zap.Error(err))
+-				return resp, err
+-			}
+-
+-			// set in cache
+-			if cerr := cache.Set(ctx, key, data); cerr != nil {
+-				logger.Error("setting in cache", zap.Error(err))
+-			}
+-
+-			return resp, err
+-
+-		case *flipt.UpdateFlagRequest, *flipt.DeleteFlagRequest:
+-			// need to do this assertion because the request type is not known in this block
+-			keyer := r.(flagKeyer)
+-			// delete from cache
+-			if err := cache.Delete(ctx, flagCacheKey(keyer.GetNamespaceKey(), keyer.GetKey())); err != nil {
+-				logger.Error("deleting from cache", zap.Error(err))
+-			}
+-		case *flipt.CreateVariantRequest, *flipt.UpdateVariantRequest, *flipt.DeleteVariantRequest:
+-			// need to do this assertion because the request type is not known in this block
+-			keyer := r.(variantFlagKeyger)
+-			// delete from cache
+-			if err := cache.Delete(ctx, flagCacheKey(keyer.GetNamespaceKey(), keyer.GetFlagKey())); err != nil {
+-				logger.Error("deleting from cache", zap.Error(err))
+-			}
+-		case *evaluation.EvaluationRequest:
+-			key, err := newEvalCachePrefix.Key(r)
+-			if err != nil {
+-				logger.Error("getting cache key", zap.Error(err))
+-				return handler(ctx, req)
+-			}
+-
+-			cached, ok, err := cache.Get(ctx, key)
+-			if err != nil {
+-				// if error, log and without cache
+-				logger.Error("getting from cache", zap.Error(err))
+-				return handler(ctx, req)
+-			}
+-
+-			if ok {
+-				resp := &evaluation.EvaluationResponse{}
+-				if err := proto.Unmarshal(cached, resp); err != nil {
+-					logger.Error("unmarshalling from cache", zap.Error(err))
+-					return handler(ctx, req)
+-				}
+-
+-				logger.Debug("evaluate cache hit", zap.Stringer("response", resp))
+-				switch r := resp.Response.(type) {
+-				case *evaluation.EvaluationResponse_VariantResponse:
+-					return r.VariantResponse, nil
+-				case *evaluation.EvaluationResponse_BooleanResponse:
+-					return r.BooleanResponse, nil
+-				default:
+-					logger.Error("unexpected eval cache response type", zap.String("type", fmt.Sprintf("%T", resp.Response)))
+-				}
+-
+-				return handler(ctx, req)
+-			}
+-
+-			logger.Debug("evaluate cache miss")
+-			resp, err := handler(ctx, req)
+-			if err != nil {
+-				return resp, err
+-			}
+-
+-			evalResponse := &evaluation.EvaluationResponse{}
+-			switch r := resp.(type) {
+-			case *evaluation.VariantEvaluationResponse:
+-				evalResponse.Type = evaluation.EvaluationResponseType_VARIANT_EVALUATION_RESPONSE_TYPE
+-				evalResponse.Response = &evaluation.EvaluationResponse_VariantResponse{
+-					VariantResponse: r,
+-				}
+-			case *evaluation.BooleanEvaluationResponse:
+-				evalResponse.Type = evaluation.EvaluationResponseType_BOOLEAN_EVALUATION_RESPONSE_TYPE
+-				evalResponse.Response = &evaluation.EvaluationResponse_BooleanResponse{
+-					BooleanResponse: r,
+-				}
+-			}
+-
+-			// marshal response
+-			data, merr := proto.Marshal(evalResponse)
+-			if merr != nil {
+-				logger.Error("marshalling for cache", zap.Error(err))
+-				return resp, err
+-			}
+-
+-			// set in cache
+-			if cerr := cache.Set(ctx, key, data); cerr != nil {
+-				logger.Error("setting in cache", zap.Error(err))
+-			}
+-
+-			return resp, err
+-		}
+-
+-		return handler(ctx, req)
+-	}
+-}
+-
+ // AuditEventUnaryInterceptor captures events and adds them to the trace span to be consumed downstream.
+ func AuditEventUnaryInterceptor(logger *zap.Logger, eventPairChecker audit.EventPairChecker) grpc.UnaryServerInterceptor {
+ 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+@@ -505,51 +315,6 @@ func AuditEventUnaryInterceptor(logger *zap.Logger, eventPairChecker audit.Event
+ 	}
+ }
+ 
+-type namespaceKeyer interface {
+-	GetNamespaceKey() string
+-}
+-
+-type flagKeyer interface {
+-	namespaceKeyer
+-	GetKey() string
+-}
+-
+-type variantFlagKeyger interface {
+-	namespaceKeyer
+-	GetFlagKey() string
+-}
+-
+-func flagCacheKey(namespaceKey, key string) string {
+-	// for backward compatibility
+-	if namespaceKey != "" {
+-		return fmt.Sprintf("f:%s:%s", namespaceKey, key)
+-	}
+-	return fmt.Sprintf("f:%s", key)
+-}
+-
+-type evaluationRequest interface {
+-	GetNamespaceKey() string
+-	GetFlagKey() string
+-	GetEntityId() string
+-	GetContext() map[string]string
+-}
+-
+-type evaluationCacheKey[T evaluationRequest] string
+-
+-func (e evaluationCacheKey[T]) Key(r T) (string, error) {
+-	out, err := json.Marshal(r.GetContext())
+-	if err != nil {
+-		return "", fmt.Errorf("marshalling req to json: %w", err)
+-	}
+-
+-	// for backward compatibility
+-	if r.GetNamespaceKey() != "" {
+-		return fmt.Sprintf("%s:%s:%s:%s:%s", string(e), r.GetNamespaceKey(), r.GetFlagKey(), r.GetEntityId(), out), nil
+-	}
+-
+-	return fmt.Sprintf("%s:%s:%s:%s", string(e), r.GetFlagKey(), r.GetEntityId(), out), nil
+-}
+-
+ // x-flipt-accept-server-version represents the maximum version of the flipt server that the client can handle.
+ const fliptAcceptServerVersionHeaderKey = "x-flipt-accept-server-version"
+ 
+diff --git a/internal/server/middleware/grpc/middleware_test.go b/internal/server/middleware/grpc/middleware_test.go
+index 3c3b50a0..61ea8c0c 100644
+--- a/internal/server/middleware/grpc/middleware_test.go
++++ b/internal/server/middleware/grpc/middleware_test.go
+@@ -4,16 +4,12 @@ import (
+ 	"context"
+ 	"fmt"
+ 	"testing"
+-	"time"
+ 
+ 	"go.flipt.io/flipt/errors"
+-	"go.flipt.io/flipt/internal/cache/memory"
+ 	"go.flipt.io/flipt/internal/common"
+-	"go.flipt.io/flipt/internal/config"
+ 	"go.flipt.io/flipt/internal/server"
+ 	"go.flipt.io/flipt/internal/server/authn/method/token"
+ 	authmiddlewaregrpc "go.flipt.io/flipt/internal/server/authn/middleware/grpc"
+-	servereval "go.flipt.io/flipt/internal/server/evaluation"
+ 	"go.flipt.io/flipt/internal/storage"
+ 	flipt "go.flipt.io/flipt/rpc/flipt"
+ 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+@@ -366,715 +362,6 @@ func TestEvaluationUnaryInterceptor_BatchEvaluation(t *testing.T) {
+ 	// assert.NotZero(t, resp.RequestDurationMillis)
+ }
+ 
+-func TestCacheUnaryInterceptor_GetFlag(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = server.New(logger, store)
+-	)
+-
+-	store.On("GetFlag", mock.Anything, storage.NewResource("", "foo")).Return(&flipt.Flag{
+-		NamespaceKey: flipt.DefaultNamespace,
+-		Key:          "foo",
+-		Enabled:      true,
+-	}, nil)
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.GetFlag(ctx, r.(*flipt.GetFlagRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	for i := 0; i < 10; i++ {
+-		req := &flipt.GetFlagRequest{Key: "foo"}
+-		got, err := unaryInterceptor(context.Background(), req, info, handler)
+-		require.NoError(t, err)
+-		assert.NotNil(t, got)
+-	}
+-
+-	assert.Equal(t, 10, cacheSpy.getCalled)
+-	assert.NotEmpty(t, cacheSpy.getKeys)
+-
+-	const cacheKey = "f:foo"
+-	_, ok := cacheSpy.getKeys[cacheKey]
+-	assert.True(t, ok)
+-
+-	assert.Equal(t, 1, cacheSpy.setCalled)
+-	assert.NotEmpty(t, cacheSpy.setItems)
+-	assert.NotEmpty(t, cacheSpy.setItems[cacheKey])
+-}
+-
+-func TestCacheUnaryInterceptor_UpdateFlag(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = server.New(logger, store)
+-		req      = &flipt.UpdateFlagRequest{
+-			Key:         "key",
+-			Name:        "name",
+-			Description: "desc",
+-			Enabled:     true,
+-		}
+-	)
+-
+-	store.On("UpdateFlag", mock.Anything, req).Return(&flipt.Flag{
+-		Key:         req.Key,
+-		Name:        req.Name,
+-		Description: req.Description,
+-		Enabled:     req.Enabled,
+-	}, nil)
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.UpdateFlag(ctx, r.(*flipt.UpdateFlagRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	got, err := unaryInterceptor(context.Background(), req, info, handler)
+-	require.NoError(t, err)
+-	assert.NotNil(t, got)
+-
+-	assert.Equal(t, 1, cacheSpy.deleteCalled)
+-	assert.NotEmpty(t, cacheSpy.deleteKeys)
+-}
+-
+-func TestCacheUnaryInterceptor_DeleteFlag(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = server.New(logger, store)
+-		req      = &flipt.DeleteFlagRequest{
+-			Key: "key",
+-		}
+-	)
+-
+-	store.On("DeleteFlag", mock.Anything, req).Return(nil)
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.DeleteFlag(ctx, r.(*flipt.DeleteFlagRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	got, err := unaryInterceptor(context.Background(), req, info, handler)
+-	require.NoError(t, err)
+-	assert.NotNil(t, got)
+-
+-	assert.Equal(t, 1, cacheSpy.deleteCalled)
+-	assert.NotEmpty(t, cacheSpy.deleteKeys)
+-}
+-
+-func TestCacheUnaryInterceptor_CreateVariant(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = server.New(logger, store)
+-		req      = &flipt.CreateVariantRequest{
+-			FlagKey:     "flagKey",
+-			Key:         "key",
+-			Name:        "name",
+-			Description: "desc",
+-		}
+-	)
+-
+-	store.On("CreateVariant", mock.Anything, req).Return(&flipt.Variant{
+-		Id:          "1",
+-		FlagKey:     req.FlagKey,
+-		Key:         req.Key,
+-		Name:        req.Name,
+-		Description: req.Description,
+-		Attachment:  req.Attachment,
+-	}, nil)
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.CreateVariant(ctx, r.(*flipt.CreateVariantRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	got, err := unaryInterceptor(context.Background(), req, info, handler)
+-	require.NoError(t, err)
+-	assert.NotNil(t, got)
+-
+-	assert.Equal(t, 1, cacheSpy.deleteCalled)
+-	assert.NotEmpty(t, cacheSpy.deleteKeys)
+-}
+-
+-func TestCacheUnaryInterceptor_UpdateVariant(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = server.New(logger, store)
+-		req      = &flipt.UpdateVariantRequest{
+-			Id:          "1",
+-			FlagKey:     "flagKey",
+-			Key:         "key",
+-			Name:        "name",
+-			Description: "desc",
+-		}
+-	)
+-
+-	store.On("UpdateVariant", mock.Anything, req).Return(&flipt.Variant{
+-		Id:          req.Id,
+-		FlagKey:     req.FlagKey,
+-		Key:         req.Key,
+-		Name:        req.Name,
+-		Description: req.Description,
+-		Attachment:  req.Attachment,
+-	}, nil)
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.UpdateVariant(ctx, r.(*flipt.UpdateVariantRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	got, err := unaryInterceptor(context.Background(), req, info, handler)
+-	require.NoError(t, err)
+-	assert.NotNil(t, got)
+-
+-	assert.Equal(t, 1, cacheSpy.deleteCalled)
+-	assert.NotEmpty(t, cacheSpy.deleteKeys)
+-}
+-
+-func TestCacheUnaryInterceptor_DeleteVariant(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = server.New(logger, store)
+-		req      = &flipt.DeleteVariantRequest{
+-			Id: "1",
+-		}
+-	)
+-
+-	store.On("DeleteVariant", mock.Anything, req).Return(nil)
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.DeleteVariant(ctx, r.(*flipt.DeleteVariantRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	got, err := unaryInterceptor(context.Background(), req, info, handler)
+-	require.NoError(t, err)
+-	assert.NotNil(t, got)
+-
+-	assert.Equal(t, 1, cacheSpy.deleteCalled)
+-	assert.NotEmpty(t, cacheSpy.deleteKeys)
+-}
+-
+-func TestCacheUnaryInterceptor_Evaluate(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = server.New(logger, store)
+-	)
+-
+-	store.On("GetFlag", mock.Anything, storage.NewResource("", "foo")).Return(&flipt.Flag{
+-		Key:     "foo",
+-		Enabled: true,
+-	}, nil)
+-
+-	store.On("GetEvaluationRules", mock.Anything, storage.NewResource("", "foo")).Return(
+-		[]*storage.EvaluationRule{
+-			{
+-				ID:      "1",
+-				FlagKey: "foo",
+-				Rank:    0,
+-				Segments: map[string]*storage.EvaluationSegment{
+-					"bar": {
+-						SegmentKey: "bar",
+-						MatchType:  flipt.MatchType_ALL_MATCH_TYPE,
+-						Constraints: []storage.EvaluationConstraint{
+-							// constraint: bar (string) == baz
+-							{
+-								ID:       "2",
+-								Type:     flipt.ComparisonType_STRING_COMPARISON_TYPE,
+-								Property: "bar",
+-								Operator: flipt.OpEQ,
+-								Value:    "baz",
+-							},
+-							// constraint: admin (bool) == true
+-							{
+-								ID:       "3",
+-								Type:     flipt.ComparisonType_BOOLEAN_COMPARISON_TYPE,
+-								Property: "admin",
+-								Operator: flipt.OpTrue,
+-							},
+-						},
+-					},
+-				},
+-			},
+-		}, nil)
+-
+-	store.On("GetEvaluationDistributions", mock.Anything, storage.NewID("1")).Return(
+-		[]*storage.EvaluationDistribution{
+-			{
+-				ID:                "4",
+-				RuleID:            "1",
+-				VariantID:         "5",
+-				Rollout:           100,
+-				VariantKey:        "boz",
+-				VariantAttachment: `{"key":"value"}`,
+-			},
+-		}, nil)
+-
+-	tests := []struct {
+-		name      string
+-		req       *flipt.EvaluationRequest
+-		wantMatch bool
+-	}{
+-		{
+-			name: "matches all",
+-			req: &flipt.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar":   "baz",
+-					"admin": "true",
+-				},
+-			},
+-			wantMatch: true,
+-		},
+-		{
+-			name: "no match all",
+-			req: &flipt.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar":   "boz",
+-					"admin": "true",
+-				},
+-			},
+-		},
+-		{
+-			name: "no match just bool value",
+-			req: &flipt.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"admin": "true",
+-				},
+-			},
+-		},
+-		{
+-			name: "no match just string value",
+-			req: &flipt.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar": "baz",
+-				},
+-			},
+-		},
+-	}
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.Evaluate(ctx, r.(*flipt.EvaluationRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	for i, tt := range tests {
+-		var (
+-			i         = i + 1
+-			req       = tt.req
+-			wantMatch = tt.wantMatch
+-		)
+-
+-		t.Run(tt.name, func(t *testing.T) {
+-			got, err := unaryInterceptor(context.Background(), req, info, handler)
+-			require.NoError(t, err)
+-			assert.NotNil(t, got)
+-
+-			resp := got.(*flipt.EvaluationResponse)
+-			assert.NotNil(t, resp)
+-			assert.Equal(t, "foo", resp.FlagKey)
+-			assert.Equal(t, req.Context, resp.RequestContext)
+-
+-			assert.Equal(t, i, cacheSpy.getCalled)
+-			assert.NotEmpty(t, cacheSpy.getKeys)
+-
+-			if !wantMatch {
+-				assert.False(t, resp.Match)
+-				assert.Empty(t, resp.SegmentKey)
+-				return
+-			}
+-
+-			assert.True(t, resp.Match)
+-			assert.Equal(t, "bar", resp.SegmentKey)
+-			assert.Equal(t, "boz", resp.Value)
+-			assert.Equal(t, `{"key":"value"}`, resp.Attachment)
+-		})
+-	}
+-}
+-
+-func TestCacheUnaryInterceptor_Evaluation_Variant(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = servereval.New(logger, store)
+-	)
+-
+-	store.On("GetFlag", mock.Anything, storage.NewResource("", "foo")).Return(&flipt.Flag{
+-		Key:     "foo",
+-		Enabled: true,
+-	}, nil)
+-
+-	store.On("GetEvaluationRules", mock.Anything, storage.NewResource("", "foo")).Return(
+-		[]*storage.EvaluationRule{
+-			{
+-				ID:      "1",
+-				FlagKey: "foo",
+-				Rank:    0,
+-				Segments: map[string]*storage.EvaluationSegment{
+-					"bar": {
+-						SegmentKey: "bar",
+-						MatchType:  flipt.MatchType_ALL_MATCH_TYPE,
+-						Constraints: []storage.EvaluationConstraint{
+-							// constraint: bar (string) == baz
+-							{
+-								ID:       "2",
+-								Type:     flipt.ComparisonType_STRING_COMPARISON_TYPE,
+-								Property: "bar",
+-								Operator: flipt.OpEQ,
+-								Value:    "baz",
+-							},
+-							// constraint: admin (bool) == true
+-							{
+-								ID:       "3",
+-								Type:     flipt.ComparisonType_BOOLEAN_COMPARISON_TYPE,
+-								Property: "admin",
+-								Operator: flipt.OpTrue,
+-							},
+-						},
+-					},
+-				},
+-			},
+-		}, nil)
+-
+-	store.On("GetEvaluationDistributions", mock.Anything, storage.NewID("1")).Return(
+-		[]*storage.EvaluationDistribution{
+-			{
+-				ID:                "4",
+-				RuleID:            "1",
+-				VariantID:         "5",
+-				Rollout:           100,
+-				VariantKey:        "boz",
+-				VariantAttachment: `{"key":"value"}`,
+-			},
+-		}, nil)
+-
+-	tests := []struct {
+-		name      string
+-		req       *evaluation.EvaluationRequest
+-		wantMatch bool
+-	}{
+-		{
+-			name: "matches all",
+-			req: &evaluation.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar":   "baz",
+-					"admin": "true",
+-				},
+-			},
+-			wantMatch: true,
+-		},
+-		{
+-			name: "no match all",
+-			req: &evaluation.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar":   "boz",
+-					"admin": "true",
+-				},
+-			},
+-		},
+-		{
+-			name: "no match just bool value",
+-			req: &evaluation.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"admin": "true",
+-				},
+-			},
+-		},
+-		{
+-			name: "no match just string value",
+-			req: &evaluation.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar": "baz",
+-				},
+-			},
+-		},
+-	}
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.Variant(ctx, r.(*evaluation.EvaluationRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	for i, tt := range tests {
+-		var (
+-			i         = i + 1
+-			req       = tt.req
+-			wantMatch = tt.wantMatch
+-		)
+-
+-		t.Run(tt.name, func(t *testing.T) {
+-			got, err := unaryInterceptor(context.Background(), req, info, handler)
+-			require.NoError(t, err)
+-			assert.NotNil(t, got)
+-
+-			resp := got.(*evaluation.VariantEvaluationResponse)
+-			assert.NotNil(t, resp)
+-
+-			assert.Equal(t, i, cacheSpy.getCalled, "cache get wasn't called as expected")
+-			assert.NotEmpty(t, cacheSpy.getKeys, "cache keys should not be empty")
+-
+-			if !wantMatch {
+-				assert.False(t, resp.Match)
+-				return
+-			}
+-
+-			assert.True(t, resp.Match)
+-			assert.Contains(t, resp.SegmentKeys, "bar")
+-			assert.Equal(t, "boz", resp.VariantKey)
+-			assert.Equal(t, `{"key":"value"}`, resp.VariantAttachment)
+-		})
+-	}
+-}
+-
+-func TestCacheUnaryInterceptor_Evaluation_Boolean(t *testing.T) {
+-	var (
+-		store = &common.StoreMock{}
+-		cache = memory.NewCache(config.CacheConfig{
+-			TTL:     time.Second,
+-			Enabled: true,
+-			Backend: config.CacheMemory,
+-		})
+-		cacheSpy = newCacheSpy(cache)
+-		logger   = zaptest.NewLogger(t)
+-		s        = servereval.New(logger, store)
+-	)
+-
+-	store.On("GetFlag", mock.Anything, storage.NewResource("", "foo")).Return(&flipt.Flag{
+-		Key:     "foo",
+-		Enabled: false,
+-		Type:    flipt.FlagType_BOOLEAN_FLAG_TYPE,
+-	}, nil)
+-
+-	store.On("GetEvaluationRollouts", mock.Anything, storage.NewResource("", "foo")).Return(
+-		[]*storage.EvaluationRollout{
+-			{
+-				RolloutType: flipt.RolloutType_SEGMENT_ROLLOUT_TYPE,
+-				Segment: &storage.RolloutSegment{
+-					Segments: map[string]*storage.EvaluationSegment{
+-						"bar": {
+-							SegmentKey: "bar",
+-							MatchType:  flipt.MatchType_ALL_MATCH_TYPE,
+-							Constraints: []storage.EvaluationConstraint{
+-								// constraint: bar (string) == baz
+-								{
+-									ID:       "2",
+-									Type:     flipt.ComparisonType_STRING_COMPARISON_TYPE,
+-									Property: "bar",
+-									Operator: flipt.OpEQ,
+-									Value:    "baz",
+-								},
+-								// constraint: admin (bool) == true
+-								{
+-									ID:       "3",
+-									Type:     flipt.ComparisonType_BOOLEAN_COMPARISON_TYPE,
+-									Property: "admin",
+-									Operator: flipt.OpTrue,
+-								},
+-							},
+-						},
+-					},
+-					Value: true,
+-				},
+-				Rank: 1,
+-			},
+-		}, nil)
+-
+-	tests := []struct {
+-		name      string
+-		req       *evaluation.EvaluationRequest
+-		wantMatch bool
+-	}{
+-		{
+-			name: "matches all",
+-			req: &evaluation.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar":   "baz",
+-					"admin": "true",
+-				},
+-			},
+-			wantMatch: true,
+-		},
+-		{
+-			name: "no match all",
+-			req: &evaluation.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar":   "boz",
+-					"admin": "true",
+-				},
+-			},
+-		},
+-		{
+-			name: "no match just bool value",
+-			req: &evaluation.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"admin": "true",
+-				},
+-			},
+-		},
+-		{
+-			name: "no match just string value",
+-			req: &evaluation.EvaluationRequest{
+-				FlagKey:  "foo",
+-				EntityId: "1",
+-				Context: map[string]string{
+-					"bar": "baz",
+-				},
+-			},
+-		},
+-	}
+-
+-	unaryInterceptor := CacheUnaryInterceptor(cacheSpy, logger)
+-
+-	handler := func(ctx context.Context, r interface{}) (interface{}, error) {
+-		return s.Boolean(ctx, r.(*evaluation.EvaluationRequest))
+-	}
+-
+-	info := &grpc.UnaryServerInfo{
+-		FullMethod: "FakeMethod",
+-	}
+-
+-	for i, tt := range tests {
+-		var (
+-			i         = i + 1
+-			req       = tt.req
+-			wantMatch = tt.wantMatch
+-		)
+-
+-		t.Run(tt.name, func(t *testing.T) {
+-			got, err := unaryInterceptor(context.Background(), req, info, handler)
+-			require.NoError(t, err)
+-			assert.NotNil(t, got)
+-
+-			resp := got.(*evaluation.BooleanEvaluationResponse)
+-			assert.NotNil(t, resp)
+-
+-			assert.Equal(t, i, cacheSpy.getCalled, "cache get wasn't called as expected")
+-			assert.NotEmpty(t, cacheSpy.getKeys, "cache keys should not be empty")
+-
+-			if !wantMatch {
+-				assert.False(t, resp.Enabled)
+-				assert.Equal(t, evaluation.EvaluationReason_DEFAULT_EVALUATION_REASON, resp.Reason)
+-				return
+-			}
+-
+-			assert.True(t, resp.Enabled)
+-			assert.Equal(t, evaluation.EvaluationReason_MATCH_EVALUATION_REASON, resp.Reason)
+-		})
+-	}
+-}
+-
+ type checkerDummy struct{}
+ 
+ func (c *checkerDummy) Check(e string) bool {
+diff --git a/internal/server/middleware/grpc/support_test.go b/internal/server/middleware/grpc/support_test.go
+index a6dfe930..fd31cd85 100644
+--- a/internal/server/middleware/grpc/support_test.go
++++ b/internal/server/middleware/grpc/support_test.go
+@@ -5,7 +5,6 @@ import (
+ 	"fmt"
+ 
+ 	"github.com/stretchr/testify/mock"
+-	"go.flipt.io/flipt/internal/cache"
+ 	"go.flipt.io/flipt/internal/server/audit"
+ 	"go.flipt.io/flipt/internal/storage"
+ 	storageauth "go.flipt.io/flipt/internal/storage/authn"
+@@ -46,46 +45,6 @@ func (a *authStoreMock) ExpireAuthenticationByID(ctx context.Context, id string,
+ 	return nil
+ }
+ 
+-type cacheSpy struct {
+-	cache.Cacher
+-
+-	getKeys   map[string]struct{}
+-	getCalled int
+-
+-	setItems  map[string][]byte
+-	setCalled int
+-
+-	deleteKeys   map[string]struct{}
+-	deleteCalled int
+-}
+-
+-func newCacheSpy(c cache.Cacher) *cacheSpy {
+-	return &cacheSpy{
+-		Cacher:     c,
+-		getKeys:    make(map[string]struct{}),
+-		setItems:   make(map[string][]byte),
+-		deleteKeys: make(map[string]struct{}),
+-	}
+-}
+-
+-func (c *cacheSpy) Get(ctx context.Context, key string) ([]byte, bool, error) {
+-	c.getCalled++
+-	c.getKeys[key] = struct{}{}
+-	return c.Cacher.Get(ctx, key)
+-}
+-
+-func (c *cacheSpy) Set(ctx context.Context, key string, value []byte) error {
+-	c.setCalled++
+-	c.setItems[key] = value
+-	return c.Cacher.Set(ctx, key, value)
+-}
+-
+-func (c *cacheSpy) Delete(ctx context.Context, key string) error {
+-	c.deleteCalled++
+-	c.deleteKeys[key] = struct{}{}
+-	return c.Cacher.Delete(ctx, key)
+-}
+-
+ type auditSinkSpy struct {
+ 	sendAuditsCalled int
+ 	events           []audit.Event
+diff --git a/internal/storage/cache/cache.go b/internal/storage/cache/cache.go
+index a4b3ac3d..5652d99f 100644
+--- a/internal/storage/cache/cache.go
++++ b/internal/storage/cache/cache.go
+@@ -7,93 +7,389 @@ import (
+ 
+ 	"go.flipt.io/flipt/internal/cache"
+ 	"go.flipt.io/flipt/internal/storage"
++	flipt "go.flipt.io/flipt/rpc/flipt"
+ 	"go.uber.org/zap"
++	"google.golang.org/protobuf/proto"
+ )
+ 
+ var _ storage.Store = &Store{}
+ 
++// Store is a decorator around a storage.Store implementation which adds
++// caching for read operations and cache invalidation for flag mutating
++// operations. Moving caching into the storage layer (rather than the gRPC
++// middleware) ensures caching cannot bypass authorization checks and
++// removes the need for request-type switching on the hot path.
+ type Store struct {
+-	storage.Store
++	next   storage.Store
+ 	cacher cache.Cacher
+ 	logger *zap.Logger
+ }
+ 
+ const (
++	// storage:flag:<namespaceKey>:<flagKey>
++	flagCacheKeyFmt = "s:f:%s:%s"
+ 	// storage:evaluationRules:<namespaceKey>:<flagKey>
+ 	evaluationRulesCacheKeyFmt = "s:er:%s:%s"
+ 	// storage:evaluationRollouts:<namespaceKey>:<flagKey>
+ 	evaluationRolloutsCacheKeyFmt = "s:ero:%s:%s"
+ )
+ 
++// NewStore wraps store with a caching decorator backed by cacher.
+ func NewStore(store storage.Store, cacher cache.Cacher, logger *zap.Logger) *Store {
+-	return &Store{Store: store, cacher: cacher, logger: logger}
++	return &Store{next: store, cacher: cacher, logger: logger}
+ }
+ 
+-func (s *Store) set(ctx context.Context, key string, value any) {
+-	cachePayload, err := json.Marshal(value)
++func (s *Store) String() string {
++	return s.next.String()
++}
++
++// setJSON marshals value to JSON and stores it under key in the cache.
++// Errors are logged and otherwise swallowed since a failure to populate
++// the cache should never fail the surrounding storage operation.
++func setJSON[T any](ctx context.Context, s *Store, key string, value T) {
++	data, err := json.Marshal(value)
+ 	if err != nil {
+-		s.logger.Error("marshalling for storage cache", zap.Error(err))
++		s.logger.Error("marshalling json for storage cache", zap.String("key", key), zap.Error(err))
+ 		return
+ 	}
+ 
+-	err = s.cacher.Set(ctx, key, cachePayload)
++	if err := s.cacher.Set(ctx, key, data); err != nil {
++		s.logger.Error("setting json in storage cache", zap.String("key", key), zap.Error(err))
++	}
++}
++
++// getJSON attempts to retrieve and unmarshal a JSON encoded value from the
++// cache. The second return value reports whether a usable value was found.
++func getJSON[T any](ctx context.Context, s *Store, key string) (T, bool) {
++	var value T
++
++	data, hit, err := s.cacher.Get(ctx, key)
+ 	if err != nil {
+-		s.logger.Error("setting in storage cache", zap.Error(err))
++		s.logger.Error("getting json from storage cache", zap.String("key", key), zap.Error(err))
++		return value, false
++	}
++
++	if !hit {
++		return value, false
++	}
++
++	if err := json.Unmarshal(data, &value); err != nil {
++		s.logger.Error("unmarshalling json from storage cache", zap.String("key", key), zap.Error(err))
++		return value, false
+ 	}
++
++	return value, true
+ }
+ 
+-func (s *Store) get(ctx context.Context, key string, value any) bool {
+-	cachePayload, cacheHit, err := s.cacher.Get(ctx, key)
++// setProtobuf marshals value as a protobuf message and stores it under key
++// in the cache.
++func setProtobuf[T proto.Message](ctx context.Context, s *Store, key string, value T) {
++	data, err := proto.Marshal(value)
+ 	if err != nil {
+-		s.logger.Error("getting from storage cache", zap.Error(err))
+-		return false
+-	} else if !cacheHit {
+-		return false
++		s.logger.Error("marshalling protobuf for storage cache", zap.String("key", key), zap.Error(err))
++		return
+ 	}
+ 
+-	err = json.Unmarshal(cachePayload, value)
++	if err := s.cacher.Set(ctx, key, data); err != nil {
++		s.logger.Error("setting protobuf in storage cache", zap.String("key", key), zap.Error(err))
++	}
++}
++
++// getProtobuf attempts to retrieve and unmarshal a protobuf encoded value
++// from the cache. newT constructs a zero-value message of the target type
++// to unmarshal into. The second return value reports whether a usable
++// value was found.
++func getProtobuf[T proto.Message](ctx context.Context, s *Store, key string, newT func() T) (T, bool) {
++	var zero T
++
++	data, hit, err := s.cacher.Get(ctx, key)
+ 	if err != nil {
+-		s.logger.Error("unmarshalling from storage cache", zap.Error(err))
+-		return false
++		s.logger.Error("getting protobuf from storage cache", zap.String("key", key), zap.Error(err))
++		return zero, false
++	}
++
++	if !hit {
++		return zero, false
+ 	}
+ 
+-	return true
++	value := newT()
++	if err := proto.Unmarshal(data, value); err != nil {
++		s.logger.Error("unmarshalling protobuf from storage cache", zap.String("key", key), zap.Error(err))
++		return zero, false
++	}
++
++	return value, true
+ }
+ 
+-func (s *Store) GetEvaluationRules(ctx context.Context, flag storage.ResourceRequest) ([]*storage.EvaluationRule, error) {
+-	cacheKey := fmt.Sprintf(evaluationRulesCacheKeyFmt, flag.Namespace(), flag.Key)
++func flagCacheKey(namespaceKey, key string) string {
++	return fmt.Sprintf(flagCacheKeyFmt, namespaceKey, key)
++}
++
++// namespaceOrDefault mirrors storage.NamespaceRequest.Namespace() for the
++// raw *flipt.XxxRequest types which do not normalize an empty namespace.
++func namespaceOrDefault(namespaceKey string) string {
++	if namespaceKey == "" {
++		return flipt.DefaultNamespace
++	}
++	return namespaceKey
++}
++
++// invalidateFlagCache removes the cached flag entry for namespaceKey/key.
++func (s *Store) invalidateFlagCache(ctx context.Context, namespaceKey, key string) {
++	cacheKey := flagCacheKey(namespaceKey, key)
++	if err := s.cacher.Delete(ctx, cacheKey); err != nil {
++		s.logger.Error("deleting from storage cache", zap.String("key", cacheKey), zap.Error(err))
++	}
++}
++
++// Namespaces
++
++func (s *Store) GetNamespace(ctx context.Context, ns storage.NamespaceRequest) (*flipt.Namespace, error) {
++	return s.next.GetNamespace(ctx, ns)
++}
++
++func (s *Store) ListNamespaces(ctx context.Context, req *storage.ListRequest[storage.ReferenceRequest]) (storage.ResultSet[*flipt.Namespace], error) {
++	return s.next.ListNamespaces(ctx, req)
++}
++
++func (s *Store) CountNamespaces(ctx context.Context, req storage.ReferenceRequest) (uint64, error) {
++	return s.next.CountNamespaces(ctx, req)
++}
++
++func (s *Store) CreateNamespace(ctx context.Context, r *flipt.CreateNamespaceRequest) (*flipt.Namespace, error) {
++	return s.next.CreateNamespace(ctx, r)
++}
++
++func (s *Store) UpdateNamespace(ctx context.Context, r *flipt.UpdateNamespaceRequest) (*flipt.Namespace, error) {
++	return s.next.UpdateNamespace(ctx, r)
++}
++
++func (s *Store) DeleteNamespace(ctx context.Context, r *flipt.DeleteNamespaceRequest) error {
++	return s.next.DeleteNamespace(ctx, r)
++}
++
++// Flags
++
++func (s *Store) GetFlag(ctx context.Context, r storage.ResourceRequest) (*flipt.Flag, error) {
++	key := flagCacheKey(r.Namespace(), r.Key)
++
++	if flag, ok := getProtobuf(ctx, s, key, func() *flipt.Flag { return &flipt.Flag{} }); ok {
++		return flag, nil
++	}
++
++	flag, err := s.next.GetFlag(ctx, r)
++	if err != nil {
++		return nil, err
++	}
++
++	setProtobuf(ctx, s, key, flag)
++	return flag, nil
++}
++
++func (s *Store) ListFlags(ctx context.Context, req *storage.ListRequest[storage.NamespaceRequest]) (storage.ResultSet[*flipt.Flag], error) {
++	return s.next.ListFlags(ctx, req)
++}
++
++func (s *Store) CountFlags(ctx context.Context, ns storage.NamespaceRequest) (uint64, error) {
++	return s.next.CountFlags(ctx, ns)
++}
++
++func (s *Store) CreateFlag(ctx context.Context, r *flipt.CreateFlagRequest) (*flipt.Flag, error) {
++	return s.next.CreateFlag(ctx, r)
++}
++
++func (s *Store) UpdateFlag(ctx context.Context, r *flipt.UpdateFlagRequest) (*flipt.Flag, error) {
++	flag, err := s.next.UpdateFlag(ctx, r)
++	if err != nil {
++		return nil, err
++	}
++
++	s.invalidateFlagCache(ctx, namespaceOrDefault(r.GetNamespaceKey()), r.GetKey())
++	return flag, nil
++}
+ 
+-	var rules []*storage.EvaluationRule
++func (s *Store) DeleteFlag(ctx context.Context, r *flipt.DeleteFlagRequest) error {
++	if err := s.next.DeleteFlag(ctx, r); err != nil {
++		return err
++	}
++
++	s.invalidateFlagCache(ctx, namespaceOrDefault(r.GetNamespaceKey()), r.GetKey())
++	return nil
++}
++
++func (s *Store) CreateVariant(ctx context.Context, r *flipt.CreateVariantRequest) (*flipt.Variant, error) {
++	variant, err := s.next.CreateVariant(ctx, r)
++	if err != nil {
++		return nil, err
++	}
++
++	s.invalidateFlagCache(ctx, namespaceOrDefault(r.GetNamespaceKey()), r.GetFlagKey())
++	return variant, nil
++}
+ 
+-	cacheHit := s.get(ctx, cacheKey, &rules)
+-	if cacheHit {
++func (s *Store) UpdateVariant(ctx context.Context, r *flipt.UpdateVariantRequest) (*flipt.Variant, error) {
++	variant, err := s.next.UpdateVariant(ctx, r)
++	if err != nil {
++		return nil, err
++	}
++
++	s.invalidateFlagCache(ctx, namespaceOrDefault(r.GetNamespaceKey()), r.GetFlagKey())
++	return variant, nil
++}
++
++func (s *Store) DeleteVariant(ctx context.Context, r *flipt.DeleteVariantRequest) error {
++	if err := s.next.DeleteVariant(ctx, r); err != nil {
++		return err
++	}
++
++	s.invalidateFlagCache(ctx, namespaceOrDefault(r.GetNamespaceKey()), r.GetFlagKey())
++	return nil
++}
++
++// Segments
++
++func (s *Store) GetSegment(ctx context.Context, req storage.ResourceRequest) (*flipt.Segment, error) {
++	return s.next.GetSegment(ctx, req)
++}
++
++func (s *Store) ListSegments(ctx context.Context, req *storage.ListRequest[storage.NamespaceRequest]) (storage.ResultSet[*flipt.Segment], error) {
++	return s.next.ListSegments(ctx, req)
++}
++
++func (s *Store) CountSegments(ctx context.Context, ns storage.NamespaceRequest) (uint64, error) {
++	return s.next.CountSegments(ctx, ns)
++}
++
++func (s *Store) CreateSegment(ctx context.Context, r *flipt.CreateSegmentRequest) (*flipt.Segment, error) {
++	return s.next.CreateSegment(ctx, r)
++}
++
++func (s *Store) UpdateSegment(ctx context.Context, r *flipt.UpdateSegmentRequest) (*flipt.Segment, error) {
++	return s.next.UpdateSegment(ctx, r)
++}
++
++func (s *Store) DeleteSegment(ctx context.Context, r *flipt.DeleteSegmentRequest) error {
++	return s.next.DeleteSegment(ctx, r)
++}
++
++func (s *Store) CreateConstraint(ctx context.Context, r *flipt.CreateConstraintRequest) (*flipt.Constraint, error) {
++	return s.next.CreateConstraint(ctx, r)
++}
++
++func (s *Store) UpdateConstraint(ctx context.Context, r *flipt.UpdateConstraintRequest) (*flipt.Constraint, error) {
++	return s.next.UpdateConstraint(ctx, r)
++}
++
++func (s *Store) DeleteConstraint(ctx context.Context, r *flipt.DeleteConstraintRequest) error {
++	return s.next.DeleteConstraint(ctx, r)
++}
++
++// Rules
++
++func (s *Store) GetRule(ctx context.Context, ns storage.NamespaceRequest, id string) (*flipt.Rule, error) {
++	return s.next.GetRule(ctx, ns, id)
++}
++
++func (s *Store) ListRules(ctx context.Context, req *storage.ListRequest[storage.ResourceRequest]) (storage.ResultSet[*flipt.Rule], error) {
++	return s.next.ListRules(ctx, req)
++}
++
++func (s *Store) CountRules(ctx context.Context, flag storage.ResourceRequest) (uint64, error) {
++	return s.next.CountRules(ctx, flag)
++}
++
++func (s *Store) CreateRule(ctx context.Context, r *flipt.CreateRuleRequest) (*flipt.Rule, error) {
++	return s.next.CreateRule(ctx, r)
++}
++
++func (s *Store) UpdateRule(ctx context.Context, r *flipt.UpdateRuleRequest) (*flipt.Rule, error) {
++	return s.next.UpdateRule(ctx, r)
++}
++
++func (s *Store) DeleteRule(ctx context.Context, r *flipt.DeleteRuleRequest) error {
++	return s.next.DeleteRule(ctx, r)
++}
++
++func (s *Store) OrderRules(ctx context.Context, r *flipt.OrderRulesRequest) error {
++	return s.next.OrderRules(ctx, r)
++}
++
++func (s *Store) CreateDistribution(ctx context.Context, r *flipt.CreateDistributionRequest) (*flipt.Distribution, error) {
++	return s.next.CreateDistribution(ctx, r)
++}
++
++func (s *Store) UpdateDistribution(ctx context.Context, r *flipt.UpdateDistributionRequest) (*flipt.Distribution, error) {
++	return s.next.UpdateDistribution(ctx, r)
++}
++
++func (s *Store) DeleteDistribution(ctx context.Context, r *flipt.DeleteDistributionRequest) error {
++	return s.next.DeleteDistribution(ctx, r)
++}
++
++// Rollouts
++
++func (s *Store) GetRollout(ctx context.Context, ns storage.NamespaceRequest, id string) (*flipt.Rollout, error) {
++	return s.next.GetRollout(ctx, ns, id)
++}
++
++func (s *Store) ListRollouts(ctx context.Context, req *storage.ListRequest[storage.ResourceRequest]) (storage.ResultSet[*flipt.Rollout], error) {
++	return s.next.ListRollouts(ctx, req)
++}
++
++func (s *Store) CountRollouts(ctx context.Context, flag storage.ResourceRequest) (uint64, error) {
++	return s.next.CountRollouts(ctx, flag)
++}
++
++func (s *Store) CreateRollout(ctx context.Context, r *flipt.CreateRolloutRequest) (*flipt.Rollout, error) {
++	return s.next.CreateRollout(ctx, r)
++}
++
++func (s *Store) UpdateRollout(ctx context.Context, r *flipt.UpdateRolloutRequest) (*flipt.Rollout, error) {
++	return s.next.UpdateRollout(ctx, r)
++}
++
++func (s *Store) DeleteRollout(ctx context.Context, r *flipt.DeleteRolloutRequest) error {
++	return s.next.DeleteRollout(ctx, r)
++}
++
++func (s *Store) OrderRollouts(ctx context.Context, r *flipt.OrderRolloutsRequest) error {
++	return s.next.OrderRollouts(ctx, r)
++}
++
++// Evaluation
++
++func (s *Store) GetEvaluationRules(ctx context.Context, flag storage.ResourceRequest) ([]*storage.EvaluationRule, error) {
++	key := fmt.Sprintf(evaluationRulesCacheKeyFmt, flag.Namespace(), flag.Key)
++
++	if rules, ok := getJSON[[]*storage.EvaluationRule](ctx, s, key); ok {
+ 		return rules, nil
+ 	}
+ 
+-	rules, err := s.Store.GetEvaluationRules(ctx, flag)
++	rules, err := s.next.GetEvaluationRules(ctx, flag)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
+-	s.set(ctx, cacheKey, rules)
++	setJSON(ctx, s, key, rules)
+ 	return rules, nil
+ }
+ 
+-func (s *Store) GetEvaluationRollouts(ctx context.Context, flag storage.ResourceRequest) ([]*storage.EvaluationRollout, error) {
+-	cacheKey := fmt.Sprintf(evaluationRolloutsCacheKeyFmt, flag.Namespace(), flag.Key)
++func (s *Store) GetEvaluationDistributions(ctx context.Context, rule storage.IDRequest) ([]*storage.EvaluationDistribution, error) {
++	return s.next.GetEvaluationDistributions(ctx, rule)
++}
+ 
+-	var rollouts []*storage.EvaluationRollout
++func (s *Store) GetEvaluationRollouts(ctx context.Context, flag storage.ResourceRequest) ([]*storage.EvaluationRollout, error) {
++	key := fmt.Sprintf(evaluationRolloutsCacheKeyFmt, flag.Namespace(), flag.Key)
+ 
+-	cacheHit := s.get(ctx, cacheKey, &rollouts)
+-	if cacheHit {
++	if rollouts, ok := getJSON[[]*storage.EvaluationRollout](ctx, s, key); ok {
+ 		return rollouts, nil
+ 	}
+ 
+-	rollouts, err := s.Store.GetEvaluationRollouts(ctx, flag)
++	rollouts, err := s.next.GetEvaluationRollouts(ctx, flag)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
+-	s.set(ctx, cacheKey, rollouts)
++	setJSON(ctx, s, key, rollouts)
+ 	return rollouts, nil
+ }
+diff --git a/internal/storage/cache/cache_test.go b/internal/storage/cache/cache_test.go
+index 922998c4..e5a5f347 100644
+--- a/internal/storage/cache/cache_test.go
++++ b/internal/storage/cache/cache_test.go
+@@ -8,10 +8,12 @@ import (
+ 	"github.com/stretchr/testify/assert"
+ 	"go.flipt.io/flipt/internal/common"
+ 	"go.flipt.io/flipt/internal/storage"
++	flipt "go.flipt.io/flipt/rpc/flipt"
+ 	"go.uber.org/zap/zaptest"
++	"google.golang.org/protobuf/proto"
+ )
+ 
+-func TestSetHandleMarshalError(t *testing.T) {
++func TestSetJSONHandleMarshalError(t *testing.T) {
+ 	var (
+ 		store       = &common.StoreMock{}
+ 		cacher      = &cacheSpy{}
+@@ -19,11 +21,11 @@ func TestSetHandleMarshalError(t *testing.T) {
+ 		cachedStore = NewStore(store, cacher, logger)
+ 	)
+ 
+-	cachedStore.set(context.TODO(), "key", make(chan int))
++	setJSON(context.TODO(), cachedStore, "key", make(chan int))
+ 	assert.Empty(t, cacher.cacheKey)
+ }
+ 
+-func TestGetHandleGetError(t *testing.T) {
++func TestGetJSONHandleGetError(t *testing.T) {
+ 	var (
+ 		store       = &common.StoreMock{}
+ 		cacher      = &cacheSpy{getErr: errors.New("get error")}
+@@ -31,12 +33,11 @@ func TestGetHandleGetError(t *testing.T) {
+ 		cachedStore = NewStore(store, cacher, logger)
+ 	)
+ 
+-	value := make(map[string]string)
+-	cacheHit := cachedStore.get(context.TODO(), "key", &value)
++	_, cacheHit := getJSON[map[string]string](context.TODO(), cachedStore, "key")
+ 	assert.False(t, cacheHit)
+ }
+ 
+-func TestGetHandleUnmarshalError(t *testing.T) {
++func TestGetJSONHandleUnmarshalError(t *testing.T) {
+ 	var (
+ 		store  = &common.StoreMock{}
+ 		cacher = &cacheSpy{
+@@ -47,8 +48,34 @@ func TestGetHandleUnmarshalError(t *testing.T) {
+ 		cachedStore = NewStore(store, cacher, logger)
+ 	)
+ 
+-	value := make(map[string]string)
+-	cacheHit := cachedStore.get(context.TODO(), "key", &value)
++	_, cacheHit := getJSON[map[string]string](context.TODO(), cachedStore, "key")
++	assert.False(t, cacheHit)
++}
++
++func TestGetProtobufHandleGetError(t *testing.T) {
++	var (
++		store       = &common.StoreMock{}
++		cacher      = &cacheSpy{getErr: errors.New("get error")}
++		logger      = zaptest.NewLogger(t)
++		cachedStore = NewStore(store, cacher, logger)
++	)
++
++	_, cacheHit := getProtobuf(context.TODO(), cachedStore, "key", func() *flipt.Flag { return &flipt.Flag{} })
++	assert.False(t, cacheHit)
++}
++
++func TestGetProtobufHandleUnmarshalError(t *testing.T) {
++	var (
++		store  = &common.StoreMock{}
++		cacher = &cacheSpy{
++			cached:      true,
++			cachedValue: []byte(`not a valid protobuf payload`),
++		}
++		logger      = zaptest.NewLogger(t)
++		cachedStore = NewStore(store, cacher, logger)
++	)
++
++	_, cacheHit := getProtobuf(context.TODO(), cachedStore, "key", func() *flipt.Flag { return &flipt.Flag{} })
+ 	assert.False(t, cacheHit)
+ }
+ 
+@@ -147,3 +174,92 @@ func TestGetEvaluationRolloutsCached(t *testing.T) {
+ 	assert.Equal(t, expectedRollouts, rollouts)
+ 	assert.Equal(t, "s:ero:ns:flag-1", cacher.cacheKey)
+ }
++
++func TestGetFlag(t *testing.T) {
++	var (
++		expectedFlag = &flipt.Flag{Key: "flag-1", NamespaceKey: "ns"}
++		store        = &common.StoreMock{}
++	)
++
++	store.On("GetFlag", context.TODO(), storage.NewResource("ns", "flag-1")).Return(
++		expectedFlag, nil,
++	)
++
++	var (
++		cacher      = &cacheSpy{}
++		logger      = zaptest.NewLogger(t)
++		cachedStore = NewStore(store, cacher, logger)
++	)
++
++	flag, err := cachedStore.GetFlag(context.TODO(), storage.NewResource("ns", "flag-1"))
++	assert.Nil(t, err)
++	assert.Equal(t, expectedFlag.Key, flag.Key)
++	assert.Equal(t, "s:f:ns:flag-1", cacher.cacheKey)
++	assert.NotEmpty(t, cacher.cachedValue)
++}
++
++func TestGetFlagCached(t *testing.T) {
++	var (
++		cachedFlag = &flipt.Flag{Key: "flag-1", NamespaceKey: "ns"}
++		store      = &common.StoreMock{}
++	)
++
++	store.AssertNotCalled(t, "GetFlag", context.TODO(), storage.NewResource("ns", "flag-1"))
++
++	data, err := proto.Marshal(cachedFlag)
++	assert.Nil(t, err)
++
++	var (
++		cacher = &cacheSpy{
++			cached:      true,
++			cachedValue: data,
++		}
++		logger      = zaptest.NewLogger(t)
++		cachedStore = NewStore(store, cacher, logger)
++	)
++
++	flag, err := cachedStore.GetFlag(context.TODO(), storage.NewResource("ns", "flag-1"))
++	assert.Nil(t, err)
++	assert.Equal(t, cachedFlag.Key, flag.Key)
++	assert.Equal(t, "s:f:ns:flag-1", cacher.cacheKey)
++}
++
++func TestUpdateFlagInvalidatesCache(t *testing.T) {
++	var (
++		expectedFlag = &flipt.Flag{Key: "flag-1", NamespaceKey: "ns"}
++		req          = &flipt.UpdateFlagRequest{Key: "flag-1", NamespaceKey: "ns"}
++		store        = &common.StoreMock{}
++	)
++
++	store.On("UpdateFlag", context.TODO(), req).Return(expectedFlag, nil)
++
++	var (
++		cacher      = &cacheSpy{}
++		logger      = zaptest.NewLogger(t)
++		cachedStore = NewStore(store, cacher, logger)
++	)
++
++	flag, err := cachedStore.UpdateFlag(context.TODO(), req)
++	assert.Nil(t, err)
++	assert.Equal(t, expectedFlag, flag)
++	assert.Equal(t, "s:f:ns:flag-1", cacher.deletedKey)
++}
++
++func TestDeleteVariantInvalidatesCache(t *testing.T) {
++	var (
++		req   = &flipt.DeleteVariantRequest{FlagKey: "flag-1", NamespaceKey: "ns"}
++		store = &common.StoreMock{}
++	)
++
++	store.On("DeleteVariant", context.TODO(), req).Return(nil)
++
++	var (
++		cacher      = &cacheSpy{}
++		logger      = zaptest.NewLogger(t)
++		cachedStore = NewStore(store, cacher, logger)
++	)
++
++	err := cachedStore.DeleteVariant(context.TODO(), req)
++	assert.Nil(t, err)
++	assert.Equal(t, "s:f:ns:flag-1", cacher.deletedKey)
++}
+diff --git a/internal/storage/cache/support_test.go b/internal/storage/cache/support_test.go
+index b5cab2f8..e8947afa 100644
+--- a/internal/storage/cache/support_test.go
++++ b/internal/storage/cache/support_test.go
+@@ -12,8 +12,10 @@ type cacheSpy struct {
+ 	cached      bool
+ 	cachedValue []byte
+ 	cacheKey    string
++	deletedKey  string
+ 	getErr      error
+ 	setErr      error
++	deleteErr   error
+ }
+ 
+ func (c *cacheSpy) String() string {
+@@ -42,5 +44,6 @@ func (c *cacheSpy) Set(ctx context.Context, key string, value []byte) error {
+ }
+ 
+ func (c *cacheSpy) Delete(ctx context.Context, key string) error {
+-	return nil
++	c.deletedKey = key
++	return c.deleteErr
+ }

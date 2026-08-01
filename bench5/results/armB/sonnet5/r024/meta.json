@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_gravitational__teleport-65438e6e44b6ce51458d09b7bb028a2797cfb0ea-vce94f93ad1030e3136852817f2423c1b3ac37bc4",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T06:13:17Z",
+  "finished_at": "2026-08-01T06:30:57Z",
+  "self_assessment": "Implemented Registration (CCR/credentialID/done with atomic CAS shared by Confirm/Rollback), added DeleteNonInteractive to nativeTID with real credentials.h/.m + api_darwin.go plumbing and an api_other.go stub, changed Register() to return *Registration and updated its two callers (tool/tsh/mfa.go, api_test.go) plus added new Confirm/Rollback/idempotency/post-rollback-Login unit tests, all passing under `go build`/`go vet`/`go test` on linux and a darwin (non-cgo stub) cross-build; the real GOOS=darwin -tags=touchid cgo/Objective-C path could not be compiled or exercised in this Linux sandbox (no macOS cross-toolchain), so that path is verified only by code review and by mirroring the existing DeleteCredential implementation pattern."
+}
