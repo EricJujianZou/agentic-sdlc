@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-6a117fab6c963b74dc1ba907d838e74f76d34a4b-v13642507b4fc1f8d234172bf8129942da2c2ca26",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:25:52Z",
+  "finished_at": "2026-08-01T07:34:47Z",
+  "self_assessment": "High confidence in the id_project_runeberg search-document plumbing and ProjectRunebergProvider class/registration (verified via full import, provider unit checks, and the full openlibrary pytest suite - 1962 passed, 0 failed, including the updated test_worksearch.py); moderate confidence in the exact download-format URLs in runeberg_download_options.html since runeberg.org's precise URL scheme could not be verified from the base commit or live web access, so it was modeled closely on the analogous gutenberg/standard_ebooks templates and dynamic-field solr behavior rather than confirmed byte-for-byte against the real site."
+}

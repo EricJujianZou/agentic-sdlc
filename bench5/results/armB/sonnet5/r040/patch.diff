@@ -1,0 +1,121 @@
+diff --git a/src/database/mongo/sorted.js b/src/database/mongo/sorted.js
+index 7b59828e49..07d4dfd246 100644
+--- a/src/database/mongo/sorted.js
++++ b/src/database/mongo/sorted.js
+@@ -422,6 +422,64 @@ module.exports = function (module) {
+ 		}
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!Array.isArray(data) || !data.length) {
++			return [];
++		}
++
++		// accumulate multiple increments to the same _key/value pair before building the
++		// bulk operation, otherwise an unordered bulk op with duplicate upserts for the
++		// same document can race and throw an E11000 duplicate key error, see
++		// sortedSetIncrBy above (https://github.com/NodeBB/NodeBB/issues/4467)
++		const increments = {};
++		const order = [];
++		data.forEach((item) => {
++			const key = item[0];
++			const increment = parseFloat(item[1]);
++			const value = helpers.valueToString(item[2]);
++			const mapKey = JSON.stringify([key, value]);
++			if (!increments[mapKey]) {
++				increments[mapKey] = { key, value, increment: 0 };
++				order.push(mapKey);
++			}
++			increments[mapKey].increment += increment;
++		});
++
++		const bulk = module.client.collection('objects').initializeUnorderedBulkOp();
++		order.forEach((mapKey) => {
++			const { key, value, increment } = increments[mapKey];
++			bulk.find({ _key: key, value: value }).upsert().updateOne({ $inc: { score: increment } });
++		});
++
++		try {
++			await bulk.execute();
++		} catch (err) {
++			if (err && err.message && err.message.startsWith('E11000 duplicate key error')) {
++				return await module.sortedSetIncrByBulk(data);
++			}
++			throw err;
++		}
++
++		const orQuery = order.map((mapKey) => {
++			const { key, value } = increments[mapKey];
++			return { _key: key, value: value };
++		});
++		const results = await module.client.collection('objects').find(
++			{ $or: orQuery },
++			{ projection: { _id: 0, _key: 1, value: 1, score: 1 } }
++		).toArray();
++
++		const scoreMap = {};
++		results.forEach((item) => {
++			scoreMap[JSON.stringify([item._key, item.value])] = item.score;
++		});
++
++		return data.map((item) => {
++			const mapKey = JSON.stringify([item[0], helpers.valueToString(item[2])]);
++			return scoreMap[mapKey];
++		});
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex(key, min, max, 1, start, count);
+ 	};
+diff --git a/src/database/postgres/sorted.js b/src/database/postgres/sorted.js
+index 23066a82a5..822ba6889f 100644
+--- a/src/database/postgres/sorted.js
++++ b/src/database/postgres/sorted.js
+@@ -498,6 +498,20 @@ RETURNING "score" s`,
+ 		});
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!Array.isArray(data) || !data.length) {
++			return [];
++		}
++
++		// executes each increment concurrently using the existing sortedSetIncrBy logic,
++		// each of which is a single atomic "INSERT ... ON CONFLICT DO UPDATE" statement,
++		// so increments to the same key/value pair are accumulated correctly even
++		// though they run concurrently
++		return await Promise.all(data.map(
++			item => module.sortedSetIncrBy(item[0], item[1], item[2])
++		));
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex(key, min, max, 1, start, count);
+ 	};
+diff --git a/src/database/redis/sorted.js b/src/database/redis/sorted.js
+index cc23c4a957..b40e21559b 100644
+--- a/src/database/redis/sorted.js
++++ b/src/database/redis/sorted.js
+@@ -240,6 +240,22 @@ module.exports = function (module) {
+ 		return parseFloat(newValue);
+ 	};
+ 
++	module.sortedSetIncrByBulk = async function (data) {
++		if (!Array.isArray(data) || !data.length) {
++			return [];
++		}
++
++		// batches the zincrby calls in a single multi/exec transaction, commands within
++		// a multi run sequentially on the server, so multiple increments to the same
++		// key/member accumulate correctly
++		const multi = module.client.multi();
++		data.forEach((item) => {
++			multi.zincrby(item[0], item[1], item[2]);
++		});
++		const results = await helpers.execBatch(multi);
++		return results.map(score => parseFloat(score));
++	};
++
+ 	module.getSortedSetRangeByLex = async function (key, min, max, start, count) {
+ 		return await sortedSetLex('zrangebylex', false, key, min, max, start, count);
+ 	};

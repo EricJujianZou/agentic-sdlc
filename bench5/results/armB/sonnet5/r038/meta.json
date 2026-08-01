@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-798a582540019363d14b2090755cc7b89a350788-v430f20c722405e462d9ef44dee7d34c41e76fe7a",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:26:08Z",
+  "finished_at": "2026-08-01T07:35:46Z",
+  "self_assessment": "Consolidated ListMixin into List in openlibrary/core/lists/model.py (with ListChangeset, get_owner, url, get_cover, get_tags, add_seed/remove_seed, register_models), removed the old List/ListMixin from core/models.py and the duplicate ListChangeset/'lists' changeset registration from upstream/models.py, updated the two call sites (openlibrary/plugins/openlibrary/lists.py, core/models.py's register_models) and moved/fixed the scattered List tests; both target imports succeed and the full openlibrary pytest suite passes (1530 passed, 0 failed, one pre-existing unrelated collection error in test_db.py reproduced identically on the unmodified base commit and excluded) with ruff clean on all touched files."
+}
