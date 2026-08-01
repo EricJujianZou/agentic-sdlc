@@ -1,0 +1,497 @@
+diff --git a/detector/kevuln.go b/detector/kevuln.go
+index 41afdfe..350cb9b 100644
+--- a/detector/kevuln.go
++++ b/detector/kevuln.go
+@@ -17,7 +17,6 @@ import (
+ 	"github.com/future-architect/vuls/models"
+ 	"github.com/future-architect/vuls/util"
+ 	kevulndb "github.com/vulsio/go-kev/db"
+-	kevulnmodels "github.com/vulsio/go-kev/models"
+ 	kevulnlog "github.com/vulsio/go-kev/utils"
+ )
+ 
+@@ -74,25 +73,22 @@ func FillWithKEVuln(r *models.ScanResult, cnf config.KEVulnConf, logOpts logging
+ 			return err
+ 		}
+ 		for _, res := range responses {
+-			kevulns := []kevulnmodels.KEVuln{}
+-			if err := json.Unmarshal([]byte(res.json), &kevulns); err != nil {
++			var body kevulndb.Response
++			if err := json.Unmarshal([]byte(res.json), &body); err != nil {
+ 				return err
+ 			}
+ 
+-			alerts := []models.Alert{}
+-			if len(kevulns) > 0 {
+-				alerts = append(alerts, models.Alert{
+-					Title: "Known Exploited Vulnerabilities Catalog",
+-					URL:   "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+-					Team:  "cisa",
+-				})
++			kevs := toModelKEVs(body)
++			if len(kevs) == 0 {
++				continue
+ 			}
+ 
+ 			v, ok := r.ScannedCves[res.request.cveID]
+-			if ok {
+-				v.AlertDict.CISA = alerts
+-				nKEV++
++			if !ok {
++				continue
+ 			}
++			v.KEVs = kevs
++			nKEV++
+ 			r.ScannedCves[res.request.cveID] = v
+ 		}
+ 	} else {
+@@ -100,24 +96,15 @@ func FillWithKEVuln(r *models.ScanResult, cnf config.KEVulnConf, logOpts logging
+ 			if cveID == "" {
+ 				continue
+ 			}
+-			kevulns, err := client.driver.GetKEVulnByCveID(cveID)
++			res, err := client.driver.GetKEVByCveID(cveID)
+ 			if err != nil {
+ 				return err
+ 			}
+-			if len(kevulns) == 0 {
++			if len(res.CISA) == 0 && len(res.VulnCheck) == 0 {
+ 				continue
+ 			}
+ 
+-			alerts := []models.Alert{}
+-			if len(kevulns) > 0 {
+-				alerts = append(alerts, models.Alert{
+-					Title: "Known Exploited Vulnerabilities Catalog",
+-					URL:   "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+-					Team:  "cisa",
+-				})
+-			}
+-
+-			vuln.AlertDict.CISA = alerts
++			vuln.KEVs = toModelKEVs(res)
+ 			nKEV++
+ 			r.ScannedCves[cveID] = vuln
+ 		}
+@@ -127,6 +114,75 @@ func FillWithKEVuln(r *models.ScanResult, cnf config.KEVulnConf, logOpts logging
+ 	return nil
+ }
+ 
++// kevulnDueDateDefault is the placeholder go-kev stores when the CISA KEV
++// catalog has no (or an unparsable) dueDate; it must not surface as a date.
++var kevulnDueDateDefault = time.Date(1000, time.January, 1, 0, 0, 0, 0, time.UTC)
++
++// toModelKEVs flattens a go-kev response into the KEV entries held on a VulnInfo
++func toModelKEVs(res kevulndb.Response) []models.KEV {
++	kevs := make([]models.KEV, 0, len(res.CISA)+len(res.VulnCheck))
++	for _, k := range res.CISA {
++		kevs = append(kevs, models.KEV{
++			Type:                       models.CISAKEVType,
++			VendorProject:              k.VendorProject,
++			Product:                    k.Product,
++			VulnerabilityName:          k.VulnerabilityName,
++			ShortDescription:           k.ShortDescription,
++			RequiredAction:             k.RequiredAction,
++			KnownRansomwareCampaignUse: k.KnownRansomwareCampaignUse,
++			DateAdded:                  k.DateAdded,
++			DueDate: func() *time.Time {
++				if k.DueDate.IsZero() || k.DueDate.Equal(kevulnDueDateDefault) {
++					return nil
++				}
++				return &k.DueDate
++			}(),
++			CISA: &models.CISAKEV{
++				Note: k.Notes,
++			},
++		})
++	}
++	for _, k := range res.VulnCheck {
++		kevs = append(kevs, models.KEV{
++			Type:                       models.VulnCheckKEVType,
++			VendorProject:              k.VendorProject,
++			Product:                    k.Product,
++			VulnerabilityName:          k.Name,
++			ShortDescription:           k.Description,
++			RequiredAction:             k.RequiredAction,
++			KnownRansomwareCampaignUse: k.KnownRansomwareCampaignUse,
++			DateAdded:                  k.DateAdded,
++			DueDate:                    k.DueDate,
++			VulnCheck: &models.VulnCheckKEV{
++				XDB: func() []models.VulnCheckXDB {
++					xdb := make([]models.VulnCheckXDB, 0, len(k.VulnCheckXDB))
++					for _, x := range k.VulnCheckXDB {
++						xdb = append(xdb, models.VulnCheckXDB{
++							XDBID:       x.XDBID,
++							XDBURL:      x.XDBURL,
++							DateAdded:   x.DateAdded,
++							ExploitType: x.ExploitType,
++							CloneSSHURL: x.CloneSSHURL,
++						})
++					}
++					return xdb
++				}(),
++				ReportedExploitation: func() []models.VulnCheckReportedExploitation {
++					es := make([]models.VulnCheckReportedExploitation, 0, len(k.VulnCheckReportedExploitation))
++					for _, e := range k.VulnCheckReportedExploitation {
++						es = append(es, models.VulnCheckReportedExploitation{
++							URL:       e.URL,
++							DateAdded: e.DateAdded,
++						})
++					}
++					return es
++				}(),
++			},
++		})
++	}
++	return kevs
++}
++
+ type kevulnResponse struct {
+ 	request kevulnRequest
+ 	json    string
+diff --git a/go.mod b/go.mod
+index 85ab030..48610f1 100644
+--- a/go.mod
++++ b/go.mod
+@@ -1,8 +1,6 @@
+ module github.com/future-architect/vuls
+ 
+-go 1.22.0
+-
+-toolchain go1.22.3
++go 1.23
+ 
+ require (
+ 	github.com/3th1nk/cidr v0.2.0
+@@ -53,7 +51,7 @@ require (
+ 	github.com/vulsio/go-cti v0.0.5-0.20240318121747-822b3ef289cb
+ 	github.com/vulsio/go-cve-dictionary v0.10.2-0.20240703055211-dbc168152e90
+ 	github.com/vulsio/go-exploitdb v0.4.7-0.20240318122115-ccb3abc151a1
+-	github.com/vulsio/go-kev v0.1.4-0.20240318121733-b3386e67d3fb
++	github.com/vulsio/go-kev v0.2.0
+ 	github.com/vulsio/go-msfdb v0.2.4-0.20240318121704-8bfc812656dc
+ 	github.com/vulsio/gost v0.4.6-0.20240501065222-d47d2e716bfa
+ 	github.com/vulsio/goval-dictionary v0.9.6-0.20240625074017-1da5dfb8b28a
+@@ -192,6 +190,7 @@ require (
+ 	github.com/go-stack/stack v1.8.1 // indirect
+ 	github.com/gobwas/glob v0.2.3 // indirect
+ 	github.com/gogo/protobuf v1.3.2 // indirect
++	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
+ 	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
+ 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+ 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+@@ -242,6 +241,8 @@ require (
+ 	github.com/kevinburke/ssh_config v1.2.0 // indirect
+ 	github.com/klauspost/compress v1.17.9 // indirect
+ 	github.com/kylelemons/godebug v1.1.0 // indirect
++	github.com/labstack/echo/v4 v4.12.0 // indirect
++	github.com/labstack/gommon v0.4.2 // indirect
+ 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
+ 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
+ 	github.com/letsencrypt/boulder v0.0.0-20231026200631-000cd05d5491 // indirect
+@@ -337,6 +338,8 @@ require (
+ 	github.com/transparency-dev/merkle v0.0.2 // indirect
+ 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
+ 	github.com/ulikunitz/xz v0.5.12 // indirect
++	github.com/valyala/bytebufferpool v1.0.0 // indirect
++	github.com/valyala/fasttemplate v1.2.2 // indirect
+ 	github.com/vbatts/tar-split v0.11.5 // indirect
+ 	github.com/xanzy/ssh-agent v0.3.3 // indirect
+ 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
+diff --git a/go.sum b/go.sum
+index be64bfd..4ba79a5 100644
+--- a/go.sum
++++ b/go.sum
+@@ -704,6 +704,8 @@ github.com/gofrs/uuid v4.3.1+incompatible/go.mod h1:b2aQJv3Z4Fp6yNu3cdSllBxTCLRx
+ github.com/gogo/protobuf v1.1.1/go.mod h1:r8qH/GZQm5c6nD/R0oafs1akxWv10x8SbQlK7atdtwQ=
+ github.com/gogo/protobuf v1.3.2 h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=
+ github.com/gogo/protobuf v1.3.2/go.mod h1:P1XiOD3dCwIKUDQYPy72D8LYyHL2YPYrpS2s69NZV8Q=
++github.com/golang-jwt/jwt v3.2.2+incompatible h1:IfV12K8xAKAnZqdXVzCZ+TOjboZ2keLg81eXfW3O+oY=
++github.com/golang-jwt/jwt v3.2.2+incompatible/go.mod h1:8pz2t5EyA70fFQQSrl6XZXzqecmYZeUEB8OUGHkxJ+I=
+ github.com/golang-jwt/jwt/v4 v4.0.0/go.mod h1:/xlHOz8bRuivTWchD4jCa+NbatV+wEUSzwAxVc6locg=
+ github.com/golang-jwt/jwt/v4 v4.5.0 h1:7cYmW1XlMY7h7ii7UhUyChSgS5wUJEnm9uZVTGqOWzg=
+ github.com/golang-jwt/jwt/v4 v4.5.0/go.mod h1:m21LjoU+eqJr34lmDMbreY2eSTRJ1cv77w39/MY0Ch0=
+@@ -998,6 +1000,10 @@ github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
+ github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
+ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
+ github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
++github.com/labstack/echo/v4 v4.12.0 h1:IKpw49IMryVB2p1a4dzwlhP1O2Tf2E0Ir/450lH+kI0=
++github.com/labstack/echo/v4 v4.12.0/go.mod h1:UP9Cr2DJXbOK3Kr9ONYzNowSh7HP0aG0ShAyycHSJvM=
++github.com/labstack/gommon v0.4.2 h1:F8qTUNXgG1+6WQmqoUWnz8WiEU60mXVVw0P4ht1WRA0=
++github.com/labstack/gommon v0.4.2/go.mod h1:QlUFxVM+SNXhDL/Z7YhocGIBYOiwB0mXm1+1bAPHPyU=
+ github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 h1:SOEGU9fKiNWd/HOJuq6+3iTQz8KNCLtVX6idSoTLdUw=
+ github.com/lann/builder v0.0.0-20180802200727-47ae307949d0/go.mod h1:dXGbAdH5GtBTC4WfIxhKZfyBF/HBFgRZSWwZ9g/He9o=
+ github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 h1:P6pPBnrTSX3DEVR4fDembhRWSsG5rVo6hYhAB/ADZrk=
+@@ -1370,6 +1376,10 @@ github.com/ulikunitz/xz v0.5.10/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0o
+ github.com/ulikunitz/xz v0.5.12 h1:37Nm15o69RwBkXM0J6A5OlE67RZTfzUxTj8fB3dfcsc=
+ github.com/ulikunitz/xz v0.5.12/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
+ github.com/urfave/cli/v2 v2.3.0/go.mod h1:LJmUH05zAU44vOAcrfzZQKsZbVcdbOG8rtL3/XcUArI=
++github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
++github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
++github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=
++github.com/valyala/fasttemplate v1.2.2/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=
+ github.com/vbatts/tar-split v0.11.5 h1:3bHCTIheBm1qFTcgh9oPu+nNBtX+XJIupG/vacinCts=
+ github.com/vbatts/tar-split v0.11.5/go.mod h1:yZbwRsSeGjusneWgA781EKej9HF8vme8okylkAeNKLk=
+ github.com/vulsio/go-cti v0.0.5-0.20240318121747-822b3ef289cb h1:aC6CqML20oYEI5Wjx04uwpARsXjdGCrOk4ken+l4dG8=
+@@ -1380,6 +1390,8 @@ github.com/vulsio/go-exploitdb v0.4.7-0.20240318122115-ccb3abc151a1 h1:rQRTmiO2g
+ github.com/vulsio/go-exploitdb v0.4.7-0.20240318122115-ccb3abc151a1/go.mod h1:ml2oTRyR37hUyyP4kWD9NSlBYIQuJUVNaAfbflSu4i4=
+ github.com/vulsio/go-kev v0.1.4-0.20240318121733-b3386e67d3fb h1:j03zKKkR+WWaPoPzMBwNxpDsc1mYDtt9s1VrHaIxmfw=
+ github.com/vulsio/go-kev v0.1.4-0.20240318121733-b3386e67d3fb/go.mod h1:AjLUC5oGYi3dWakVE6WuuHoC+xL/f8YN8CFC45oTE9c=
++github.com/vulsio/go-kev v0.2.0 h1:vbAQBYWDAzIJ/YjR/WGqQUMkXrW+Geddu3MrAU+kIDU=
++github.com/vulsio/go-kev v0.2.0/go.mod h1:ujzGGsLFvdDhsK5EylSdb33Z0AUmozF535fGyrud0aE=
+ github.com/vulsio/go-msfdb v0.2.4-0.20240318121704-8bfc812656dc h1:nf62vF8T3yAmmwu7xMycqIvTVincv/sH7FyeeWWodxs=
+ github.com/vulsio/go-msfdb v0.2.4-0.20240318121704-8bfc812656dc/go.mod h1:X7NqckQva6ok3GaWRYFAEvd72xzWFeGKOm9YOCWeIhc=
+ github.com/vulsio/gost v0.4.6-0.20240501065222-d47d2e716bfa h1:AmXiFpp2kFuoCgGw/yBl+RGuanSbPg7cV78dvIrbJ/k=
+diff --git a/models/scanresults.go b/models/scanresults.go
+index 508b992..54606b5 100644
+--- a/models/scanresults.go
++++ b/models/scanresults.go
+@@ -197,13 +197,14 @@ func (r ScanResult) FormatTextReportHeader() string {
+ 		pkgs = fmt.Sprintf("%s, %d libs", pkgs, r.LibraryScanners.Total())
+ 	}
+ 
+-	return fmt.Sprintf("%s\n%s\n%s\n%s, %s, %s, %s\n%s\n",
++	return fmt.Sprintf("%s\n%s\n%s\n%s, %s, %s, %s, %s\n%s\n",
+ 		r.ServerInfo(),
+ 		buf.String(),
+ 		r.ScannedCves.FormatCveSummary(),
+ 		r.ScannedCves.FormatFixedStatus(r.Packages),
+ 		r.FormatExploitCveSummary(),
+ 		r.FormatMetasploitCveSummary(),
++		r.FormatKEVCveSummary(),
+ 		r.FormatAlertSummary(),
+ 		pkgs)
+ }
+@@ -251,6 +252,17 @@ func (r ScanResult) FormatMetasploitCveSummary() string {
+ 	return fmt.Sprintf("%d exploits", nMetasploitCve)
+ }
+ 
++// FormatKEVCveSummary returns a summary of KEV CVEs
++func (r ScanResult) FormatKEVCveSummary() string {
++	nKEVCve := 0
++	for _, vuln := range r.ScannedCves {
++		if 0 < len(vuln.KEVs) {
++			nKEVCve++
++		}
++	}
++	return fmt.Sprintf("%d KEVs", nKEVCve)
++}
++
+ // FormatAlertSummary returns a summary of CERT alerts
+ func (r ScanResult) FormatAlertSummary() string {
+ 	cisaCnt := 0
+@@ -428,6 +440,13 @@ func (r *ScanResult) SortForJSONOutput() {
+ 
+ 		v.CveContents.Sort()
+ 
++		sort.Slice(v.KEVs, func(i, j int) bool {
++			if v.KEVs[i].Type != v.KEVs[j].Type {
++				return v.KEVs[i].Type < v.KEVs[j].Type
++			}
++			return v.KEVs[i].VulnerabilityName < v.KEVs[j].VulnerabilityName
++		})
++
+ 		sort.Slice(v.AlertDict.USCERT, func(i, j int) bool {
+ 			return v.AlertDict.USCERT[i].Title < v.AlertDict.USCERT[j].Title
+ 		})
+diff --git a/models/vulninfos.go b/models/vulninfos.go
+index 3e85e81..a624df0 100644
+--- a/models/vulninfos.go
++++ b/models/vulninfos.go
+@@ -267,6 +267,7 @@ type VulnInfo struct {
+ 	Metasploits          []Metasploit         `json:"metasploits,omitempty"`
+ 	Mitigations          []Mitigation         `json:"mitigations,omitempty"`
+ 	Ctis                 []string             `json:"ctis,omitempty"`
++	KEVs                 []KEV                `json:"kevs,omitempty"`
+ 	AlertDict            AlertDict            `json:"alertDict,omitempty"`
+ 	CpeURIs              []string             `json:"cpeURIs,omitempty"` // CpeURIs related to this CVE defined in config.toml
+ 	GitHubSecurityAlerts GitHubSecurityAlerts `json:"gitHubSecurityAlerts,omitempty"`
+@@ -910,9 +911,61 @@ type Mitigation struct {
+ 	URL            string         `json:"url,omitempty"`
+ }
+ 
++// KEVType :
++type KEVType string
++
++const (
++	// CISAKEVType :
++	CISAKEVType KEVType = "cisa"
++	// VulnCheckKEVType :
++	VulnCheckKEVType KEVType = "vulncheck"
++)
++
++// KEV has Known Exploited Vulnerability
++type KEV struct {
++	Type                       KEVType    `json:"type,omitempty"`
++	VendorProject              string     `json:"vendor_project,omitempty"`
++	Product                    string     `json:"product,omitempty"`
++	VulnerabilityName          string     `json:"vulnerability_name,omitempty"`
++	ShortDescription           string     `json:"short_description,omitempty"`
++	RequiredAction             string     `json:"required_action,omitempty"`
++	KnownRansomwareCampaignUse string     `json:"known_ransomware_campaign_use,omitempty"`
++	DateAdded                  time.Time  `json:"date_added,omitempty"`
++	DueDate                    *time.Time `json:"due_date,omitempty"`
++
++	CISA      *CISAKEV      `json:"cisa,omitempty"`
++	VulnCheck *VulnCheckKEV `json:"vulncheck,omitempty"`
++}
++
++// CISAKEV has CISA KEV only data
++type CISAKEV struct {
++	Note string `json:"note,omitempty"`
++}
++
++// VulnCheckKEV has VulnCheck KEV only data
++type VulnCheckKEV struct {
++	XDB                  []VulnCheckXDB                  `json:"xdb,omitempty"`
++	ReportedExploitation []VulnCheckReportedExploitation `json:"reported_exploitation,omitempty"`
++}
++
++// VulnCheckXDB has VulnCheck XDB data
++type VulnCheckXDB struct {
++	XDBID       string    `json:"xdb_id,omitempty"`
++	XDBURL      string    `json:"xdb_url,omitempty"`
++	DateAdded   time.Time `json:"date_added,omitempty"`
++	ExploitType string    `json:"exploit_type,omitempty"`
++	CloneSSHURL string    `json:"clone_ssh_url,omitempty"`
++}
++
++// VulnCheckReportedExploitation has VulnCheck Reported Exploitation data
++type VulnCheckReportedExploitation struct {
++	URL       string    `json:"url,omitempty"`
++	DateAdded time.Time `json:"date_added,omitempty"`
++}
++
+ // AlertDict has target cve JPCERT, USCERT and CISA alert data
+ type AlertDict struct {
+-	CISA   []Alert `json:"cisa"`
++	CISA   []Alert `json:"cisa"` // backwards compatibility for JSON tag
+ 	JPCERT []Alert `json:"jpcert"`
+ 	USCERT []Alert `json:"uscert"`
+ }
+diff --git a/reporter/util.go b/reporter/util.go
+index d9cfdaa..0f388f7 100644
+--- a/reporter/util.go
++++ b/reporter/util.go
+@@ -204,6 +204,7 @@ func formatOneLineSummary(rs ...models.ScanResult) string {
+ 				r.FormatUpdatablePkgsSummary(),
+ 				r.FormatExploitCveSummary(),
+ 				r.FormatMetasploitCveSummary(),
++				r.FormatKEVCveSummary(),
+ 				r.FormatAlertSummary(),
+ 			}
+ 		} else {
+@@ -269,6 +270,11 @@ No CVE-IDs are found in updatable packages.
+ 			exploits = "POC"
+ 		}
+ 
++		kev := ""
++		if 0 < len(vinfo.KEVs) {
++			kev = "KEV"
++		}
++
+ 		// link := ""
+ 		// if strings.HasPrefix(vinfo.CveID, "CVE-") {
+ 		// 	link = fmt.Sprintf("https://nvd.nist.gov/vuln/detail/%s", vinfo.CveID)
+@@ -283,6 +289,7 @@ No CVE-IDs are found in updatable packages.
+ 			// fmt.Sprintf("%4.1f", v2max),
+ 			// fmt.Sprintf("%4.1f", v3max),
+ 			exploits,
++			fmt.Sprintf("%3s", kev),
+ 			fmt.Sprintf("%9s", vinfo.AlertDict.FormatSource()),
+ 			fmt.Sprintf("%7s", vinfo.PatchStatus(r.Packages)),
+ 			packnames,
+@@ -298,6 +305,7 @@ No CVE-IDs are found in updatable packages.
+ 		// "v3",
+ 		// "v2",
+ 		"PoC",
++		"KEV",
+ 		"Alert",
+ 		"Fixed",
+ 		// "NVD",
+@@ -565,6 +573,15 @@ No CVE-IDs are found in updatable packages.
+ 		})
+ 		data = append(data, ds...)
+ 
++		for _, kev := range vuln.KEVs {
++			switch kev.Type {
++			case models.CISAKEVType:
++				data = append(data, []string{"CISA KEV", "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"})
++			case models.VulnCheckKEVType:
++				data = append(data, []string{"VulnCheck KEV", "https://vulncheck.com/kev"})
++			}
++		}
++
+ 		for _, alert := range vuln.AlertDict.CISA {
+ 			data = append(data, []string{"CISA Alert", alert.URL})
+ 		}
+@@ -616,7 +633,7 @@ No CVE-IDs are found in updatable packages.
+ }
+ 
+ func formatCsvList(r models.ScanResult, path string) error {
+-	data := [][]string{{"CVE-ID", "CVSS", "Attack", "PoC", "CERT", "Fixed", "NVD"}}
++	data := [][]string{{"CVE-ID", "CVSS", "Attack", "PoC", "KEV", "CERT", "Fixed", "NVD"}}
+ 	for _, vinfo := range r.ScannedCves.ToSortedSlice() {
+ 		max := vinfo.MaxCvssScore().Value.Score
+ 
+@@ -625,6 +642,11 @@ func formatCsvList(r models.ScanResult, path string) error {
+ 			exploits = "POC"
+ 		}
+ 
++		kev := ""
++		if 0 < len(vinfo.KEVs) {
++			kev = "KEV"
++		}
++
+ 		link := ""
+ 		if strings.HasPrefix(vinfo.CveID, "CVE-") {
+ 			link = fmt.Sprintf("https://nvd.nist.gov/vuln/detail/%s", vinfo.CveID)
+@@ -637,6 +659,7 @@ func formatCsvList(r models.ScanResult, path string) error {
+ 			fmt.Sprintf("%4.1f", max),
+ 			vinfo.AttackVector(),
+ 			exploits,
++			kev,
+ 			vinfo.AlertDict.FormatSource(),
+ 			vinfo.PatchStatus(r.Packages),
+ 			link,
+diff --git a/tui/tui.go b/tui/tui.go
+index 4407f56..d4f8db0 100644
+--- a/tui/tui.go
++++ b/tui/tui.go
+@@ -631,6 +631,11 @@ func summaryLines(r models.ScanResult) string {
+ 			exploits = "POC"
+ 		}
+ 
++		kev := ""
++		if 0 < len(vinfo.KEVs) {
++			kev = "KEV"
++		}
++
+ 		var cols []string
+ 		cols = []string{
+ 			fmt.Sprintf(indexFormat, i+1),
+@@ -639,6 +644,7 @@ func summaryLines(r models.ScanResult) string {
+ 			cvssScore + " |",
+ 			fmt.Sprintf("%-6s |", av),
+ 			fmt.Sprintf("%3s |", exploits),
++			fmt.Sprintf("%3s |", kev),
+ 			fmt.Sprintf("%9s |", vinfo.AlertDict.FormatSource()),
+ 			fmt.Sprintf("%7s |", vinfo.PatchStatus(r.Packages)),
+ 			strings.Join(pkgNames, ", "),
+@@ -812,6 +818,16 @@ func setChangelogLayout(g *gocui.Gui) error {
+ 			}
+ 		}
+ 
++		if len(vinfo.KEVs) > 0 {
++			lines = append(lines, "\n",
++				"Known Exploited Vulnerabilities",
++				"===============================",
++			)
++			for _, kev := range vinfo.KEVs {
++				lines = append(lines, fmt.Sprintf("* %s: %s", kev.Type, kev.VulnerabilityName))
++			}
++		}
++
+ 		if len(vinfo.AlertDict.CISA) > 0 {
+ 			lines = append(lines, "\n",
+ 				"CISA Alert",
