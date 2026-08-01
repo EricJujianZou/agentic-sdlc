@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_element-hq__element-web-8f3c8b35153d2227af45f32e46bd1e15bd60b71f-vnan",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T05:31:34Z",
+  "finished_at": "2026-08-01T05:39:52Z",
+  "self_assessment": "Confident on the mechanical rename across all 7 named usage sites (UserMenu, DownloadActionButton, MessageActionBar x6, WidgetPip, EventTileThreadToolbar x2, MessageComposerFormatBar) since RovingAccessibleButton already forwarded all AccessibleButton props (title/disableTooltip/caption/placement) unchanged; less certain about the exact disableTooltip semantics I chose for ExtraTile (title always set, disableTooltip=!isMinimized, verified only by manual reasoning plus one analogous existing snapshot in RoomTile, not by running the test suite) since yarn install failed on a blocked git-based matrix-js-sdk dependency, so npx tsc/jest could not be run and this was manual review only."
+}

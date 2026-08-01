@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_protonmail__webclients-7e54526774e577c0ebb58ced7ba8bef349a69fec",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T05:32:11Z",
+  "finished_at": "2026-08-01T05:43:46Z",
+  "self_assessment": "Centralized sizeUnits/BASE_SIZE in a new leaf module packages/shared/lib/helpers/size.ts and converted every named GIGA/BASE_SIZE usage (MemberStorageSelector, SubUser*Modal, UserInviteOrEditModal, csv.ts, SetupOrganizationModal, calendar/contacts constants, constants.ts bonus storage, plus the analogous members/multipleUserCreation/constants.ts) to sizeUnits.GB/TB, verified with a scoped tsc syntax pass (no unresolved-name errors) and repo-wide grep that no GIGA/BASE_SIZE usage was left dangling; kept GIGA and BASE_SIZE re-exported from constants.ts as thin aliases so the one remaining unmentioned test file (csv.test.ts) keeps compiling unchanged, and could not run the full monorepo build/test suite since node_modules were not installed."
+}
