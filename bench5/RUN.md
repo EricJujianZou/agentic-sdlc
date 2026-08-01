@@ -155,6 +155,21 @@ power for H1/H2/H5. Pre-registered remedy ("ease the subset ... and
 document the change") applies. Remedy decision checkpointed with the
 owner before any re-rank is committed.
 
+## 2026-08-01 — Battery amendment v2 (owner-approved remedy)
+
+Owner selected the recommended remedy: re-rank to the hardest 100 among
+instances passed by >=1 of the 3 leaderboard-config frontier runs (pool
+399; selected set is uniformly the 1-of-3 stratum, tie-broken by proxy).
+Zero-coverage instances excluded (no solvability evidence). Frozen to
+`instances.json` v2 with amendment text + two pre-commitments recorded in
+its metadata: main run N=60 (first 60 by rank; v1 timing trim) and the v2
+pilot rule (ranks 5,11,17,23,29,35,41,47,53,59, branches
+`bench5/pilot2-*`). v1 list remains in git history (commit 600195e); v1
+probe results preserved as `probe/probe_results_v1.json`. Probe re-runs
+on the v2 list BEFORE the v2 pilot (same gate order as v1). Owner has
+delegated remaining gate decisions to the orchestrator's recommended
+option unless a true blocker arises.
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are

@@ -62,10 +62,14 @@ for col in ["patch_bytes", "files_touched", "n_tests"]:
     df[f"z_{col}"] = (df[col] - df[col].mean()) / df[col].std()
 df["proxy"] = df.z_patch_bytes + df.z_files_touched + df.z_n_tests
 
-uncovered = df[df.frontier_score.isna()]
-if len(uncovered):
-    print(f"WARNING: {len(uncovered)} instances have zero frontier coverage; proxy-only")
-    df.loc[df.frontier_score.isna(), "frontier_score"] = -1.0  # proxy-only sinks to hardest
+# v2 AMENDMENT (2026-08-01, owner-approved after pilot floor-gate failure):
+# the 0/3-frontier-passes stratum piloted at 0/10 for BOTH subject models
+# (no discriminating power). Select the hardest instances among those with
+# frontier_score > 0 (passed by >= 1 leaderboard run) — hard but solvable
+# by construction. Zero-coverage instances are excluded for the same
+# reason (no solvability evidence).
+df = df[df.frontier_score.notna() & (df.frontier_score > 0)]
+print(f"v2 candidate pool (frontier_score > 0): {len(df)}")
 
 ranked = df.sort_values(
     ["frontier_score", "proxy", "instance_id"], ascending=[True, False, True]
@@ -114,7 +118,27 @@ out = {
         ),
         "harness_repo": "https://github.com/scaleapi/SWE-bench_Pro-os",
         "selected_n": len(instances),
-        "frozen_utc": "2026-07-31",
+        "frozen_utc": "2026-08-01",
+        "version": 2,
+        "amendment": (
+            "v1 (commit 600195e) selected the 0/3-frontier-passes stratum; "
+            "pilot graded sonnet-5 0/10 and opus-5 0/10 (RUN.md gate 5), "
+            "failing the pre-registered floor gate. Per the pre-registered "
+            "remedy the subset is eased: hardest 100 among instances passed "
+            "by >=1 of the 3 leaderboard runs. Committed before any v2 "
+            "probe/pilot/main-run result was observed."
+        ),
+        "n_run_precommit": (
+            "Main run uses the FIRST 60 instances by this ranking (trim "
+            "rule pre-applied from v1 pilot timing: ~40 min/instance makes "
+            "N=100 arm-B project ~66h > 3 days). Ranks 61-100 are reserve, "
+            "used only if the v2 pilot halves per-instance time."
+        ),
+        "pilot_rule_v2": (
+            "Pilot = ranks 5, 11, 17, 23, 29, 35, 41, 47, 53, 59 (evenly "
+            "spaced across the N=60 run set), both models, bare condition, "
+            "branches bench5/pilot2-<model>-r<NNN>."
+        ),
     },
     "instances": instances,
 }
