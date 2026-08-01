@@ -1,0 +1,214 @@
+diff --git a/api/types/app.go b/api/types/app.go
+index f9b4a276ef..11038d521a 100644
+--- a/api/types/app.go
++++ b/api/types/app.go
+@@ -101,6 +101,12 @@ func (a *AppV3) GetVersion() string {
+ 	return a.Version
+ }
+ 
++// GetTeleportVersion returns the Version field of the given AppV3 instance,
++// exposing version metadata.
++func GetTeleportVersion(a *AppV3) string {
++	return a.Version
++}
++
+ // GetKind returns the app resource kind.
+ func (a *AppV3) GetKind() string {
+ 	return a.Kind
+diff --git a/api/types/app_test.go b/api/types/app_test.go
+index 9b5b12d23c..e65558594e 100644
+--- a/api/types/app_test.go
++++ b/api/types/app_test.go
+@@ -90,6 +90,13 @@ func TestAppPublicAddrValidation(t *testing.T) {
+ 	}
+ }
+ 
++func TestGetTeleportVersion(t *testing.T) {
++	app := &AppV3{
++		Version: "v13.1.1",
++	}
++	require.Equal(t, "v13.1.1", GetTeleportVersion(app))
++}
++
+ func TestAppServerSorter(t *testing.T) {
+ 	t.Parallel()
+ 
+diff --git a/lib/asciitable/table.go b/lib/asciitable/table.go
+index c7f705f517..9823ef0ed0 100644
+--- a/lib/asciitable/table.go
++++ b/lib/asciitable/table.go
+@@ -21,10 +21,21 @@ package asciitable
+ import (
+ 	"bytes"
+ 	"fmt"
++	"os"
+ 	"strings"
+ 	"text/tabwriter"
++
++	"golang.org/x/term"
+ )
+ 
++// defaultTableWidth is the width assumed for the table when the terminal
++// size cannot be determined.
++const defaultTableWidth = 80
++
++// truncatedColumnMinSize is the minimum width reserved for the column being
++// truncated, used when computing the maximum width of the other columns.
++const truncatedColumnMinSize = 16
++
+ // Column represents a column in the table.
+ type Column struct {
+ 	Title         string
+@@ -60,6 +71,101 @@ func MakeTable(headers []string) Table {
+ 	return t
+ }
+ 
++// MakeTableWithTruncatedColumn creates a table whose column widths are
++// computed from the terminal size. Every column other than truncatedColumn
++// is given a maximum width proportional to the available terminal space,
++// while the column named truncatedColumn (matched against columnOrder by
++// header name) expands or shrinks to occupy whatever space remains,
++// truncating its content with an ellipsis when it doesn't fit.
++//
++// If the terminal size cannot be determined, a default width of 80 is used.
++//
++// If truncatedColumn does not match any entry in columnOrder, no column is
++// truncated and the table is built with all columns and data intact.
++//
++// columnOrder may contain empty strings, in which case the resulting table
++// is headless (see MakeHeadlessTable), same as with MakeTable.
++func MakeTableWithTruncatedColumn(columnOrder []string, rows [][]string, truncatedColumn string) Table {
++	width := getTerminalWidth()
++
++	truncatedColIndex := -1
++	for i, name := range columnOrder {
++		if name == truncatedColumn {
++			truncatedColIndex = i
++			break
++		}
++	}
++
++	otherCols := len(columnOrder)
++	if truncatedColIndex != -1 {
++		otherCols--
++	}
++	maxColWidth := 0
++	if truncatedColIndex != -1 && otherCols > 0 {
++		maxColWidth = (width - truncatedColumnMinSize) / otherCols
++	}
++
++	t := MakeTable(make([]string, 0))
++	columns := make([]Column, 0, len(columnOrder))
++	totalLen := 0
++
++	for i, colName := range columnOrder {
++		column := Column{
++			Title:         colName,
++			MaxCellLength: len(colName),
++		}
++		if i == truncatedColIndex {
++			// The truncated column's width is computed in the second pass,
++			// once the widths of all other columns are known.
++			columns = append(columns, column)
++			continue
++		}
++		for _, row := range rows {
++			if i >= len(row) {
++				continue
++			}
++			if len(row[i]) > column.MaxCellLength {
++				column.MaxCellLength = len(row[i])
++			}
++		}
++		if truncatedColIndex != -1 {
++			if maxColWidth > 0 && column.MaxCellLength > maxColWidth {
++				column.MaxCellLength = maxColWidth
++				totalLen += column.MaxCellLength + 4 // "... "
++			} else {
++				totalLen += column.MaxCellLength + 1 // column separator
++			}
++		}
++		columns = append(columns, column)
++	}
++
++	for i, column := range columns {
++		if i == truncatedColIndex {
++			remaining := width - totalLen - len("... ")
++			if remaining < 0 {
++				remaining = 0
++			}
++			column.MaxCellLength = remaining
++		}
++		t.AddColumn(column)
++	}
++
++	for _, row := range rows {
++		t.AddRow(row)
++	}
++	return t
++}
++
++// getTerminalWidth returns the width of the current terminal, or
++// defaultTableWidth if it cannot be determined.
++func getTerminalWidth() int {
++	width, _, err := term.GetSize(int(os.Stdin.Fd()))
++	if err != nil || width <= 0 {
++		return defaultTableWidth
++	}
++	return width
++}
++
+ // AddColumn adds a column to the table's structure.
+ func (t *Table) AddColumn(c Column) {
+ 	c.width = len(c.Title)
+diff --git a/lib/asciitable/table_test.go b/lib/asciitable/table_test.go
+index 96c7f0ddf9..ec850b605d 100644
+--- a/lib/asciitable/table_test.go
++++ b/lib/asciitable/table_test.go
+@@ -59,6 +59,46 @@ func TestHeadlessTable(t *testing.T) {
+ 	require.Equal(t, headlessTable, table.AsBuffer().String())
+ }
+ 
++func TestMakeTableWithTruncatedColumn(t *testing.T) {
++	longLabel := strings.Repeat("l", 100)
++	rows := [][]string{
++		{"server-1", longLabel},
++	}
++
++	table := MakeTableWithTruncatedColumn([]string{"Name", "Labels"}, rows, "Labels")
++	out := table.AsBuffer().String()
++	require.Contains(t, out, "server-1")
++	require.Contains(t, out, "...")
++	require.NotContains(t, out, longLabel)
++}
++
++func TestMakeTableWithTruncatedColumnNoMatch(t *testing.T) {
++	// When truncatedColumn doesn't match any header, no column should be
++	// truncated and no data should be lost.
++	longLabel := strings.Repeat("l", 100)
++	rows := [][]string{
++		{"server-1", longLabel},
++	}
++
++	table := MakeTableWithTruncatedColumn([]string{"Name", "Labels"}, rows, "DoesNotExist")
++	out := table.AsBuffer().String()
++	require.Contains(t, out, "server-1")
++	require.Contains(t, out, longLabel)
++	require.NotContains(t, out, "...")
++}
++
++func TestMakeTableWithTruncatedColumnHeadless(t *testing.T) {
++	rows := [][]string{
++		{"server-1", "role=admin"},
++	}
++
++	table := MakeTableWithTruncatedColumn([]string{"", ""}, rows, "")
++	require.True(t, table.IsHeadless())
++	out := table.AsBuffer().String()
++	require.Contains(t, out, "server-1")
++	require.Contains(t, out, "role=admin")
++}
++
+ func TestTruncatedTable(t *testing.T) {
+ 	table := MakeTable([]string{"Name"})
+ 	table.AddColumn(Column{

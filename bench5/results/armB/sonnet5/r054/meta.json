@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-5069b09e5f64428dce59b33455c8bb17fe577070-v8717e18970bcdc4e0d2cea3b1527752b21e74866",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T08:19:11Z",
+  "finished_at": "2026-08-01T08:23:21Z",
+  "self_assessment": "High confidence: located the actual bug (the except-branch in CommonExtras.update_work_ids_individually that deleted the conflicting row after a failed UPDATE), removed the destructive DELETE entirely in favor of a rollback + failed_deletes counter, changed update_work_id to return the required rows_changed/rows_deleted/failed_deletes dict, updated the one internal caller (admin/code.py) that relied on the old tuple-via-list() shape, and verified directly against both a bookshelves_books and a booknotes in-memory sqlite table that on conflict the table is byte-for-byte unchanged and the result dict is exactly {rows_changed:0, rows_deleted:0, failed_deletes:1}; could not run the full pytest suite via conftest.py due to heavy unrelated dependencies (lxml/memcache build failures) so I validated with standalone scripts exercising the same code paths instead, and also updated the one pre-existing test that asserted the old buggy delete-on-conflict behavior."
+}

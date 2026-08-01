@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T08:18:57Z",
+  "finished_at": "2026-08-01T08:23:41Z",
+  "self_assessment": "Implemented all required changes (Digest field on both Image structs, GetFullName on config.Image, exact IsValidImage error strings, Digest propagation in scan/base.go, GetFullName usage in scan/container.go and scan/serverapi.go logging, non-concatenated image reference in report.go, and tag/digest-free ServerName format in scan/serverapi.go) and verified with go build, go vet (pre-existing warnings only), and go test across config/scan/report/models, all passing except a pre-existing unrelated models vet failure confirmed present on the unmodified base commit."
+}

@@ -1,0 +1,138 @@
+diff --git a/openlibrary/core/db.py b/openlibrary/core/db.py
+index 35882e1d5..64d770d15 100644
+--- a/openlibrary/core/db.py
++++ b/openlibrary/core/db.py
+@@ -27,11 +27,17 @@ class CommonExtras:
+     def update_work_id(cls, current_work_id, new_work_id, _test=False):
+         """This method allows all instances of a work_id (such as that of a
+         redirect) to be updated to a new work_id.
++
++        If updating a record would collide with a record that already
++        exists for the new_work_id, that record is left untouched (no
++        rows are changed or deleted for it) and the failure is counted
++        under `failed_deletes` instead.
+         """
+         oldb = get_db()
+         t = oldb.transaction()
+         rows_changed = 0
+         rows_deleted = 0
++        failed_deletes = 0
+ 
+         try:
+             rows_changed = oldb.update(
+@@ -40,19 +46,24 @@ class CommonExtras:
+                 work_id=new_work_id,
+                 vars={"work_id": current_work_id})
+         except (UniqueViolation, IntegrityError):
+-            rows_changed, rows_deleted = cls.update_work_ids_individually(
++            rows_changed, rows_deleted, failed_deletes = cls.update_work_ids_individually(
+                 current_work_id,
+                 new_work_id,
+                 _test=_test
+             )
+         t.rollback() if _test else t.commit()
+-        return rows_changed, rows_deleted
++        return {
++            "rows_changed": rows_changed,
++            "rows_deleted": rows_deleted,
++            "failed_deletes": failed_deletes,
++        }
+ 
+     @classmethod
+     def update_work_ids_individually(cls, current_work_id, new_work_id, _test=False):
+         oldb = get_db()
+         rows_changed = 0
+         rows_deleted = 0
++        failed_deletes = 0
+         # get records with old work_id
+         # `list` used to solve sqlite cursor test
+         rows = list(oldb.select(
+@@ -65,19 +76,20 @@ class CommonExtras:
+                 for k, v in row.items()
+                 if k in cls.PRIMARY_KEY
+             ])
++            t_update = oldb.transaction()
+             try:
+                 # try to update the row to new_work_id
+-                t_update = oldb.transaction()
+                 oldb.query(f"UPDATE {cls.TABLENAME} set work_id={new_work_id} where {where}")
+                 rows_changed += 1
+                 t_update.rollback() if _test else t_update.commit()
+             except (UniqueViolation, IntegrityError):
+-                t_delete = oldb.transaction()
+-                # otherwise, delete row with current_work_id if failed
+-                oldb.query(f"DELETE FROM {cls.TABLENAME} WHERE {where}")
+-                rows_deleted += 1
+-                t_delete.rollback() if _test else t_delete.commit()
+-        return rows_changed, rows_deleted
++                # A record for new_work_id already exists (conflict).
++                # Roll back the failed update and leave both the
++                # current row and the conflicting row untouched -- do
++                # NOT delete anything.
++                t_update.rollback()
++                failed_deletes += 1
++        return rows_changed, rows_deleted, failed_deletes
+ 
+ 
+ def _proxy(method_name):
+diff --git a/openlibrary/plugins/admin/code.py b/openlibrary/plugins/admin/code.py
+index 8800d9b80..5b82542bd 100644
+--- a/openlibrary/plugins/admin/code.py
++++ b/openlibrary/plugins/admin/code.py
+@@ -240,14 +240,14 @@ class resolve_redirects:
+                     Observations.get_observations_for_work(olid))
+ 
+                 # track updates
+-                r['updates']['readinglog'] = list(
+-                    Bookshelves.update_work_id(olid, new_olid, _test=params.test))
+-                r['updates']['ratings'] = list(
+-                    Ratings.update_work_id(olid, new_olid, _test=params.test))
+-                r['updates']['booknotes'] = list(
+-                    Booknotes.update_work_id(olid, new_olid, _test=params.test))
+-                r['updates']['observations'] = list(
+-                    Observations.update_work_id(olid, new_olid, _test=params.test))
++                r['updates']['readinglog'] = Bookshelves.update_work_id(
++                    olid, new_olid, _test=params.test)
++                r['updates']['ratings'] = Ratings.update_work_id(
++                    olid, new_olid, _test=params.test)
++                r['updates']['booknotes'] = Booknotes.update_work_id(
++                    olid, new_olid, _test=params.test)
++                r['updates']['observations'] = Observations.update_work_id(
++                    olid, new_olid, _test=params.test)
+ 
+         return delegate.RawText(
+             json.dumps(summary), content_type="application/json")
+diff --git a/openlibrary/tests/core/test_db.py b/openlibrary/tests/core/test_db.py
+index f0dec4ba5..87831a6a5 100644
+--- a/openlibrary/tests/core/test_db.py
++++ b/openlibrary/tests/core/test_db.py
+@@ -41,17 +41,25 @@ class TestUpdateWorkID:
+         }
+         self.db.insert("bookshelves_books", **existing_book)
+         assert len(list(self.db.select("bookshelves_books"))) == 2
+-        Bookshelves.update_work_id(self.source_book['work_id'], existing_book['work_id'])
++        result = Bookshelves.update_work_id(
++            self.source_book['work_id'], existing_book['work_id'])
++        assert result == {
++            "rows_changed": 0,
++            "rows_deleted": 0,
++            "failed_deletes": 1,
++        }
++        # on conflict, nothing should be changed or deleted: both the
++        # original and the conflicting rows must remain intact.
+         assert len(list(self.db.select("bookshelves_books", where={
+             "username": "@cdrini",
+             "work_id": "2",
+             "edition_id": "2"
+-        }))), "failed to update 1 to 2"
+-        assert not len(list(self.db.select("bookshelves_books", where={
++        }))), "existing work_id 2 missing"
++        assert len(list(self.db.select("bookshelves_books", where={
+             "username": "@cdrini",
+             "work_id": "1",
+             "edition_id": "1"
+-        }))), "old work_id 1 present"
++        }))), "old work_id 1 was deleted"
+ 
+ 
+     def test_update_simple(self):
