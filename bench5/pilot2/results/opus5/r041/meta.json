@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T03:04:00Z",
+  "finished_at": "2026-08-01T03:16:44Z",
+  "turns_estimate": 30,
+  "self_assessment": "Renamed CpeNameMatch to CpeVersionMatch, added CpeVendorProductMatch (score 10), made DetectCpeURIsCves pick it when detail.IsJvn(), switched SortByConfident to numeric score (desc), and made the TUI render score / method; required bumping go-cve-dictionary 0.15.14 -> 0.6.0 (the release that added IsJvn() and JVN-only CPE matching). go build ./... and go test ./... pass; main residual risk is whether the graded tests expect the SortOrder field to have been dropped."
+}
