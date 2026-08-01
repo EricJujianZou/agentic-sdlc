@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T03:13:14Z",
+  "finished_at": "2026-08-01T03:14:45Z",
+  "turns_estimate": 30,
+  "self_assessment": "Confident: renamed CpeNameMatch to CpeVersionMatch, added CpeVendorProductMatch(10) selected via NvdJSON==nil in DetectCpeURIsCves, switched sort to numeric score, updated TUI to score/method, and full test suite passes."
+}
