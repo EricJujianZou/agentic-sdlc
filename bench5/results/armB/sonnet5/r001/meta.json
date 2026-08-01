@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-139f3a81b66c47e6d8f70ce6c4afe7a9196a6ea8",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T04:16:53Z",
+  "finished_at": "2026-08-01T04:29:13Z",
+  "self_assessment": "High confidence: all imports were migrated from aquasecurity/fanal to trivy/pkg/fanal, go.mod was bumped to trivy v0.30.4 (trivy-db, go-dep-parser, Azure/AWS SDKs resolved transitively via go mod tidy) with the docker/docker replace directive added exactly as specified, the integration submodule was updated to the requested commit, PNPM and .NET-deps analyzers/lockfile mappings were added, the disabled-analyzer list in scanner/base.go was modernized to exclude OS/config/license/secret/RedHat analyzers via the new trivy analyzer.Type* slices, db.NewClient and DetectVulnerabilities call signatures were updated, and GNUmakefile LIBS now includes 'pnpm' and 'dotnet-deps'; `go build ./...`, `go vet ./...`, and the full `go test ./...` suite all pass cleanly. Known gaps: I could not verify against the actual upstream gold commit (by design), so exact version pins for a few indirect deps (e.g. hashicorp/go-uuid, knqyf263/go-rpm-version) were whatever `go mod tidy` resolved rather than a specific hand-picked version from the original PR; the `-tags=scanner` build was not exercised end-to-end because it also fails to build at the unmodified base commit (pre-existing repo issue unrelated to this change, confirmed by testing on stashed/original code)."
+}
