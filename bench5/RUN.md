@@ -170,6 +170,19 @@ on the v2 list BEFORE the v2 pilot (same gate order as v1). Owner has
 delegated remaining gate decisions to the orchestrator's recommended
 option unless a true blocker arises.
 
+## 2026-08-01 — Memorization probe v2 (on the amended battery): COMPLETE
+
+200 queries, zero failures, 2 instances unscorable (all gold files named
+in issue text). Sonnet 5: 39/98 high-probe, mean recall 0.348. Opus 5:
+71/98, mean 0.599. Union high-probe: **72/100** — substantially higher
+than v1's 47, as expected (the solvable-by-one-frontier-model stratum is
+better represented in training). Consequence logged honestly: the
+low-probe sensitivity subset is only n=28 (n~17 within the N=60 run
+set), so the probe-conditioned repeat of the primary analysis will be
+descriptive, not powered. The full-battery paired contrasts (H1-H3) are
+unaffected; contamination remains quantified rather than eliminated
+(PLAN threat #1). Results: `probe/probe_results.json`.
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are
