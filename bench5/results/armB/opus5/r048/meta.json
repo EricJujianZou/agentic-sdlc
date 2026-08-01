@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-6682232b5c8a9d08c0e9f15bd90d41bff3875adc",
+  "model": "opus5",
+  "started_at": "2026-08-01T08:01:06Z",
+  "finished_at": "2026-08-01T08:10:06Z",
+  "self_assessment": "getAmazonLinuxVersion now normalises the release string explicitly: a single-field release still maps to \"1\", and otherwise it switches on the first field returning \"2\", \"2022\", \"2023\", \"2025\", \"2027\" or \"2029\" as-is, falling back to \"1\" when the field parses as a YYYY.MM date (the Amazon Linux 1 AMI releases such as \"2018.03 (Amazon Linux AMI)\") and \"unknown\" for anything else - previously it returned the raw first field, so an unknown release silently became its own key. GetEOL's Amazon map gained 2023 (standard support until 2028-03-15), 2025 (2030-03-15), 2027 (2032-03-15) and 2029 (2034-03-15) next to the existing 1/2/2022 entries, so an unrecognised release now misses the map and returns found=false. Verified: go build ./... and gofmt clean, ./config ./scanner ./detector all pass, and a scratch test covered every normalisation case (2018.03, bare \"2\", the parenthesised 2/2022/2023/2025/2027/2029 forms, an unknown 2031 release and a junk string) plus, for each new version, that GetEOL is found with the right cutoff, that IsStandardSupportEnded flips exactly at it, and that the extended-support check follows. I deliberately did not rename the repo's misspelled IsExtendedSuppportEnded method that the requirement refers to by its corrected name, since the task states no new interfaces are introduced."
+}
