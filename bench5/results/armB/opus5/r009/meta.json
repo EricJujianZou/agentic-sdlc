@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-d109cc7e6e161170391f98f9a6fa1d02534c18e4-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+  "model": "opus5",
+  "started_at": "2026-08-01T05:05:43Z",
+  "finished_at": "2026-08-01T05:15:16Z",
+  "self_assessment": "Added ThingReferenceDict to core/models.py and AnnotatedSeedDict/AnnotatedSeed/AnnotatedSeedThing to core/lists/model.py. Seed now carries an optional notes field with from_json (accepting subject strings, plain refs and annotated dicts), from_values, to_db (annotated seeds become a keyless Thing whose _data holds thing+notes) and to_json; Seed.dict() emits notes, which is the API/frontend path. List.add_seed/remove_seed/_index_of_seed/_get_seed_strings compare by key only so a plain ref dedups against an annotated one; normalize_input_seed accepts the annotated shape; edit.html posts seeds--N--thing--key plus seeds--N--notes (unflattens straight into AnnotatedSeedDict) and view_body.html renders sanitized markdown notes under each item. Empty notes degrade exactly to a plain ThingReferenceDict. Verified: existing Seed tests pass, list tests go 7->9 passing with the same one pre-existing failure present on the clean base, and a written harness confirms add/remove/dedup, JSON round-trips, db shape and the empty-notes case."
+}
