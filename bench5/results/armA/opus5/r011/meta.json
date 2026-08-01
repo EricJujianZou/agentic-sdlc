@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+  "model": "opus5",
+  "started_at": "2026-08-01T15:33:21Z",
+  "finished_at": "2026-08-01T15:47:20Z",
+  "turns_estimate": 36,
+  "self_assessment": "All listed requirements implemented: models.KEV/KEVType/CISAKEV/VulnCheckKEV/VulnCheckXDB/VulnCheckReportedExploitation, VulnInfo.KEVs, FormatKEVCveSummary (\"%d KEVs\"), KEV sorting in SortForJSONOutput, and FillWithKEVuln rewritten over kevulndb.Response (CISA + VulnCheck, placeholder due date year-1000 -> nil); needed a go-kev bump to the first revision exposing the VulnCheck source (2-line go.mod/go.sum change, go mod tidy clean). go build + go test ./... green, gofmt/vet/revive add no new findings; scratch table tests (since deleted) verified the mapping, nil-due-date normalisation, summary count and sort order. AlertDict.CISA kept for older-JSON compatibility per the requirements; rendering KEV detail in tui/reporter was not listed and is not implemented, so those views no longer show the old CISA alert line."
+}
