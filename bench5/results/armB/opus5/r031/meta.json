@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-aaea15e516ece43978cf98e09e52080478b1d39f",
+  "model": "opus5",
+  "started_at": "2026-08-01T06:46:54Z",
+  "finished_at": "2026-08-01T06:57:54Z",
+  "self_assessment": "searchCache now takes the cache map by value and returns the map lookup's value/ok pair directly, dropping the pointer indirection and the redundant if. FillWordPress drops the *map[string]string too and now takes the per-server config.WordPressConf, sourcing both the wpscan token and the ignore-inactive setting from it instead of the global c.Conf.WpIgnoreInactive; removeInactives (which already excludes Status==inactive and keeps Status==active) is gated on cnf.IgnoreInactive. report.DetectWordPressCves/WordPressOption were updated to carry the conf and a plain map, and the global -wp-ignore-inactive flag is OR'd into the per-server value so that CLI flag keeps working. Verified: go build ./... clean, and both wordpress package tests pass after adapting the in-repo test call to the new signature - that adaptation was reverted so the patch contains no test changes."
+}
