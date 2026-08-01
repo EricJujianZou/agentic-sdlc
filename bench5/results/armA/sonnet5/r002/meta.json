@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-4a72295de7b91faa59d90a5bee91535bbe76755d",
+  "model": "sonnet5",
+  "started_at": "2026-08-01T05:45:00Z",
+  "finished_at": "2026-08-01T06:30:00Z",
+  "turns_estimate": 55,
+  "self_assessment": "Fixed trivy-to-vuls library-only scans (pseudo family/default server name/trivy-target optional), added isTrivySupportedOS/isTrivySupportedLib helpers, tagged LibraryScanners with Type, made OVAL/gost detection skip cleanly on empty Release, fixed a real i-vs-j self-comparison bug in CveContents.Sort(), registered new fanal language analyzers via go.mod bump + go mod tidy, and added a new parser test case for the library-only scenario; build, vet, and full test suite pass."
+}
