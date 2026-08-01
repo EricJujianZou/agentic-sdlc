@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-139f3a81b66c47e6d8f70ce6c4afe7a9196a6ea8",
+  "model": "opus5",
+  "started_at": "2026-08-01T04:15:28Z",
+  "finished_at": "2026-08-01T04:22:48Z",
+  "self_assessment": "Upgraded to Trivy v0.30.4: rewrote all fanal imports to trivy/pkg/fanal, added pnpm + dotnet/deps analyzers, expanded disabled-analyzer list to all non-language analyzers, db.NewClient 3-arg, DetectVulnerabilities empty-first-arg, GNUmakefile LIBS += pnpm/dotnet-deps, docker replace directive, integration submodule bumped. go build ./... clean and full go test ./... passes."
+}
