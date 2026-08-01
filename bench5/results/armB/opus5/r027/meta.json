@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_flipt-io__flipt-e88e93990e3ec1e7697754b423decc510d5dd5fe",
+  "model": "opus5",
+  "started_at": "2026-08-01T06:26:22Z",
+  "finished_at": "2026-08-01T06:44:22Z",
+  "self_assessment": "Added flag_key to BooleanEvaluationResponse (field 6) and VariantEvaluationResponse (field 9) in evaluation.proto, and regenerated evaluation.pb.go with the real protoc-gen-go v1.31.0: since protoc is unavailable I rebuilt the CodeGeneratorRequest from the compiled-in FileDescriptorProto and confirmed the pipeline reproduces the checked-in pb.go byte-for-byte before adding the fields, so the rawDesc/struct tags/getters are genuinely generated, not hand-edited. Server side sets FlagKey: flag.Key on both the boolean response (at construction, so it covers threshold, segment and default-fallback returns) and the variant response, which also covers Batch since it delegates to those helpers. Verified: go build ./... clean in both modules, go test ./internal/server/evaluation/... passes, and a scratch test confirmed proto/protojson round-trip of flagKey plus empty-string GetFlagKey() when unset."
+}
