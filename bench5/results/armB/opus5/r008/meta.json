@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_protonmail__webclients-8142704f447df6e108d53cab25451c8a94976b92",
+  "model": "opus5",
+  "started_at": "2026-08-01T04:59:54Z",
+  "finished_at": "2026-08-01T05:05:26Z",
+  "self_assessment": "Moved CALENDAR_TYPE, CALENDAR_TYPE_EXTENDED, EXTENDED_CALENDAR_TYPE and CALENDAR_DISPLAY into packages/shared/lib/calendar/constants.ts and deleted the duplicate SETTINGS_VIEW from interfaces/calendar/Calendar.ts, so each value is declared exactly once; Calendar.ts/Api.ts/CalendarMember.ts now import from ../../calendar/constants, and all 18 consumers across calendar, mail, components, shared and testing were repointed (including seven multi-line import blocks). api.ts now uses local relative imports instead of the @proton/shared barrel. Numeric values unchanged, so persisted settings and API payloads are unaffected; constants.ts imports only ../constants, so no cycle back into the interface layer. Verified with a standalone tsc pass over every changed file: no 'has no exported member' errors remain (only module-resolution noise, which untouched imports show equally since workspace deps cannot be installed - the proxy blocks codeload.github.com)."
+}
