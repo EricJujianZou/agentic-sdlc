@@ -183,6 +183,24 @@ descriptive, not powered. The full-battery paired contrasts (H1-H3) are
 unaffected; contamination remains quantified rather than eliminated
 (PLAN threat #1). Results: `probe/probe_results.json`.
 
+## 2026-08-01 — Arm materials + arm-B continuity amendment (pre-main-run)
+
+`protocol_armA.md` (one instance per fresh session, 60-line state file,
+verify-before-commit) and `prompt_armB.md` committed; task files
+`tasks/r001..r060.md` = first 60 of frozen v2 list per the N=60
+pre-commitment. **Arm-B continuity amendment, documented BEFORE the main
+run:** one continuous session cannot span 60 hard instances (v1/v2 pilots
+measure ~25-90 min per instance; a single session would need ~40h).
+Arm B therefore runs as the MINIMAL number of maximal-length continuous
+sessions: each session works in rank order until it dies/stalls, and the
+orchestrator launches a successor continuous session starting from the
+first missing result (no scaffolding, no state carried between arm-B
+sessions). The treatment contrast preserved: arm A = 1 instance per
+session + carried state file; arm B = many instances per session, no
+scaffolding. Session count per arm-B cell is reported as a process
+metric. An arm-B session that dies mid-INSTANCE gets that instance
+re-done by the successor (patch not yet pushed = not done).
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are
