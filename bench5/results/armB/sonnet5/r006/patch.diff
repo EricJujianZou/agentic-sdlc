@@ -1,0 +1,265 @@
+diff --git a/res/css/_components.scss b/res/css/_components.scss
+index 7e69d2b17f..f88cc728c8 100644
+--- a/res/css/_components.scss
++++ b/res/css/_components.scss
+@@ -83,6 +83,7 @@
+ @import "./views/avatars/_DecoratedRoomAvatar.scss";
+ @import "./views/avatars/_WidgetAvatar.scss";
+ @import "./views/beta/_BetaCard.scss";
++@import "./views/buttons/_Cancel.scss";
+ @import "./views/context_menus/_CallContextMenu.scss";
+ @import "./views/context_menus/_DeviceContextMenu.scss";
+ @import "./views/context_menus/_IconizedContextMenu.scss";
+diff --git a/res/css/views/buttons/_Cancel.scss b/res/css/views/buttons/_Cancel.scss
+new file mode 100644
+index 0000000000..0ee10f6199
+--- /dev/null
++++ b/res/css/views/buttons/_Cancel.scss
+@@ -0,0 +1,29 @@
++/*
++Copyright 2022 The Matrix.org Foundation C.I.C.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++.mx_CancelButton {
++    --size: 16px;
++    width: var(--size);
++    height: var(--size);
++    min-width: var(--size);
++    min-height: var(--size);
++    cursor: pointer;
++    background-color: $primary-content;
++    mask: url('$(res)/img/cancel.svg');
++    mask-repeat: no-repeat;
++    mask-position: center;
++    mask-size: contain;
++}
+diff --git a/res/css/views/rooms/_MessageComposer.scss b/res/css/views/rooms/_MessageComposer.scss
+index 9619bad3fe..19ba2ca715 100644
+--- a/res/css/views/rooms/_MessageComposer.scss
++++ b/res/css/views/rooms/_MessageComposer.scss
+@@ -43,6 +43,11 @@ limitations under the License.
+     height: 31px;
+ }
+ 
++.mx_MessageComposer_roomReplaced_header,
++.mx_MessageComposer_roomReplaced_continues {
++    margin: 0;
++}
++
+ .mx_MessageComposer_roomReplaced_header {
+     font-weight: bold;
+ }
+diff --git a/res/css/views/rooms/_ReplyPreview.scss b/res/css/views/rooms/_ReplyPreview.scss
+index 50abcc738b..efc8058416 100644
+--- a/res/css/views/rooms/_ReplyPreview.scss
++++ b/res/css/views/rooms/_ReplyPreview.scss
+@@ -30,24 +30,13 @@ limitations under the License.
+ 
+         .mx_ReplyPreview_header {
+             display: flex;
++            align-items: center;
+             justify-content: space-between;
+             column-gap: 8px;
+ 
+             color: $primary-content;
+             font-weight: 400;
+             opacity: 0.4;
+-
+-            .mx_ReplyPreview_header_cancel {
+-                background-color: $primary-content;
+-                mask: url('$(res)/img/cancel.svg');
+-                mask-repeat: no-repeat;
+-                mask-position: center;
+-                mask-size: 18px;
+-                width: 18px;
+-                height: 18px;
+-                min-width: 18px;
+-                min-height: 18px;
+-            }
+         }
+     }
+ }
+diff --git a/src/components/views/buttons/Cancel.tsx b/src/components/views/buttons/Cancel.tsx
+new file mode 100644
+index 0000000000..42dc66c9b2
+--- /dev/null
++++ b/src/components/views/buttons/Cancel.tsx
+@@ -0,0 +1,45 @@
++/*
++Copyright 2022 The Matrix.org Foundation C.I.C.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++import React, { ComponentProps, CSSProperties } from "react";
++import classNames from "classnames";
++
++import AccessibleButton from "../elements/AccessibleButton";
++import { _t } from "../../../languageHandler";
++
++interface ICancelButtonStyle extends CSSProperties {
++    "--size": string;
++}
++
++// The size (width & height) in pixels of the button, defaults to "16"
++type IProps = ComponentProps<typeof AccessibleButton> & { size?: string };
++
++// A reusable, consistently styled cancel button used across the message
++// composer, reply preview and other parts of the app which need to offer
++// the user a way to dismiss/cancel something.
++const CancelButton: React.FC<IProps> = ({ size = "16", className, style, ...props }) => {
++    return <AccessibleButton
++        {...props}
++        className={classNames("mx_CancelButton", className)}
++        style={{
++            ...style,
++            "--size": `${size}px`,
++        } as ICancelButtonStyle}
++        aria-label={props["aria-label"] ?? _t("Cancel")}
++    />;
++};
++
++export default CancelButton;
+diff --git a/src/components/views/messages/DisambiguatedProfile.tsx b/src/components/views/messages/DisambiguatedProfile.tsx
+index 36850e916e..fbb8571bea 100644
+--- a/src/components/views/messages/DisambiguatedProfile.tsx
++++ b/src/components/views/messages/DisambiguatedProfile.tsx
+@@ -28,11 +28,19 @@ interface IProps {
+     onClick?(): void;
+     colored?: boolean;
+     emphasizeDisplayName?: boolean;
++    // The element type to render the profile as, allowing it to be embedded
++    // in different contexts (e.g. as a "span" when nested within inline
++    // text such as a paragraph). Defaults to "div".
++    as?: keyof JSX.IntrinsicElements;
+ }
+ 
+ export default class DisambiguatedProfile extends React.Component<IProps> {
++    static defaultProps = {
++        as: "div",
++    };
++
+     render() {
+-        const { fallbackName, member, colored, emphasizeDisplayName, onClick } = this.props;
++        const { fallbackName, member, colored, emphasizeDisplayName, onClick, as: Root } = this.props;
+         const rawDisplayName = member?.rawDisplayName || fallbackName;
+         const mxid = member?.userId;
+ 
+@@ -58,12 +66,12 @@ export default class DisambiguatedProfile extends React.Component<IProps> {
+         });
+ 
+         return (
+-            <div className="mx_DisambiguatedProfile" onClick={onClick}>
++            <Root className="mx_DisambiguatedProfile" onClick={onClick}>
+                 <span className={displayNameClasses} dir="auto">
+                     { rawDisplayName }
+                 </span>
+                 { mxidElement }
+-            </div>
++            </Root>
+         );
+     }
+ }
+diff --git a/src/components/views/rooms/MessageComposer.tsx b/src/components/views/rooms/MessageComposer.tsx
+index 0791258637..c56e0374af 100644
+--- a/src/components/views/rooms/MessageComposer.tsx
++++ b/src/components/views/rooms/MessageComposer.tsx
+@@ -394,17 +394,19 @@ export default class MessageComposer extends React.Component<IProps, IState> {
+                 >
+                     { _t("The conversation continues here.") }
+                 </a>
+-            ) : '';
++            ) : null;
+ 
+             controls.push(<div className="mx_MessageComposer_replaced_wrapper" key="room_replaced">
+                 <div className="mx_MessageComposer_replaced_valign">
+                     <img className="mx_MessageComposer_roomReplaced_icon"
+                         src={require("../../../../res/img/room_replaced.svg").default}
+                     />
+-                    <span className="mx_MessageComposer_roomReplaced_header">
++                    <p className="mx_MessageComposer_roomReplaced_header">
+                         { _t("This room has been replaced and is no longer active.") }
+-                    </span><br />
+-                    { continuesLink }
++                    </p>
++                    { continuesLink && <p className="mx_MessageComposer_roomReplaced_continues">
++                        { continuesLink }
++                    </p> }
+                 </div>
+             </div>);
+         } else {
+diff --git a/src/components/views/rooms/ReplyPreview.tsx b/src/components/views/rooms/ReplyPreview.tsx
+index 611c58f852..c7a78b2841 100644
+--- a/src/components/views/rooms/ReplyPreview.tsx
++++ b/src/components/views/rooms/ReplyPreview.tsx
+@@ -22,7 +22,8 @@ import { _t } from '../../../languageHandler';
+ import { RoomPermalinkCreator } from "../../../utils/permalinks/Permalinks";
+ import ReplyTile from './ReplyTile';
+ import RoomContext, { TimelineRenderingType } from '../../../contexts/RoomContext';
+-import AccessibleButton from "../elements/AccessibleButton";
++import DisambiguatedProfile from "../messages/DisambiguatedProfile";
++import CancelButton from "../buttons/Cancel";
+ 
+ function cancelQuoting(context: TimelineRenderingType) {
+     dis.dispatch({
+@@ -43,12 +44,22 @@ export default class ReplyPreview extends React.Component<IProps> {
+     public render(): JSX.Element {
+         if (!this.props.replyToEvent) return null;
+ 
++        const mxEvent = this.props.replyToEvent;
++
+         return <div className="mx_ReplyPreview">
+             <div className="mx_ReplyPreview_section">
+                 <div className="mx_ReplyPreview_header">
+-                    <span>{ _t('Replying') }</span>
+-                    <AccessibleButton
+-                        className="mx_ReplyPreview_header_cancel"
++                    <span>
++                        { _t("Replying to <sender/>", {}, {
++                            sender: () => <DisambiguatedProfile
++                                as="span"
++                                member={mxEvent.sender}
++                                fallbackName={mxEvent.getSender() || ""}
++                                emphasizeDisplayName={true}
++                            />,
++                        }) }
++                    </span>
++                    <CancelButton
+                         onClick={() => cancelQuoting(this.context.timelineRenderingType)}
+                     />
+                 </div>
+diff --git a/src/i18n/strings/en_EN.json b/src/i18n/strings/en_EN.json
+index 9b5f83c7b8..26404c1c7b 100644
+--- a/src/i18n/strings/en_EN.json
++++ b/src/i18n/strings/en_EN.json
+@@ -1770,7 +1770,7 @@
+     "Seen by %(count)s people|one": "Seen by %(count)s person",
+     "Read receipts": "Read receipts",
+     "Recently viewed": "Recently viewed",
+-    "Replying": "Replying",
++    "Replying to <sender/>": "Replying to <sender/>",
+     "Room %(name)s": "Room %(name)s",
+     "Recently visited rooms": "Recently visited rooms",
+     "No recently visited rooms": "No recently visited rooms",

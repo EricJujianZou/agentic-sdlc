@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_protonmail__webclients-8142704f447df6e108d53cab25451c8a94976b92",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T04:32:57Z",
+  "finished_at": "2026-08-01T04:40:10Z",
+  "self_assessment": "Consolidated CALENDAR_TYPE/CALENDAR_TYPE_EXTENDED/EXTENDED_CALENDAR_TYPE/CALENDAR_DISPLAY into packages/shared/lib/calendar/constants.ts (which already held CALENDAR_FLAGS/VIEWS/SETTINGS_VIEW/MAX_CALENDARS_*/DEFAULT_EVENT_DURATION as canonical, and removed a duplicate SETTINGS_VIEW enum in Calendar.ts), updated all 13 named interface/consumer/shared-lib files to import from it (with Calendar.ts re-exporting for barrel backward-compatibility), verified via repo-wide grep that each constant now has exactly one declaration site with no dangling old imports, and ran per-file `tsc --noEmit` (no local node_modules, so only syntax/parse-level checking, not full type resolution) which found zero syntax errors; a full `yarn install`/type-check across this large monorepo was not attempted due to time/resource constraints."
+}
