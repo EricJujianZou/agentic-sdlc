@@ -59,37 +59,42 @@ def main():
     if args.arm_branch:
         # rank -> instance mapping from the frozen list is authoritative;
         # subject meta.json is recorded but not trusted for identity.
+        # Accepts comma-separated branch/prefix lists (zipped); patches are
+        # sorted by instance so same-instance grades share one image pull.
         frozen = json.load(open(os.path.join(REPO, "bench5", "instances.json")))
         by_rank = {r["rank"]: r["instance_id"] for r in frozen["instances"]}
-        cell = args.results_prefix.rstrip("/").split("/")[-2] + "_" + \
-            args.results_prefix.rstrip("/").split("/")[-1]
-        tree = sh(["git", "ls-tree", "-r", "--name-only",
-                   f"origin/{args.arm_branch}"])
         import re as _re
-        ranks = sorted({int(m.group(1)) for m in _re.finditer(
-            _re.escape(args.results_prefix) + r"/r(\d{3})/patch\.diff",
-            tree)})
-        print(f"{args.arm_branch}: {len(ranks)} results present")
-        for rank in ranks:
-            iid = by_rank[rank]
-            prefix = f"{cell}_r{rank:03d}"
-            outp = os.path.join(HARNESS_WIN,
-                                args.eval_dir.replace("/", os.sep), iid,
-                                f"{prefix}_output.json")
-            if not args.redo and os.path.exists(outp):
-                continue  # already graded
-            patch = git_show(args.arm_branch,
-                             f"{args.results_prefix}/r{rank:03d}/patch.diff")
-            try:
-                meta = json.loads(git_show(
-                    args.arm_branch, f"{args.results_prefix}/r{rank:03d}/meta.json"))
-            except RuntimeError:
-                meta = {}
-            patches.append({"instance_id": iid, "patch": patch, "prefix": prefix})
-            rows[iid] = df.loc[iid]
-            branch_info[prefix] = {"status": "collected", "instance_id": iid,
-                                   "prefix": prefix, "meta": meta,
-                                   "patch_bytes": len(patch)}
+        for arm_branch, results_prefix in zip(args.arm_branch.split(","),
+                                              args.results_prefix.split(",")):
+            parts = results_prefix.rstrip("/").split("/")
+            cell = parts[-2] + "_" + parts[-1]
+            tree = sh(["git", "ls-tree", "-r", "--name-only",
+                       f"origin/{arm_branch}"])
+            ranks = sorted({int(m.group(1)) for m in _re.finditer(
+                _re.escape(results_prefix) + r"/r(\d{3})/patch\.diff", tree)})
+            print(f"{arm_branch}: {len(ranks)} results present")
+            for rank in ranks:
+                iid = by_rank[rank]
+                prefix = f"{cell}_r{rank:03d}"
+                outp = os.path.join(HARNESS_WIN,
+                                    args.eval_dir.replace("/", os.sep), iid,
+                                    f"{prefix}_output.json")
+                if not args.redo and os.path.exists(outp):
+                    continue  # already graded
+                patch = git_show(arm_branch,
+                                 f"{results_prefix}/r{rank:03d}/patch.diff")
+                try:
+                    meta = json.loads(git_show(
+                        arm_branch, f"{results_prefix}/r{rank:03d}/meta.json"))
+                except RuntimeError:
+                    meta = {}
+                patches.append({"instance_id": iid, "patch": patch,
+                                "prefix": prefix})
+                rows[iid] = df.loc[iid]
+                branch_info[prefix] = {"status": "collected",
+                                       "instance_id": iid, "prefix": prefix,
+                                       "meta": meta, "patch_bytes": len(patch)}
+        patches.sort(key=lambda p: (p["instance_id"], p["prefix"]))
 
     for branch in (args.branches.split(",") if args.branches else []):
         branch = branch.strip()
