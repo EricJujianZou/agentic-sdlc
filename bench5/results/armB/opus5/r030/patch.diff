@@ -1,0 +1,77 @@
+diff --git a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
+index dee35c1..bcbb897 100644
+--- a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
++++ b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
+@@ -45,6 +45,45 @@ const reorderItems = (collection: SystemFolder[]): SystemFolder[] =>
+         return nextItem;
+     });
+ 
++/**
++ * "Sent" and "All sent" are two representations of the same folder, only one of
++ * them is visible at a time. They must always stay next to each other, so moving
++ * one of them moves the other one along with it.
++ */
++const LINKED_SYSTEM_FOLDERS: Partial<Record<MAILBOX_LABEL_IDS, MAILBOX_LABEL_IDS>> = {
++    [MAILBOX_LABEL_IDS.SENT]: MAILBOX_LABEL_IDS.ALL_SENT,
++    [MAILBOX_LABEL_IDS.ALL_SENT]: MAILBOX_LABEL_IDS.SENT,
++};
++
++/**
++ * Places the folder linked to the dragged one right before it, keeping its own
++ * visibility untouched, then recomputes every order so the list stays contiguous
++ */
++const moveLinkedItem = (collection: SystemFolder[], draggedID: MAILBOX_LABEL_IDS): SystemFolder[] => {
++    const linkedID = LINKED_SYSTEM_FOLDERS[draggedID];
++    if (linkedID === undefined) {
++        return collection;
++    }
++
++    const linkedItem = collection.find((item) => item.labelID === linkedID);
++    const draggedItem = collection.find((item) => item.labelID === draggedID);
++    if (!linkedItem || !draggedItem) {
++        return collection;
++    }
++
++    const collectionWithoutLinkedItem = collection.filter((item) => item.labelID !== linkedID);
++    const draggedItemIndex = collectionWithoutLinkedItem.findIndex((item) => item.labelID === draggedID);
++
++    const nextLinkedItem = cloneItem(linkedItem);
++    nextLinkedItem.display = draggedItem.display;
++
++    return reorderItems([
++        ...collectionWithoutLinkedItem.slice(0, draggedItemIndex),
++        nextLinkedItem,
++        ...collectionWithoutLinkedItem.slice(draggedItemIndex),
++    ]);
++};
++
+ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, systemFolders) => {
+     if (draggedID === MAILBOX_LABEL_IDS.INBOX) {
+         return systemFolders;
+@@ -82,7 +121,7 @@ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, syste
+             }
+             return clonedItem;
+         });
+-        return nextItems;
++        return moveLinkedItem(nextItems, draggedID);
+     }
+ 
+     if (droppedOver === 'INBOX') {
+@@ -104,7 +143,7 @@ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, syste
+             }
+             return clonedItem;
+         });
+-        return nextItems;
++        return moveLinkedItem(nextItems, draggedID);
+     }
+ 
+     if (droppedOver === 'MORE_FOLDER') {
+@@ -136,7 +175,7 @@ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, syste
+             }
+             return clonedItem;
+         });
+-        return nextItems;
++        return moveLinkedItem(nextItems, draggedID);
+     }
+ 
+     return systemFolders;

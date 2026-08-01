@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_protonmail__webclients-fc9d535e9beb3ae30a52a7146398cadfd6e30606",
+  "model": "opus5",
+  "started_at": "2026-08-01T06:39:32Z",
+  "finished_at": "2026-08-01T06:55:32Z",
+  "self_assessment": "moveSystemFolders now keeps SENT and ALL_SENT adjacent: a LINKED_SYSTEM_FOLDERS table pairs the two label IDs and a moveLinkedItem helper, applied after each of the three drop branches (item, inbox, more-folder), re-inserts the linked folder directly before the dragged one, mirrors the dragged folder's display section onto it, leaves its visible flag untouched, and re-runs reorderItems so every order is contiguous. For the spec scenario {Inbox, Drafts, Sent, All sent (hidden), Scheduled} with Sent dropped on Inbox the result is exactly Inbox(1), All sent(2, still hidden), Sent(3), Drafts(4), Scheduled(5). Verified by transpiling the helper with tsc and running it under node against stubbed @proton modules: all 10 assertions from the existing helpers test suite still pass unchanged plus the new linked-move case; tsc reports no type errors in the file (only unresolved-module noise). jest could not be run - the proton monorepo needs a full yarn install and the proxy blocks the git/registry fetches."
+}
