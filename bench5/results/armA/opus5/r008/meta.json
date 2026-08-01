@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_protonmail__webclients-8142704f447df6e108d53cab25451c8a94976b92",
+    "model": "opus5",
+    "started_at": "2026-08-01T12:34:12Z",
+    "finished_at": "2026-08-01T12:53:07Z",
+    "turns_estimate": 40,
+    "self_assessment": "Moved CALENDAR_TYPE/CALENDAR_TYPE_EXTENDED/EXTENDED_CALENDAR_TYPE/CALENDAR_DISPLAY/SETTINGS_VIEW out of interfaces/calendar into calendar/constants.ts and repointed all 20 consumers; tsc clean on shared/components/calendar/mail/testing, all 5 affected jest suites pass, prettier+eslint clean."
+}
