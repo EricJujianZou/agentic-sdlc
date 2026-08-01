@@ -47,3 +47,14 @@
 - **Submodules:** `git submodule update --init` before touching
   submodule-tracked dirs; a pinned submodule commit named in the task
   is often already fetchable locally without an extra `git fetch`.
+- **No `protoc` in this env.** For gogo-proto changes, hand-edit both
+  `.proto` and generated `.pb.go`: struct field + `Get<X>()` + a case in
+  `MarshalToSizedBuffer` (REVERSE field-number order, tag byte =
+  `(fieldNum<<3)|wireType`) + `Size()` + a `case N:` in `Unmarshal` —
+  copy an existing field of the same Go type as template.
+- **`gofmt -w` on these old files reformats every doc comment** (list
+  indents etc.), not just touched lines — `git diff -U0 <file> | grep
+  '^@@'` after formatting, revert hunks far from your edit.
+- **teleport `lib/auth` tests panic on Go 1.24** (`reflect2` nil-deref
+  via `json-iterator`) even unmodified — pre-existing env issue, not
+  your patch; confirm with `git stash` + rerun.
