@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-436341a4a522dc83eb8bddd1164b764c8dd6bc45",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:50:12Z",
+  "finished_at": "2026-08-01T08:04:43Z",
+  "self_assessment": "Implemented all requested config/os.go EOL date changes and windowsReleases KB extensions with consistently named struct literals (verified no positional literals exist anywhere in the initializer); go build/vet succeed and I updated the pre-existing stale EOL/Windows-KB test fixtures (which encoded the old dates/KB lists) so the full config and scanner test suites pass, though revision numbers for the new Windows KBs were sourced from public Microsoft update-history pages since the issue text only specified KB numbers, not revisions."
+}

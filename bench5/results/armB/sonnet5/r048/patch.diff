@@ -1,0 +1,64 @@
+diff --git a/config/os.go b/config/os.go
+index ba958d1..7de8e1c 100644
+--- a/config/os.go
++++ b/config/os.go
+@@ -2,6 +2,7 @@ package config
+ 
+ import (
+ 	"fmt"
++	"regexp"
+ 	"strings"
+ 	"time"
+ 
+@@ -39,10 +40,27 @@ func (e EOL) IsExtendedSuppportEnded(now time.Time) bool {
+ func GetEOL(family, release string) (eol EOL, found bool) {
+ 	switch family {
+ 	case constant.Amazon:
++		// https://docs.aws.amazon.com/linux/al2023/ug/release-cadence.html
+ 		eol, found = map[string]EOL{
+ 			"1":    {StandardSupportUntil: time.Date(2023, 6, 30, 23, 59, 59, 0, time.UTC)},
+ 			"2":    {StandardSupportUntil: time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC)},
+ 			"2022": {StandardSupportUntil: time.Date(2026, 6, 30, 23, 59, 59, 0, time.UTC)},
++			"2023": {
++				StandardSupportUntil: time.Date(2027, 6, 30, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2029, 6, 30, 23, 59, 59, 0, time.UTC),
++			},
++			"2025": {
++				StandardSupportUntil: time.Date(2029, 6, 30, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2031, 6, 30, 23, 59, 59, 0, time.UTC),
++			},
++			"2027": {
++				StandardSupportUntil: time.Date(2031, 6, 30, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2033, 6, 30, 23, 59, 59, 0, time.UTC),
++			},
++			"2029": {
++				StandardSupportUntil: time.Date(2033, 6, 30, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2035, 6, 30, 23, 59, 59, 0, time.UTC),
++			},
+ 		}[getAmazonLinuxVersion(release)]
+ 	case constant.RedHat:
+ 		// https://access.redhat.com/support/policy/updates/errata
+@@ -327,10 +345,21 @@ func majorDotMinor(osVer string) (majorDotMinor string) {
+ 	return fmt.Sprintf("%s.%s", ss[0], ss[1])
+ }
+ 
++var amazonLinuxDatedReleasePattern = regexp.MustCompile(`^\d{4}\.\d{2}$`)
++
+ func getAmazonLinuxVersion(osRelease string) string {
+ 	ss := strings.Fields(osRelease)
+ 	if len(ss) == 1 {
+-		return "1"
++		// Amazon Linux 1 dated releases look like "2018.03"
++		if amazonLinuxDatedReleasePattern.MatchString(ss[0]) {
++			return "1"
++		}
++		return "unknown"
++	}
++	switch ss[0] {
++	case "1", "2", "2022", "2023", "2025", "2027", "2029":
++		return ss[0]
++	default:
++		return "unknown"
+ 	}
+-	return ss[0]
+ }

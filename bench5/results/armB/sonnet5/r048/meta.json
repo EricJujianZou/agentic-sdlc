@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-6682232b5c8a9d08c0e9f15bd90d41bff3875adc",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T07:45:00Z",
+  "finished_at": "2026-08-01T07:58:00Z",
+  "self_assessment": "High confidence in the AL2023 dates (standard support until 2027-06-30, extended/maintenance until 2029-06-30, corroborated by multiple current AWS-docs-derived sources); the 2025/2027/2029 dates are extrapolated by applying the same +4/+6-year-from-release-year formula since AWS never published fixed dates for those versions (and real-world AL2025 was later cancelled) -- lower confidence on those three, but they follow the cadence AWS had originally announced and match the pattern implied by the issue."
+}
