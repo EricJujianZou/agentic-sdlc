@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_gravitational__teleport-0415e422f12454db0c22316cf3eaa5088d6b6322",
+  "model": "opus5",
+  "started_at": "2026-08-01T06:31:07Z",
+  "finished_at": "2026-08-01T06:36:24Z",
+  "self_assessment": "Added auth.U2FAuthenticateChallenge (embedded legacy single challenge + new Challenges list); U2FSignRequest now emits one challenge per registered U2F device; propagated the type through auth_with_roles, clt (client + interface), web/sessions and the /webapi/u2f/signrequest handler; CLI SSHAgentU2FLogin now decodes all challenges and passes them to u2f.AuthenticateSignChallenge so any registered key works, with back-compat synthesis of Challenges from the legacy field for pre-6.0 servers. Verified: go build ./... clean, go vet clean (one pre-existing time.Since warning), lib/client tests pass; lib/auth test binary panics on the clean base too (json-iterator/reflect2 vs Go 1.24), so it could not be exercised."
+}
