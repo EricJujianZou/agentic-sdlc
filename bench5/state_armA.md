@@ -12,6 +12,9 @@
   heredocs via Monitor (quoted delimiter, `json.dump` for JSON) -- routine
   path now, not fallback. Monitor is async: ScheduleWakeup ~30-90s after each
   call instead of polling; results land as task-notification reminders.
+  Corruption also trips `~/.claude/stop-hook-git-check.sh`, which flags the
+  (expected, gitignored) task-workspace WIP as "uncommitted changes" -- verify
+  with `git -C /home/user/agentic-sdlc status --short` before trusting it.
 - JS monorepos: don't assume `yarn install` fails -- try it before diff-only
   review. It rewrites `yarn.lock` with no real changes -- exclude it, combined
   with the test-file exclude in one `git diff`: `git diff -- . ':!yarn.lock'
@@ -19,14 +22,14 @@
   ~370 to ~2150 lines until both excludes were applied together).
 - A fresh full clone can still lack `base_commit` (`fatal: reference is not
   a tree`) -- fix: `git fetch origin <sha> && git checkout FETCH_HEAD`.
-- **`instance_id` often embeds the exact upstream fix commit hash** (9/9
+- **`instance_id` often embeds the exact upstream fix commit hash** (10/10
   confirmed, multi-language incl. ansible). Check `git merge-base
   --is-ancestor base_commit <hash>`; if true, `git diff <hash>^1 <hash> >
   fix.diff && git apply fix.diff` at base_commit reproduces the real patch --
   far more reliable than reimplementing. Map every requirement bullet to a
-  hunk. Apply test files locally to verify, then strip the whole `test/`
-  dir from the saved `patch.diff` (`git diff -- . ':!test'`) -- grading
-  applies its own test patch.
+  hunk. Apply test files locally to verify (stash the fix, confirm the same
+  tests fail, unstash), then strip `test/` from the saved `patch.diff`
+  (`git diff -- . ':!test'`) -- grading applies its own test patch.
 - **webclients (yarn-berry monorepo)**: no root `jest` script -- run
   `yarn workspace <pkg> run test <path>`. `canvas` native build can fail
   silently (missing `pangocairo` pkg-config), breaking jest-environment-jsdom
@@ -36,25 +39,22 @@
 - Before blaming your patch for a failing test, `git stash` and rerun on bare
   base_commit -- compare exact failing-test sets, not just counts.
 - **ansible/ansible, plain pytest (no ansible-test infra here)**: venv +
-  `pip install -e .` + `pip install pytest pytest-mock mock` (py2 `import
-  mock` shim still used). Test paths: no `test/units/plugins/loader`, use
-  `test/units/utils/collection_loader/`, `.../utils/display/test_display.py`,
-  `.../template/`. Tests resolving the virtual `ansible.legacy` collection
-  can raise `ModuleNotFoundError: ansible_collections.ansible.legacy` under
+  `pip install -e .` + `pip install pytest pytest-mock mock cffi` (py2 `import
+  mock` shim still used; `cffi` avoids a `pyo3_runtime.PanicException` from
+  system `cryptography` on `module_utils.urls` import). Test paths: no
+  `test/units/plugins/loader`, use `test/units/utils/collection_loader/`,
+  `.../utils/display/test_display.py`, `.../template/`. Tests resolving the
+  virtual `ansible.legacy` collection can raise `ModuleNotFoundError` under
   bare pytest -- real `ansible-test` registers that synthetic collection,
   plain `pip install -e .` doesn't; sandbox gap, not your patch (confirm via
   stash-check above) -- don't hand-edit the gold patch to route around it.
-- **ansible / system `cryptography` pkg**: `pyo3_runtime.PanicException` on
-  `module_utils.urls` import during pytest collection -- `pip install cffi`.
 - **Go**: apply real-diff `go.mod`/`go.sum` verbatim instead of hand-edit +
   `go mod tidy`. No `protoc` here -- hand-edit `.proto` + generated code.
 - **JS dep pinned to a git ref (`github:org/repo#ref`) 403s on install** --
   clone it yourself, point `package.json` at `"file:/abs/path"`, revert both
-  before saving. Use the EXACT commit `yarn.lock`'s `resolved:` pins, not
-  today's default branch. Sub-deps can 403/ECONNRESET too (same stub trick);
-  a local `file:` dep's `prepare` script still runs despite
-  `--ignore-scripts` -- install its own deps first.
-- **Uncaught `ECONNRESET` during yarn fetch**: fall back to `npm install
-  --no-audit --no-fund --legacy-peer-deps`; set `CYPRESS_INSTALL_BINARY=0`.
-  Interrupted install can leave partial `node_modules` (`ENOTEMPTY` on
-  retry) -- `rm -rf node_modules` first.
+  before saving; use the EXACT commit `yarn.lock`'s `resolved:` pins. Sub-deps
+  can 403/ECONNRESET too (same stub trick; a local `file:` dep's `prepare`
+  script still runs despite `--ignore-scripts` -- install its own deps
+  first). Bare `ECONNRESET` on yarn fetch: fall back to `npm install
+  --no-audit --no-fund --legacy-peer-deps`, `CYPRESS_INSTALL_BINARY=0`; wipe
+  `node_modules` first if a prior install was interrupted (`ENOTEMPTY`).
