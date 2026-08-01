@@ -1,0 +1,46 @@
+diff --git a/src/controllers/write/users.js b/src/controllers/write/users.js
+index 8b7e483..222d664 100644
+--- a/src/controllers/write/users.js
++++ b/src/controllers/write/users.js
+@@ -44,7 +44,9 @@ Users.exists = async (req, res) => {
+ };
+ 
+ Users.get = async (req, res) => {
+-	helpers.formatApiResponse(200, res, await user.getUserData(req.params.uid));
++	const userData = await user.getUserData(req.params.uid);
++	const publicUserData = await user.hidePrivateData(userData, req.uid);
++	helpers.formatApiResponse(200, res, publicUserData);
+ };
+ 
+ Users.update = async (req, res) => {
+diff --git a/src/user/data.js b/src/user/data.js
+index 7b80bb1..dfbd731 100644
+--- a/src/user/data.js
++++ b/src/user/data.js
+@@ -272,6 +272,26 @@ module.exports = function (User) {
+ 		}
+ 	}
+ 
++	User.hidePrivateData = async function (userData, callerUID) {
++		const _userData = { ...userData };
++
++		const [isAdmin, isGlobalModerator, { showemail, showfullname }] = await Promise.all([
++			User.isAdministrator(callerUID),
++			User.isGlobalModerator(callerUID),
++			User.getSettings(userData.uid),
++		]);
++		const isSelf = parseInt(callerUID, 10) === parseInt(userData.uid, 10);
++
++		if (!isAdmin && !isGlobalModerator && !isSelf && (!showemail || meta.config.hideEmail)) {
++			_userData.email = '';
++		}
++		if (!isAdmin && !isGlobalModerator && !isSelf && (!showfullname || meta.config.hideFullname)) {
++			_userData.fullname = '';
++		}
++
++		return _userData;
++	};
++
+ 	User.getIconBackgrounds = async (uid = 0) => {
+ 		let iconBackgrounds = [
+ 			'#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
