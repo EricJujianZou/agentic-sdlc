@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_protonmail__webclients-8142704f447df6e108d53cab25451c8a94976b92",
+  "model": "sonnet5",
+  "started_at": "2026-08-01T12:10:44Z",
+  "finished_at": "2026-08-01T12:28:52Z",
+  "turns_estimate": 25,
+  "self_assessment": "Centralized CALENDAR_TYPE/CALENDAR_TYPE_EXTENDED/EXTENDED_CALENDAR_TYPE/CALENDAR_DISPLAY into calendar/constants.ts (which already held SETTINGS_VIEW/VIEWS/CALENDAR_FLAGS/limits), removed the duplicate SETTINGS_VIEW declared in Calendar.ts, and repointed all 9 required interface/consumer/shared-lib files to import from the authoritative module while leaving the barrel re-export intact for unlisted consumers; verified with tsc across @proton/shared, @proton/components, proton-calendar, and proton-mail (all pass, zero errors) and kept enum values numerically identical so no behavior/serialization change."
+}
