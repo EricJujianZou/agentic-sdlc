@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_flipt-io__flipt-e88e93990e3ec1e7697754b423decc510d5dd5fe",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T06:40:24Z",
+  "finished_at": "2026-08-01T06:51:04Z",
+  "self_assessment": "Used real protoc (v25.3) + protoc-gen-go v1.31.0 (pinned to match the repo's existing generated-code version) to regenerate evaluation.pb.go from the edited evaluation.proto, rather than hand-patching the generated Go; go build/go vet/go test all pass, including the updated flag_key assertions across every boolean and variant match/fallback branch and the batch test."
+}
