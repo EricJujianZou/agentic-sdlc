@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_qutebrowser__qutebrowser-deeb15d6f009b3ca0c3bd503a7cef07462bd16b4-v363c8a7e5ccdf6968fc7ab84a2053ac78036691d",
+  "model": "opus5",
+  "started_at": "2026-08-01T06:27:57Z",
+  "finished_at": "2026-08-01T06:39:57Z",
+  "self_assessment": "Rewrote urlutils incdec: segment getters/setters moved to a module-level _URL_SEGMENTS table using QUrl.FullyEncoded getters and QUrl.StrictMode setters so percent-encoded data round-trips losslessly; the match regex gained (?<!%)(?<!%.) lookbehinds so digits inside percent-encoded triplets are never selected in any segment; decrement now raises IncDecError when count exceeds the value (instead of only when value<=0); bad incdec raises ValueError and count<1 raises ValueError. Verified with a standalone PyQt5 script reproducing the whole existing TestIncDecNumber matrix plus new encoded-sequence cases (%3A5, #%3A10, ?v=%3A5, %C3%B6 hosts/paths) - all pass; the repo's pytest conftest is incompatible with the installed pytest so the suite itself could not be run."
+}
