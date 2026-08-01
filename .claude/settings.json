@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet python hooks/pretooluse_guard.py"
+            "command": "uv run --quiet python \"$CLAUDE_PROJECT_DIR/hooks/pretooluse_guard.py\""
           }
         ]
       },
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet python hooks/pretooluse_guard.py"
+            "command": "uv run --quiet python \"$CLAUDE_PROJECT_DIR/hooks/pretooluse_guard.py\""
           }
         ]
       }
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet python hooks/posttooluse_autocommit.py"
+            "command": "uv run --quiet python \"$CLAUDE_PROJECT_DIR/hooks/posttooluse_autocommit.py\""
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet python hooks/stop_checklist.py"
+            "command": "uv run --quiet python \"$CLAUDE_PROJECT_DIR/hooks/stop_checklist.py\""
           }
         ]
       }
