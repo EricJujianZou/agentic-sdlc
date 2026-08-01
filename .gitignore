@@ -220,6 +220,9 @@ __marimo__/
 # Harness runtime artifacts (per-run, never durable — see architecture.md memory model)
 state.json
 observability/runs/
-prd.json 
+prd.json
 # keep on giving me merge conflicts.
+
+# bench5 arm B: per-task scratch clones (results live in bench5/results/)
+bench5/workspaces/
 
