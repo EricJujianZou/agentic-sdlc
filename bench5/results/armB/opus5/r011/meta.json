@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+  "model": "opus5",
+  "started_at": "2026-08-01T05:18:47Z",
+  "finished_at": "2026-08-01T05:27:08Z",
+  "self_assessment": "Added KEVType (CISAKEVType=cisa, VulnCheckKEVType=vulncheck) and the KEV/CISAKEV/VulnCheckKEV/VulnCheckXDB/VulnCheckReportedExploitation structs to models, plus a first-class KEVs field on VulnInfo. Bumped go-kev to v0.3.0 (the pinned version had no VulnCheck model) and rewrote FillWithKEVuln to use driver.GetKEVByCveID/db.Response, mapping both CISA and VulnCheck entries into a unified KEV list via a toModelKEVs helper - CISA entries carry Note and normalize the 1000-01-01 placeholder due date to nil, VulnCheck entries carry XDB records and ReportedExploitation. Added ScanResult.FormatKEVCveSummary returning '%d KEVs' and wired it into the one-line reporter summary; SortForJSONOutput now orders KEVs by Type then VulnerabilityName. Verified: go build ./... clean, gofmt clean, and the full go test ./... suite passes."
+}
