@@ -242,6 +242,23 @@ invocation per patch with a socket-health wait between (grade_batch.py
 serial mode, commit 1bbd8d5). All "no output.json" pseudo-fails were
 re-run to genuine grades; nothing was scored from an infra failure.
 
+## 2026-08-01 04:10 UTC — MAIN RUN LAUNCHED (replicate 1, all 4 cells)
+
+| cell | mechanism | branch | trigger |
+|---|---|---|---|
+| SA (sonnet, scaffolded) | hourly cron, fresh session/instance, first-missing-task rule | `bench5/armA-sonnet5` | `trig_01KM6k7Ywx7UUaYLrY9wrEL7` (:09) |
+| OA (opus, scaffolded) | hourly cron, fresh session/instance | `bench5/armA-opus5` | `trig_01XK7db8WhVVzrpd8oPA3r5B` (:30) |
+| SB (sonnet, unscaffolded) | continuous session(s), successor-from-first-missing | `bench5/armB-sonnet5` | session `cse_01Xb9ZCZqn6WXFyLumH7kq41` 04:10 |
+| OB (opus, unscaffolded) | continuous session(s) | `bench5/armB-opus5` | session `cse_01WELRJWT7oUN9haKinzM4zm` 04:10 |
+
+Arm-A cron cadence = 1 task/hour/cell (projected ~2.5 days/cell, within
+the 3-day rule); collision rule in kickoff (first-missing + rebase +
+abandon duplicates). Arm-B successor sessions are launched by the
+orchestrator on stall (>2h without a new push) or silent death, starting
+from the first missing result. Pilot2 straggler relaunches (opus r005,
+sonnet r017) remain in flight; their grades append to the pilot table
+and cannot change gate outcomes.
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are
