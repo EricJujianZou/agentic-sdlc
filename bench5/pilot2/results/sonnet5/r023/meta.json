@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_tutao__tutanota-09c2776c0fce3db5c6e18da92b5a45dce9f013aa-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T03:33:09Z",
+  "finished_at": "2026-08-01T03:52:45Z",
+  "turns_estimate": 45,
+  "self_assessment": "Implemented a per-operation OperationProgressTracker (main), threaded it through CalendarFacade.saveImportedCalendarEvents/_saveCalendarEvents via an onProgress callback bypassing the generic progress channel, and wired CalendarImporterDialog to register/close the operation; tsc is clean and the full unit test suite (8091 assertions, including CalendarFacadeTest) passes unmodified, though I can't run the hidden grading tests myself so confidence is good but not certain."
+}
