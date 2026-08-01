@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_NodeBB__NodeBB-97c8569a798075c50e93e585ac741ab55cb7c28b-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T03:05:35Z",
+  "finished_at": "2026-08-01T03:13:40Z",
+  "turns_estimate": 34,
+  "self_assessment": "Added User.hidePrivateData(userData, callerUID) in src/user/data.js (non-mutating copy; self/admin/global-mod bypass; email gated on showemail + meta.config.hideEmail, fullname on showfullname + meta.config.hideFullname, hidden as empty strings) and applied it in Users.get in src/controllers/write/users.js; mirrors the existing accounts/helpers.js semantics and passes 14 stubbed-dependency branch tests, but NodeBB's real suite needs a live database so it was not run here."
+}
