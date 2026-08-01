@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_element-hq__element-web-f14374a51c153f64f313243f2df6ea4971db4e15",
+  "model": "opus5",
+  "started_at": "2026-08-01T10:34:10Z",
+  "finished_at": "2026-08-01T11:04:00Z",
+  "turns_estimate": 45,
+  "self_assessment": "Added a reusable CancelButton (size prop -> --size custom property), made DisambiguatedProfile renderable as any element, reworked the reply preview to name the sender and use the shared cancel button, and made the tombstone notice a <p>; jest (full suite minus 6 pre-existing map/snapshot failures), eslint and stylelint pass, exact upstream wording for the new strings is a guess."
+}
