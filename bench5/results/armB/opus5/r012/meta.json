@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_flipt-io__flipt-e42da21a07a5ae35835ec54f74004ebd58713874",
+  "model": "opus5",
+  "started_at": "2026-08-01T05:27:25Z",
+  "finished_at": "2026-08-01T05:31:24Z",
+  "self_assessment": "Added ErrDisabled/ErrDisabledf to errors; evaluate() now returns ErrDisabled for a disabled flag and batchEvaluate uses errors.As to skip past it (still aborting on ErrNotFound and any other error), so BatchEvaluate returns one entry per input flag in request order with per-entry timestamp and request_duration_millis plus the total duration on the outer response. Also migrated the hand-written files off github.com/golang/protobuf to google.golang.org/protobuf (emptypb.Empty for all delete RPCs, timestamppb.New/AsTime in evaluator and storage timestamp) - the generated .pb.go files were left alone since protoc is unavailable and the two Empty/Timestamp types are aliases, so it compiles either way. Verified: go build ./... and the full go test ./... suite pass, and a written test confirmed a batch containing a disabled flag now returns both entries in order instead of erroring. Note the base commit already fails to build under Go 1.24 due to an incomplete go.sum; that is pre-existing and I left go.sum untouched."
+}
