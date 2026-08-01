@@ -1,0 +1,66 @@
+diff --git a/src/user/data.js b/src/user/data.js
+index bccea4c..8481b6b 100644
+--- a/src/user/data.js
++++ b/src/user/data.js
+@@ -19,11 +19,20 @@ const intFields = [
+ ];
+ 
+ module.exports = function (User) {
+-	const iconBackgrounds = [
+-		'#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
+-		'#009688', '#1b5e20', '#33691e', '#827717', '#e65100', '#ff5722',
+-		'#795548', '#607d8b',
+-	];
++	User.getIconBackgrounds = async (uid = 0) => {
++		let iconBackgrounds = [
++			'#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
++			'#009688', '#1b5e20', '#33691e', '#827717', '#e65100', '#ff5722',
++			'#795548', '#607d8b',
++		];
++
++		({ iconBackgrounds } = await plugins.hooks.fire('filter:user.iconBackgrounds', {
++			uid,
++			iconBackgrounds,
++		}));
++
++		return iconBackgrounds;
++	};
+ 
+ 	const fieldWhitelist = [
+ 		'uid', 'username', 'userslug', 'email', 'email:confirmed', 'joindate',
+@@ -31,7 +40,7 @@ module.exports = function (User) {
+ 		'aboutme', 'signature', 'uploadedpicture', 'profileviews', 'reputation',
+ 		'postcount', 'topiccount', 'lastposttime', 'banned', 'banned:expire',
+ 		'status', 'flags', 'followerCount', 'followingCount', 'cover:url',
+-		'cover:position', 'groupTitle',
++		'cover:position', 'groupTitle', 'icon:bgColor',
+ 	];
+ 
+ 	User.guestData = {
+@@ -148,6 +157,9 @@ module.exports = function (User) {
+ 	};
+ 
+ 	async function modifyUserData(users, requestedFields, fieldsToRemove) {
++		const [iconBackgrounds] = await Promise.all([
++			User.getIconBackgrounds(),
++		]);
+ 		let uidToSettings = {};
+ 		if (meta.config.showFullnameAsDisplayName) {
+ 			const uids = users.map(user => user.uid);
+@@ -204,8 +216,15 @@ module.exports = function (User) {
+ 
+ 			// User Icons
+ 			if (user.hasOwnProperty('picture') && user.username && parseInt(user.uid, 10) && !meta.config.defaultAvatar) {
++				const iconBackgroundIndex = Array.prototype.reduce.call(
++					user.username, (cur, next) => cur + next.charCodeAt(), 0
++				) % iconBackgrounds.length;
++
+ 				user['icon:text'] = (user.username[0] || '').toUpperCase();
+-				user['icon:bgColor'] = iconBackgrounds[Array.prototype.reduce.call(user.username, (cur, next) => cur + next.charCodeAt(), 0) % iconBackgrounds.length];
++				// use the user's own choice when it is one of the allowed colours
++				user['icon:bgColor'] = iconBackgrounds.includes(user['icon:bgColor']) ?
++					user['icon:bgColor'] :
++					iconBackgrounds[iconBackgroundIndex];
+ 			}
+ 
+ 			if (user.hasOwnProperty('joindate')) {
