@@ -112,6 +112,49 @@ Execution notes:
   evals with FileNotFoundError; re-run. Rule stands: a grade only counts
   if `{prefix}_output.json` exists with a parsed test list.
 
+## 2026-08-01 — Pilot verdict (gate 5): FLOOR GATE FAILED
+
+All 20 cells delivered and graded genuinely (one opus session silently
+died and was relaunched per protocol — logged in pilot/sessions.json).
+Passed/needed tests per cell (official harness, all-or-nothing scoring):
+
+| rank | instance (repo) | sonnet-5 | opus-5 |
+|---|---|---|---|
+| r005 | protonmail/webclients | F 9/21 | F 9/21 |
+| r015 | flipt | F 0/21 | F 0/21 |
+| r025 | flipt | F 0/2 | F 0/2 |
+| r035 | NodeBB | F 422/425 | F 423/425 |
+| r045 | flipt | F 0/8 | F 5/8 |
+| r055 | element-web | F 35/51 | F 43/51 |
+| r065 | flipt | F 1/2 | F 1/2 |
+| r075 | qutebrowser | F 62/70 | F 67/70 |
+| r085 | vuls | F 78/80 | F 78/80 |
+| r095 | flipt | F 1/2 | F 1/2 |
+
+**Sonnet 5: 0/10. Opus 5: 0/10.**
+
+Gate outcomes:
+1. Ceiling (Opus < 90%): passed trivially — but at 0% it signals the
+   subset has no headroom in EITHER direction.
+2. Floor (Sonnet > 30%): **FAILED** (0%).
+3. Timing: fire->push 25 min - 2.2 h (median ~40 min). At ~40 min/instance
+   an arm-B continuous session over N=100 projects ~66 h > 3 days; the
+   pre-registered trim rule would bind regardless of the floor fix.
+
+Notes: (a) many failures are near-misses (423/425, 78/80, 67/70) — real
+attempts, not broken sessions; (b) despite 47/100 high-probe instances,
+memorization produced zero passes on this stratum — file-name recall does
+not equal solution recall; (c) subjects work from a plain sandbox clone
+(no per-instance Docker env), a handicap shared equally by all four cells
+but additive with instance difficulty.
+
+Diagnosis: the frozen battery is the "0/3 frontier passes" stratum by
+construction; the pilot shows it is unsolvable-at-floor for both subject
+models under our bare cloud-session condition, leaving no discriminating
+power for H1/H2/H5. Pre-registered remedy ("ease the subset ... and
+document the change") applies. Remedy decision checkpointed with the
+owner before any re-rank is committed.
+
 ### Memorization probe scoring (pre-specified with the freeze)
 
 See `probe/README.md`: gold files named verbatim in the issue text are
