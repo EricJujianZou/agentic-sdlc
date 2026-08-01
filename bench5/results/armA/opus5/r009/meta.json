@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_internetarchive__openlibrary-d109cc7e6e161170391f98f9a6fa1d02534c18e4-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+    "model": "opus5",
+    "started_at": "2026-08-01T13:33:40Z",
+    "finished_at": "2026-08-01T13:55:00Z",
+    "turns_estimate": 55,
+    "self_assessment": "Added AnnotatedSeedDict/AnnotatedSeed/AnnotatedSeedThing plus Seed.from_json/from_db/to_db/to_json and ThingReferenceDict (renamed from SeedDict, moved to core/models); List.add_seed/remove_seed/_index_of_seed/get_seeds now key-equal ignoring notes, normalize_input_seed accepts annotated seeds (empty notes collapse to a thing ref), edit.html gained a per-seed notes textarea (seeds--i--thing--key/seeds--i--notes) and view_body renders notes via format(); solr/export/CSV/carousel consumers updated. Full suite 1613 passed, ruff/black/mypy clean, before/after reproduced with a scratch script."
+}
