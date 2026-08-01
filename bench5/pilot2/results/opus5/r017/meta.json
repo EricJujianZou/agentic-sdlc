@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_ansible__ansible-984216f52e76b904e5b0fa0fb956ab4f1e0a7751-v1055803c3a812189a1133297f7f5468579283f86",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T03:04:51Z",
+  "finished_at": "2026-08-01T03:20:03Z",
+  "turns_estimate": 42,
+  "self_assessment": "Implemented all 12 requirements (AnsiblePluginError hierarchy, get_with_context/get_with_context_result, tombstone -> AnsiblePluginRemovedError, Display.get_deprecation_message, and the task_executor/action/template consumers); full test/units diff vs base shows zero new failures and a 28-check behavioral script passes, but I kept TAGGED_VERSION_RE parsing as a back-compat shim rather than converting the ~38 legacy tagged call sites, so wording for those may differ from the reference patch."
+}
