@@ -1,0 +1,228 @@
+diff --git a/contrib/trivy/parser/parser.go b/contrib/trivy/parser/parser.go
+index a690f0a..d0a82b9 100644
+--- a/contrib/trivy/parser/parser.go
++++ b/contrib/trivy/parser/parser.go
+@@ -6,8 +6,10 @@ import (
+ 	"time"
+ 
+ 	"github.com/aquasecurity/fanal/analyzer/os"
++	ftypes "github.com/aquasecurity/fanal/types"
+ 	"github.com/aquasecurity/trivy/pkg/report"
+ 	"github.com/aquasecurity/trivy/pkg/types"
++	"github.com/future-architect/vuls/constant"
+ 	"github.com/future-architect/vuls/models"
+ )
+ 
+@@ -22,9 +24,10 @@ func Parse(vulnJSON []byte, scanResult *models.ScanResult) (result *models.ScanR
+ 	vulnInfos := models.VulnInfos{}
+ 	uniqueLibraryScannerPaths := map[string]models.LibraryScanner{}
+ 	for _, trivyResult := range trivyResults {
+-		if IsTrivySupportedOS(trivyResult.Type) {
+-			overrideServerData(scanResult, &trivyResult)
++		if !IsTrivySupportedOS(trivyResult.Type) && !IsTrivySupportedLib(trivyResult.Type) {
++			continue
+ 		}
++		overrideServerData(scanResult, &trivyResult)
+ 		for _, vuln := range trivyResult.Vulnerabilities {
+ 			if _, ok := vulnInfos[vuln.VulnerabilityID]; !ok {
+ 				vulnInfos[vuln.VulnerabilityID] = models.VulnInfo{
+@@ -101,6 +104,7 @@ func Parse(vulnJSON []byte, scanResult *models.ScanResult) (result *models.ScanR
+ 					FixedIn: vuln.FixedVersion,
+ 				})
+ 				libScanner := uniqueLibraryScannerPaths[trivyResult.Target]
++				libScanner.Type = trivyResult.Type
+ 				libScanner.Libs = append(libScanner.Libs, types.Library{
+ 					Name:    vuln.PkgName,
+ 					Version: vuln.InstalledVersion,
+@@ -128,6 +132,7 @@ func Parse(vulnJSON []byte, scanResult *models.ScanResult) (result *models.ScanR
+ 		})
+ 
+ 		libscanner := models.LibraryScanner{
++			Type: v.Type,
+ 			Path: path,
+ 			Libs: libraries,
+ 		}
+@@ -168,11 +173,47 @@ func IsTrivySupportedOS(family string) bool {
+ 	return false
+ }
+ 
++// IsTrivySupportedLib :
++func IsTrivySupportedLib(typ string) bool {
++	supportedTypes := []string{
++		ftypes.Bundler,
++		ftypes.Cargo,
++		ftypes.Composer,
++		ftypes.Npm,
++		ftypes.NuGet,
++		ftypes.Pipenv,
++		ftypes.Poetry,
++		ftypes.Yarn,
++		ftypes.Jar,
++		ftypes.GoBinary,
++		ftypes.GoMod,
++	}
++	for _, supportedType := range supportedTypes {
++		if typ == supportedType {
++			return true
++		}
++	}
++	return false
++}
++
++// overrideServerData fills the server information of the scan result.
++// OS information takes precedence, so a library result is only used
++// when the trivy report has no OS information (library only scan).
+ func overrideServerData(scanResult *models.ScanResult, trivyResult *report.Result) {
+-	scanResult.Family = trivyResult.Type
+-	scanResult.ServerName = trivyResult.Target
+-	scanResult.Optional = map[string]interface{}{
+-		"trivy-target": trivyResult.Target,
++	if IsTrivySupportedOS(trivyResult.Type) {
++		scanResult.Family = trivyResult.Type
++		scanResult.ServerName = trivyResult.Target
++		scanResult.Optional = map[string]interface{}{
++			"trivy-target": trivyResult.Target,
++		}
++	} else if scanResult.Family == "" {
++		scanResult.Family = constant.ServerTypePseudo
++		if scanResult.ServerName == "" {
++			scanResult.ServerName = "library scan by trivy"
++		}
++		scanResult.Optional = map[string]interface{}{
++			"trivy-target": trivyResult.Target,
++		}
+ 	}
+ 	scanResult.ScannedAt = time.Now()
+ 	scanResult.ScannedBy = "trivy"
+diff --git a/contrib/trivy/parser/parser_test.go b/contrib/trivy/parser/parser_test.go
+index c1bd5c0..98a221b 100644
+--- a/contrib/trivy/parser/parser_test.go
++++ b/contrib/trivy/parser/parser_test.go
+@@ -3158,6 +3158,7 @@ func TestParse(t *testing.T) {
+ 				},
+ 				LibraryScanners: models.LibraryScanners{
+ 					{
++						Type: "npm",
+ 						Path: "node-app/package-lock.json",
+ 						Libs: []types.Library{
+ 							{Name: "jquery", Version: "3.3.9"},
+@@ -3165,12 +3166,14 @@ func TestParse(t *testing.T) {
+ 						},
+ 					},
+ 					{
++						Type: "composer",
+ 						Path: "php-app/composer.lock",
+ 						Libs: []types.Library{
+ 							{Name: "guzzlehttp/guzzle", Version: "6.2.0"},
+ 						},
+ 					},
+ 					{
++						Type: "pipenv",
+ 						Path: "python-app/Pipfile.lock",
+ 						Libs: []types.Library{
+ 							{Name: "django-cors-headers", Version: "2.5.2"},
+@@ -3179,6 +3182,7 @@ func TestParse(t *testing.T) {
+ 						},
+ 					},
+ 					{
++						Type: "bundler",
+ 						Path: "ruby-app/Gemfile.lock",
+ 						Libs: []types.Library{
+ 							{Name: "actionpack", Version: "5.2.3"},
+@@ -3194,6 +3198,7 @@ func TestParse(t *testing.T) {
+ 						},
+ 					},
+ 					{
++						Type: "cargo",
+ 						Path: "rust-app/Cargo.lock",
+ 						Libs: []types.Library{
+ 							{Name: "ammonia", Version: "1.9.0"},
+diff --git a/detector/detector.go b/detector/detector.go
+index b29d473..715953a 100644
+--- a/detector/detector.go
++++ b/detector/detector.go
+@@ -182,7 +182,11 @@ func Detect(rs []models.ScanResult, dir string) ([]models.ScanResult, error) {
+ // pass 2 configs
+ func DetectPkgCves(r *models.ScanResult, ovalCnf config.GovalDictConf, gostCnf config.GostConf) error {
+ 	// Pkg Scan
+-	if r.Release != "" {
++	if r.Family == constant.ServerTypePseudo {
++		logging.Log.Infof("pseudo type. Skip OVAL and gost detection")
++	} else if r.Release == "" {
++		logging.Log.Infof("r.Release is empty. Skip OVAL and gost detection")
++	} else {
+ 		// OVAL, gost(Debian Security Tracker) does not support Package for Raspbian, so skip it.
+ 		if r.Family == constant.Raspbian {
+ 			r = r.RemoveRaspbianPackFromResult()
+@@ -197,12 +201,6 @@ func DetectPkgCves(r *models.ScanResult, ovalCnf config.GovalDictConf, gostCnf c
+ 		if err := detectPkgsCvesWithGost(gostCnf, r); err != nil {
+ 			return xerrors.Errorf("Failed to detect CVE with gost: %w", err)
+ 		}
+-	} else if reuseScannedCves(r) {
+-		logging.Log.Infof("r.Release is empty. Use CVEs as it as.")
+-	} else if r.Family == constant.ServerTypePseudo {
+-		logging.Log.Infof("pseudo type. Skip OVAL and gost detection")
+-	} else {
+-		return xerrors.Errorf("Failed to fill CVEs. r.Release is empty")
+ 	}
+ 
+ 	for i, v := range r.ScannedCves {
+diff --git a/go.mod b/go.mod
+index c9b2805..5ceef4c 100644
+--- a/go.mod
++++ b/go.mod
+@@ -95,7 +95,9 @@ require (
+ 	github.com/gorilla/websocket v1.4.2 // indirect
+ 	github.com/grokify/html-strip-tags-go v0.0.1 // indirect
+ 	github.com/hashicorp/errwrap v1.1.0 // indirect
++	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
+ 	github.com/hashicorp/go-multierror v1.1.1 // indirect
++	github.com/hashicorp/go-retryablehttp v0.6.8 // indirect
+ 	github.com/hashicorp/hcl v1.0.0 // indirect
+ 	github.com/htcat/htcat v1.0.2 // indirect
+ 	github.com/huandu/xstrings v1.3.2 // indirect
+diff --git a/go.sum b/go.sum
+index d25d4c2..cd673f2 100644
+--- a/go.sum
++++ b/go.sum
+@@ -724,6 +724,7 @@ github.com/hashicorp/go-cleanhttp v0.5.1 h1:dH3aiDG9Jvb5r5+bYHsikaOUIpcM0xvgMXVo
+ github.com/hashicorp/go-cleanhttp v0.5.1/go.mod h1:JpRdi6/HCYpAwUzNwuwqhbovhLtngrth3wmdIIUrZ80=
+ github.com/hashicorp/go-getter v1.5.2/go.mod h1:orNH3BTYLu/fIxGIdLjLoAJHWMDQ/UKQr5O4m3iBuoo=
+ github.com/hashicorp/go-hclog v0.9.2/go.mod h1:5CU+agLiy3J7N7QjHK5d05KxGsuXiQLrjA0H7acj2lQ=
++github.com/hashicorp/go-hclog v0.15.0 h1:qMuK0wxsoW4D0ddCCYwPSTm4KQv1X1ke3WmPWZ0Mvsk=
+ github.com/hashicorp/go-hclog v0.15.0/go.mod h1:whpDNt7SSdeAju8AWKIWsul05p54N/39EeqMAyrmvFQ=
+ github.com/hashicorp/go-immutable-radix v1.0.0/go.mod h1:0y9vanUI8NX6FsYoO3zeMjhV/C5i9g4Q3DwcSNZ4P60=
+ github.com/hashicorp/go-msgpack v0.5.3/go.mod h1:ahLV/dePpqEmjfWmKiqvPkv/twdG7iPBM1vqhUKIvfM=
+diff --git a/models/cvecontents.go b/models/cvecontents.go
+index 5d830c0..a95b841 100644
+--- a/models/cvecontents.go
++++ b/models/cvecontents.go
+@@ -235,10 +235,10 @@ func (v CveContents) Sort() {
+ 		sort.Slice(contents, func(i, j int) bool {
+ 			if contents[i].Cvss3Score > contents[j].Cvss3Score {
+ 				return true
+-			} else if contents[i].Cvss3Score == contents[i].Cvss3Score {
++			} else if contents[i].Cvss3Score == contents[j].Cvss3Score {
+ 				if contents[i].Cvss2Score > contents[j].Cvss2Score {
+ 					return true
+-				} else if contents[i].Cvss2Score == contents[i].Cvss2Score {
++				} else if contents[i].Cvss2Score == contents[j].Cvss2Score {
+ 					if contents[i].SourceLink < contents[j].SourceLink {
+ 						return true
+ 					}
+diff --git a/scanner/base.go b/scanner/base.go
+index fa16d51..d4c60d8 100644
+--- a/scanner/base.go
++++ b/scanner/base.go
+@@ -29,8 +29,11 @@ import (
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/bundler"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/cargo"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/composer"
++	_ "github.com/aquasecurity/fanal/analyzer/library/gobinary"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/gomod"
++	_ "github.com/aquasecurity/fanal/analyzer/library/jar"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/npm"
++	_ "github.com/aquasecurity/fanal/analyzer/library/nuget"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/pipenv"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/poetry"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/yarn"

@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-4a72295de7b91faa59d90a5bee91535bbe76755d",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-01T06:33:33Z",
+  "finished_at": "2026-08-01T06:42:22Z",
+  "turns_estimate": 28,
+  "self_assessment": "All 7 requirements implemented: parser skips unsupported types via IsTrivySupportedOS/new IsTrivySupportedLib, sets Family=pseudo + ServerName 'library scan by trivy' + Optional[trivy-target] for library-only reports, stamps LibraryScanner.Type; DetectPkgCves skips OVAL/gost for pseudo or empty Release instead of erroring; CveContents.Sort() comparator self-comparison bug fixed; gobinary/jar/nuget analyzers blank-imported (go.mod +2 indirect via go mod tidy). Verified before/after with a built trivy-to-vuls on a library-only report (before: Family/ServerName/Type all empty -> the reported error path; after: correct), full `go test ./...` green, go vet clean, both default and -tags=scanner builds OK. Updated the 5 existing parser_test LibraryScanners expectations for the new Type field."
+}
