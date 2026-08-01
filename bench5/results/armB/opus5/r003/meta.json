@@ -1,0 +1,7 @@
+{
+  "instance_id": "instance_gravitational__teleport-288c5519ce0dec9622361a5e5d6cd36aa2d9e348",
+  "model": "opus5",
+  "started_at": "2026-08-01T04:28:27Z",
+  "finished_at": "2026-08-01T04:36:01Z",
+  "self_assessment": "Added repeated ServerNames field to DatabaseCertRequest (proto + hand-written gogo marshal/size/unmarshal, round-trip verified); lib/auth/db.go now falls back from legacy ServerName, sets all SANs as DNSNames and first entry as CommonName; tctl auth sign splits/dedups --host into ServerNames, errors when empty, sets legacy ServerName to first entry. TestGenerateDatabaseKeys passes; TestAuthSignKubeconfig failure is pre-existing on the clean base commit."
+}
