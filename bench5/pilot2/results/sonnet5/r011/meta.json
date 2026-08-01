@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+  "model": "claude-sonnet-5",
+  "started_at": "2026-08-01T03:02:06Z",
+  "finished_at": "2026-08-01T03:17:31Z",
+  "turns_estimate": 45,
+  "self_assessment": "Added the KEV/CISAKEV/VulnCheckKEV/VulnCheckXDB/VulnCheckReportedExploitation models, VulnInfo.KEVs field, ScanResult.FormatKEVCveSummary, KEV sorting in SortForJSONOutput, and rewired detector.FillWithKEVuln (bumping go-kev to v0.2.0 for VulnCheck support) to populate it from both CISA and VulnCheck sources; full repo builds and existing tests pass, but I could not run the hidden grading tests to confirm exact expected behavior/field-mapping choices."
+}
