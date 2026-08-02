@@ -1,0 +1,60 @@
+diff --git a/src/middleware/user.js b/src/middleware/user.js
+index 57c1db8..37c8450 100644
+--- a/src/middleware/user.js
++++ b/src/middleware/user.js
+@@ -239,6 +239,11 @@ module.exports = function (middleware) {
+ 		 */
+ 		const path = req.path.startsWith('/api/') ? req.path.replace('/api', '') : req.path;
+ 
++		// Email confirmation must always be reachable, otherwise the email can never be confirmed
++		if (path.startsWith('/confirm/')) {
++			return setImmediate(next);
++		}
++
+ 		if (!req.session.hasOwnProperty('registration')) {
+ 			if (req.uid && !path.endsWith('/edit/email')) {
+ 				const [confirmed, isAdmin] = await Promise.all([
+@@ -246,11 +251,16 @@ module.exports = function (middleware) {
+ 					user.isAdministrator(req.uid),
+ 				]);
+ 				if (meta.config.requireEmailAddress && !confirmed && !isAdmin) {
+-					controllers.helpers.redirect(res, '/me/edit/email');
++					req.session.registration = {
++						uid: req.uid,
++						updateEmail: true,
++					};
+ 				}
+ 			}
+ 
+-			return setImmediate(next);
++			if (!req.session.hasOwnProperty('registration')) {
++				return setImmediate(next);
++			}
+ 		}
+ 
+ 		const { allowed } = await plugins.hooks.fire('filter:middleware.registrationComplete', {
+diff --git a/test/controllers.js b/test/controllers.js
+index 211bb60..631c97b 100644
+--- a/test/controllers.js
++++ b/test/controllers.js
+@@ -620,7 +620,19 @@ describe('Controllers', () => {
+ 					});
+ 
+ 					assert.strictEqual(res.statusCode, 307);
+-					assert.strictEqual(res.headers.location, `${nconf.get('relative_path')}/me/edit/email`);
++					assert.strictEqual(res.headers.location, `${nconf.get('relative_path')}/register/complete`);
++				});
++
++				it('should not block access to the email confirmation route', async () => {
++					const res = await requestAsync(`${nconf.get('url')}/confirm/abcdef`, {
++						jar,
++						json: true,
++						resolveWithFullResponse: true,
++						followRedirect: false,
++						simple: false,
++					});
++
++					assert.notStrictEqual(res.statusCode, 307);
+ 				});
+ 			});
+ 		});
