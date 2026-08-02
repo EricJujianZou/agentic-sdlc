@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-308a35d6999427c02b1dbf5211c033ad3b352556-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+  "model": "opus5",
+  "started_at": "2026-08-02T16:34:02Z",
+  "finished_at": "2026-08-02T16:46:37Z",
+  "turns_estimate": 30,
+  "self_assessment": "Moved List (ListMixin merged in) and ListChangeset into openlibrary/core/lists/model.py with the required register_models(); full suite delta vs base is zero (2 pre-existing memcache failures, 1596->1597 pass), black/ruff clean, mypy error set identical, and reverting each registration/regex line flips exactly the matching tests. Two judgement calls declared: ListChangeset now extends client.Changeset (the upstream base would re-create the cycle) so I kept an explicit can_undo()->False, which is the only inherited method templates call - the unreachable _undo/get_undo_changeset were not copied; and I re-exported ListChangeset from plugins/upstream/models.py because upstream/utils.py imports it from there under TYPE_CHECKING."
+}
