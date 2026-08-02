@@ -51,10 +51,10 @@
   update --init vendor/infogami` + `PYTHONPATH=vendor/infogami:$PYTHONPATH`
   (conftest.py needs it); `pytest openlibrary/tests/<subtree>` offline, no
   docker/db. `apt-get install libpq-dev` 404s -- use `psycopg2-binary`,
-  strip `^psycopg2` from requirements.txt (repoint _test.txt's `-r`; pip
-  from repo dir). Golden commits + your own env fixes both leak unrelated
-  `requirements.txt`/`i18n/messages.pot` edits -- `git checkout base_commit
-  -- <file>` on both before saving `patch.diff`. `test_db.py` has a
-  standing unrelated circular import -- `--ignore` it. A refactor golden
-  patch that relocates tests fails locally once stripped -- diff against
-  its test changes before calling it a break.
+  strip `^psycopg2` from requirements.txt (repoint _test.txt's `-r`, or skip
+  it and `pip install` its test-only pkgs directly). Golden commits + your
+  own env fixes both leak unrelated `requirements.txt`/`i18n/messages.pot`
+  edits -- `git checkout base_commit -- <file>` on both before saving
+  `patch.diff`. `test_db.py` has a standing unrelated circular import --
+  `--ignore` it. A refactor golden patch that relocates tests fails locally
+  once stripped -- diff against its test changes before calling it a break.
