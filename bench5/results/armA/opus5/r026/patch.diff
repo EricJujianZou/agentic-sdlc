@@ -1,0 +1,194 @@
+diff --git a/qutebrowser/utils/urlutils.py b/qutebrowser/utils/urlutils.py
+index 59cf313..6214472 100644
+--- a/qutebrowser/utils/urlutils.py
++++ b/qutebrowser/utils/urlutils.py
+@@ -535,8 +535,9 @@ def _get_incdec_value(match, incdec, url, count):
+     # This should always succeed because we match \d+
+     val = int(number)
+     if incdec == 'decrement':
+-        if val <= 0:
+-            raise IncDecError("Can't decrement {}!".format(val), url)
++        if val < count:
++            raise IncDecError("Can't decrement {} by {}!".format(val, count),
++                              url)
+         val -= count
+     elif incdec == 'increment':
+         val += count
+@@ -551,27 +552,60 @@ def _get_incdec_value(match, incdec, url, count):
+     return ''.join([pre, zeroes, str(val), post])
+ 
+ 
++# Order of the segments as they appear in a URL.
++# Each entry is a (name, getter, setter) tuple, with the getter/setter taking
++# the QUrl as first argument. FullyEncoded/StrictMode are used so no
++# percent-encoded information gets lost when reading or writing a segment.
++_URL_SEGMENTS = [
++    ('host',
++     lambda url: url.host(QUrl.FullyEncoded),
++     lambda url, host: url.setHost(host, QUrl.StrictMode)),
++
++    ('port',
++     lambda url: str(url.port()) if url.port() > 0 else '',
++     lambda url, x: url.setPort(int(x))),
++
++    ('path',
++     lambda url: url.path(QUrl.FullyEncoded),
++     lambda url, path: url.setPath(path, QUrl.StrictMode)),
++
++    ('query',
++     lambda url: url.query(QUrl.FullyEncoded),
++     lambda url, query: url.setQuery(query, QUrl.StrictMode)),
++
++    ('anchor',
++     lambda url: url.fragment(QUrl.FullyEncoded),
++     lambda url, fragment: url.setFragment(fragment, QUrl.StrictMode)),
++]
++
++
+ def incdec_number(url, incdec, count=1, segments=None):
+     """Find a number in the url and increment or decrement it.
+ 
+     Args:
+         url: The current url
+         incdec: Either 'increment' or 'decrement'
+-        count: The number to increment or decrement by
++        count: The number to increment or decrement by (positive)
+         segments: A set of URL segments to search. Valid segments are:
+                   'host', 'port', 'path', 'query', 'anchor'.
+-                  Default: {'path', 'query'}
++                  Default: {'path'}
+ 
+     Return:
+         The new url with the number incremented/decremented.
+ 
+-    Raises IncDecError if the url contains no number.
++    Raises IncDecError if the url contains no number, or if decrementing
++    would result in a negative number.
++    Raises ValueError for an invalid incdec or count.
+     """
+     if not url.isValid():
+         raise InvalidUrlError(url)
+ 
++    if count < 1:
++        raise ValueError(
++            "Count must be a positive integer, not {}!".format(count))
++
+     if segments is None:
+-        segments = {'path', 'query'}
++        segments = {'path'}
+     valid_segments = {'host', 'port', 'path', 'query', 'anchor'}
+     if segments - valid_segments:
+         extra_elements = segments - valid_segments
+@@ -580,26 +614,18 @@ def incdec_number(url, incdec, count=1, segments=None):
+ 
+     # Make a copy of the QUrl so we don't modify the original
+     url = QUrl(url)
+-    # Order as they appear in a URL
+-    segment_modifiers = [
+-        ('host', url.host, url.setHost),
+-        ('port', lambda: str(url.port()) if url.port() > 0 else '',
+-         lambda x: url.setPort(int(x))),
+-        ('path', url.path, url.setPath),
+-        ('query', url.query, url.setQuery),
+-        ('anchor', url.fragment, url.setFragment),
+-    ]
+     # We're searching the last number so we walk the url segments backwards
+-    for segment, getter, setter in reversed(segment_modifiers):
++    for segment, getter, setter in reversed(_URL_SEGMENTS):
+         if segment not in segments:
+             continue
+ 
+-        # Get the last number in a string
+-        match = re.fullmatch(r'(.*\D|^)(0*)(\d+)(.*)', getter())
++        # Get the last number in a string not preceded by regex '%' or '%.'
++        match = re.fullmatch(r'(.*\D|^)(?<!%)(?<!%.)(0*)(\d+)(.*)',
++                             getter(url))
+         if not match:
+             continue
+ 
+-        setter(_get_incdec_value(match, incdec, url, count))
++        setter(url, _get_incdec_value(match, incdec, url, count))
+         return url
+ 
+     raise IncDecError("No number found in URL!", url)
+diff --git a/tests/unit/utils/test_urlutils.py b/tests/unit/utils/test_urlutils.py
+index e975853..daad544 100644
+--- a/tests/unit/utils/test_urlutils.py
++++ b/tests/unit/utils/test_urlutils.py
+@@ -677,16 +677,24 @@ class TestIncDecNumber:
+     def test_incdec_number_count(self, incdec, value, url, count):
+         """Test incdec_number with valid URLs and a count."""
+         base_value = value.format(20)
++        base_url = QUrl(url.format(base_value))
++        segments = {'host', 'path', 'query', 'anchor'}
++
++        if incdec == 'decrement' and count > 20:
++            # Decrementing by more than the number itself is rejected.
++            with pytest.raises(urlutils.IncDecError):
++                urlutils.incdec_number(base_url, incdec, count,
++                                       segments=segments)
++            return
++
+         if incdec == 'increment':
+             expected_value = value.format(20 + count)
+         else:
+             expected_value = value.format(20 - count)
+ 
+-        base_url = QUrl(url.format(base_value))
+         expected_url = QUrl(url.format(expected_value))
+-        new_url = urlutils.incdec_number(
+-            base_url, incdec, count,
+-            segments={'host', 'path', 'query', 'anchor'})
++        new_url = urlutils.incdec_number(base_url, incdec, count,
++                                         segments=segments)
+         assert new_url == expected_url
+ 
+     @pytest.mark.parametrize('number, expected, incdec', [
+@@ -718,6 +726,18 @@ class TestIncDecNumber:
+                                          segments=segments)
+         assert new_url == QUrl(expected)
+ 
++    @pytest.mark.parametrize('url, segments, expected', [
++        ('http://localhost/%3A5', {'path'}, 'http://localhost/%3A6'),
++        ('http://localhost/#%3A10', {'anchor'}, 'http://localhost/#%3A11'),
++        ('http://localhost/?v=%3A5', {'query'}, 'http://localhost/?v=%3A6'),
++        ('http://localhost/a%20b/1', {'path'}, 'http://localhost/a%20b/2'),
++    ])
++    def test_incdec_encoded(self, url, segments, expected):
++        """Test that percent-encoded data survives an incdec."""
++        new_url = urlutils.incdec_number(QUrl(url), 'increment',
++                                         segments=segments)
++        assert new_url.toString(QUrl.FullyEncoded) == expected
++
+     @pytest.mark.parametrize('url', [
+         "http://example.com/long/path/but/no/number",
+         "http://ex4mple.com/number/in/hostname",
+@@ -726,6 +746,8 @@ class TestIncDecNumber:
+         "http://example.com/%C3%B6/urlencoded/data",
+         "http://example.com/number/in/anchor#5",
+         "http://www2.ex4mple.com:42/all/of/the/%C3%A4bove#5",
++        "http://example.com/%23/%23",
++        "http://example.com/?value=3",
+     ])
+     def test_no_number(self, url):
+         """Test incdec_number with URLs that don't contain a number."""
+@@ -738,6 +760,19 @@ class TestIncDecNumber:
+             urlutils.incdec_number(QUrl('http://example.com/page_0.html'),
+                                    'decrement')
+ 
++    def test_number_below_0_by_count(self):
++        """Test incdec_number with a count bigger than the number."""
++        with pytest.raises(urlutils.IncDecError):
++            urlutils.incdec_number(QUrl('http://example.com/page_1.html'),
++                                   'decrement', 2)
++
++    @pytest.mark.parametrize('count', [0, -1])
++    def test_invalid_count(self, count):
++        """Test if incdec_number rejects a non-positive count."""
++        with pytest.raises(ValueError):
++            urlutils.incdec_number(QUrl('http://example.com/page_1.html'),
++                                   'increment', count)
++
+     def test_invalid_url(self):
+         """Test if incdec_number rejects an invalid URL."""
+         with pytest.raises(urlutils.InvalidUrlError):
