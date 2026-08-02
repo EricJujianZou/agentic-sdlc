@@ -1,0 +1,49 @@
+diff --git a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
+index dee35c1..cfa1799 100644
+--- a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
++++ b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
+@@ -45,6 +45,35 @@ const reorderItems = (collection: SystemFolder[]): SystemFolder[] =>
+         return nextItem;
+     });
+ 
++/**
++ * Some system folders are linked together and are displayed as an adjacent group.
++ * The linked folder is always positioned right before the folder it's linked to.
++ */
++const LINKED_SYSTEM_FOLDERS: Partial<Record<MAILBOX_LABEL_IDS, MAILBOX_LABEL_IDS>> = {
++    [MAILBOX_LABEL_IDS.SENT]: MAILBOX_LABEL_IDS.ALL_SENT,
++};
++
++/**
++ * Moves the folder linked to `labelID`, if any, right before it.
++ * Every other item keeps its relative position.
++ */
++const moveLinkedSystemFolder = (collection: SystemFolder[], labelID: MAILBOX_LABEL_IDS): SystemFolder[] => {
++    const linkedLabelID = LINKED_SYSTEM_FOLDERS[labelID];
++    if (linkedLabelID === undefined) {
++        return collection;
++    }
++
++    const itemIndex = collection.findIndex((item) => item.labelID === labelID);
++    const linkedItemIndex = collection.findIndex((item) => item.labelID === linkedLabelID);
++    if (itemIndex === -1 || linkedItemIndex === -1 || linkedItemIndex === itemIndex - 1) {
++        return collection;
++    }
++
++    // "move" removes the linked item before inserting it, shifting the target
++    // one step left when the linked item was sitting before it
++    return move(collection, linkedItemIndex, linkedItemIndex < itemIndex ? itemIndex - 1 : itemIndex);
++};
++
+ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, systemFolders) => {
+     if (draggedID === MAILBOX_LABEL_IDS.INBOX) {
+         return systemFolders;
+@@ -91,7 +120,7 @@ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, syste
+             return systemFolders;
+         }
+         const inboxItem = systemFolders[inboxItemIndex];
+-        const movedItems = move(systemFolders, draggedItemIndex, inboxItemIndex + 1);
++        const movedItems = moveLinkedSystemFolder(move(systemFolders, draggedItemIndex, inboxItemIndex + 1), draggedID);
+         const reorderedItems = reorderItems(movedItems);
+         const nextItems = reorderedItems.map((item) => {
+             const clonedItem = cloneItem(item);

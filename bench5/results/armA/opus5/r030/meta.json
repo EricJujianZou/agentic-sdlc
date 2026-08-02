@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_protonmail__webclients-fc9d535e9beb3ae30a52a7146398cadfd6e30606",
+    "model": "claude-opus-5",
+    "started_at": "2026-08-02T10:34:16Z",
+    "finished_at": "2026-08-02T10:47:30Z",
+    "turns_estimate": 30,
+    "self_assessment": "Added a LINKED_SYSTEM_FOLDERS map (SENT -> ALL_SENT) and a moveLinkedSystemFolder helper applied in the drop-on-INBOX branch of moveSystemFolders, so All Sent is repositioned directly before Sent and orders are recalculated contiguously; verified with the repo's own suite (5 tests) plus MailSidebar (12) green, a throwaway 8-case suite whose 3 linked-move cases flip red at base as a negative control, and tsc/eslint/prettier clean. Scoped to the INBOX branch per requirement bullet 2; the ITEM and MORE_FOLDER branches are unchanged since section-flip semantics for the linked folder are unspecified."
+}
