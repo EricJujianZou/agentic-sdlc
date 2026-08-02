@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_flipt-io__flipt-b4bb5e13006a729bc0eed8fe6ea18cff54acdacb",
+  "model": "opus5",
+  "started_at": "2026-08-02T15:33:35Z",
+  "finished_at": "2026-08-02T15:44:20Z",
+  "turns_estimate": 26,
+  "self_assessment": "All 8 Requirements covered: oci.WithManifestVersion(oras.PackManifestVersion) + StoreOptions.manifestVersion defaulting to 1.1 in NewStore, Build now packs with s.opts.manifestVersion; config OCI.ManifestVersion (mapstructure manifest_version) with viper default \"1.1\" for storage.type=oci and validate() returning exactly \"wrong manifest version, it should be 1.0 or 1.1\"; wired at the only bundle-building call site (cmd/flipt/bundle.go getStore) and mirrored into config/flipt.schema.json + flipt.schema.cue. Verified: go build ./... exit 0, go vet + go test for ./internal/oci ./internal/config ./config all green, gofmt clean; three one-line negative controls (PackManifest arg, SetDefault, validate switch) each flipped only their own subtests. Judgement calls declared: (a) field typed plain string with untyped consts OCIManifestVersion10/11, since the Interface section lists WithManifestVersion as the only new public symbol; (b) the read-only server-side store (internal/storage/fs/store/store.go) was left unwired because it never calls Build and no bullet names it; (c) new testdata fixtures added under my own names rather than editing oci_provided.yml, whose expected struct I updated for the new 1.1 default."
+}

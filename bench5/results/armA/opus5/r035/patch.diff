@@ -1,0 +1,314 @@
+diff --git a/cmd/flipt/bundle.go b/cmd/flipt/bundle.go
+index 594fbcf..e08f9b5 100644
+--- a/cmd/flipt/bundle.go
++++ b/cmd/flipt/bundle.go
+@@ -9,6 +9,7 @@ import (
+ 	"go.flipt.io/flipt/internal/config"
+ 	"go.flipt.io/flipt/internal/containers"
+ 	"go.flipt.io/flipt/internal/oci"
++	"oras.land/oras-go/v2"
+ )
+ 
+ type bundleCommand struct{}
+@@ -169,6 +170,13 @@ func (c *bundleCommand) getStore() (*oci.Store, error) {
+ 		if cfg.BundlesDirectory != "" {
+ 			dir = cfg.BundlesDirectory
+ 		}
++
++		manifestVersion := oras.PackManifestVersion1_1
++		if cfg.ManifestVersion == config.OCIManifestVersion10 {
++			manifestVersion = oras.PackManifestVersion1_0
++		}
++
++		opts = append(opts, oci.WithManifestVersion(manifestVersion))
+ 	}
+ 
+ 	return oci.NewStore(logger, dir, opts...)
+diff --git a/config/flipt.schema.cue b/config/flipt.schema.cue
+index 9df007f..bbaaeb5 100644
+--- a/config/flipt.schema.cue
++++ b/config/flipt.schema.cue
+@@ -209,7 +209,8 @@ import "strings"
+ 				username: string
+ 				password: string
+ 			}
+-			poll_interval?: =~#duration | *"30s"
++			poll_interval?:    =~#duration | *"30s"
++			manifest_version?: "1.0" | "1.1" | *"1.1"
+ 		}
+ 	}
+ 
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+index 3173388..429cad9 100644
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+@@ -768,6 +768,11 @@
+                 }
+               ],
+               "default": "1m"
++            },
++            "manifest_version": {
++              "type": "string",
++              "enum": ["1.0", "1.1"],
++              "default": "1.1"
+             }
+           },
+           "title": "OCI"
+diff --git a/internal/config/config_test.go b/internal/config/config_test.go
+index 0a258e9..3e3e109 100644
+--- a/internal/config/config_test.go
++++ b/internal/config/config_test.go
+@@ -826,12 +826,39 @@ func TestLoad(t *testing.T) {
+ 							Username: "foo",
+ 							Password: "bar",
+ 						},
+-						PollInterval: 5 * time.Minute,
++						PollInterval:    5 * time.Minute,
++						ManifestVersion: OCIManifestVersion11,
+ 					},
+ 				}
+ 				return cfg
+ 			},
+ 		},
++		{
++			name: "OCI manifest version provided",
++			path: "./testdata/storage/oci_manifest_version_provided.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Storage = StorageConfig{
++					Type: OCIStorageType,
++					OCI: &OCI{
++						Repository:       "some.target/repository/abundle:latest",
++						BundlesDirectory: "/tmp/bundles",
++						Authentication: &OCIAuthentication{
++							Username: "foo",
++							Password: "bar",
++						},
++						PollInterval:    5 * time.Minute,
++						ManifestVersion: OCIManifestVersion10,
++					},
++				}
++				return cfg
++			},
++		},
++		{
++			name:    "OCI invalid manifest version",
++			path:    "./testdata/storage/oci_invalid_manifest_version.yml",
++			wantErr: errors.New("wrong manifest version, it should be 1.0 or 1.1"),
++		},
+ 		{
+ 			name:    "OCI invalid no repository",
+ 			path:    "./testdata/storage/oci_invalid_no_repo.yml",
+diff --git a/internal/config/storage.go b/internal/config/storage.go
+index e8dacc1..b524ae7 100644
+--- a/internal/config/storage.go
++++ b/internal/config/storage.go
+@@ -24,6 +24,13 @@ const (
+ 	OCIStorageType      = StorageType("oci")
+ )
+ 
++const (
++	// OCIManifestVersion10 is the OCI image manifest version 1.0.
++	OCIManifestVersion10 = "1.0"
++	// OCIManifestVersion11 is the OCI image manifest version 1.1.
++	OCIManifestVersion11 = "1.1"
++)
++
+ type ObjectSubStorageType string
+ 
+ const (
+@@ -71,6 +78,7 @@ func (c *StorageConfig) setDefaults(v *viper.Viper) error {
+ 
+ 	case string(OCIStorageType):
+ 		v.SetDefault("storage.oci.poll_interval", "30s")
++		v.SetDefault("storage.oci.manifest_version", OCIManifestVersion11)
+ 
+ 		dir, err := DefaultBundleDir()
+ 		if err != nil {
+@@ -122,6 +130,12 @@ func (c *StorageConfig) validate() error {
+ 		if _, err := oci.ParseReference(c.OCI.Repository); err != nil {
+ 			return fmt.Errorf("validating OCI configuration: %w", err)
+ 		}
++
++		switch c.OCI.ManifestVersion {
++		case OCIManifestVersion10, OCIManifestVersion11:
++		default:
++			return errors.New("wrong manifest version, it should be 1.0 or 1.1")
++		}
+ 	}
+ 
+ 	// setting read only mode is only supported with database storage
+@@ -302,6 +316,10 @@ type OCI struct {
+ 	// Authentication configures authentication credentials for accessing the target registry
+ 	Authentication *OCIAuthentication `json:"-,omitempty" mapstructure:"authentication" yaml:"-,omitempty"`
+ 	PollInterval   time.Duration      `json:"pollInterval,omitempty" mapstructure:"poll_interval" yaml:"poll_interval,omitempty"`
++	// ManifestVersion is the OCI manifest version used when building bundles.
++	// It should be one of '1.0' or '1.1'. Some registries (e.g. AWS ECR) only
++	// support '1.0'.
++	ManifestVersion string `json:"manifestVersion,omitempty" mapstructure:"manifest_version" yaml:"manifest_version,omitempty"`
+ }
+ 
+ // OCIAuthentication configures the credentials for authenticating against a target OCI regitstry
+diff --git a/internal/config/testdata/storage/oci_invalid_manifest_version.yml b/internal/config/testdata/storage/oci_invalid_manifest_version.yml
+new file mode 100644
+index 0000000..d848c52
+--- /dev/null
++++ b/internal/config/testdata/storage/oci_invalid_manifest_version.yml
+@@ -0,0 +1,10 @@
++storage:
++  type: oci
++  oci:
++    repository: some.target/repository/abundle:latest
++    bundles_directory: /tmp/bundles
++    authentication:
++      username: foo
++      password: bar
++    poll_interval: 5m
++    manifest_version: "1.2"
+diff --git a/internal/config/testdata/storage/oci_manifest_version_provided.yml b/internal/config/testdata/storage/oci_manifest_version_provided.yml
+new file mode 100644
+index 0000000..5bfcb04
+--- /dev/null
++++ b/internal/config/testdata/storage/oci_manifest_version_provided.yml
+@@ -0,0 +1,10 @@
++storage:
++  type: oci
++  oci:
++    repository: some.target/repository/abundle:latest
++    bundles_directory: /tmp/bundles
++    authentication:
++      username: foo
++      password: bar
++    poll_interval: 5m
++    manifest_version: "1.0"
+diff --git a/internal/oci/file.go b/internal/oci/file.go
+index 4c368cd..ed27861 100644
+--- a/internal/oci/file.go
++++ b/internal/oci/file.go
+@@ -53,6 +53,7 @@ type StoreOptions struct {
+ 		username string
+ 		password string
+ 	}
++	manifestVersion oras.PackManifestVersion
+ }
+ 
+ // WithCredentials configures username and password credentials used for authenticating
+@@ -69,11 +70,19 @@ func WithCredentials(user, pass string) containers.Option[StoreOptions] {
+ 	}
+ }
+ 
++// WithManifestVersion configures the OCI manifest version used when building bundles
++func WithManifestVersion(version oras.PackManifestVersion) containers.Option[StoreOptions] {
++	return func(s *StoreOptions) {
++		s.manifestVersion = version
++	}
++}
++
+ // NewStore constructs and configures an instance of *Store for the provided config
+ func NewStore(logger *zap.Logger, dir string, opts ...containers.Option[StoreOptions]) (*Store, error) {
+ 	store := &Store{
+ 		opts: StoreOptions{
+-			bundleDir: dir,
++			bundleDir:       dir,
++			manifestVersion: oras.PackManifestVersion1_1,
+ 		},
+ 		logger: logger,
+ 		local:  memory.New(),
+@@ -365,7 +374,7 @@ func (s *Store) Build(ctx context.Context, src fs.FS, ref Reference) (Bundle, er
+ 		return Bundle{}, err
+ 	}
+ 
+-	desc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1_RC4, MediaTypeFliptFeatures, oras.PackManifestOptions{
++	desc, err := oras.PackManifest(ctx, store, s.opts.manifestVersion, MediaTypeFliptFeatures, oras.PackManifestOptions{
+ 		ManifestAnnotations: map[string]string{},
+ 		Layers:              layers,
+ 	})
+diff --git a/internal/oci/file_test.go b/internal/oci/file_test.go
+index 68d223a..9cae917 100644
+--- a/internal/oci/file_test.go
++++ b/internal/oci/file_test.go
+@@ -4,6 +4,7 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"embed"
++	"encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"io"
+@@ -17,6 +18,7 @@ import (
+ 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
++	"go.flipt.io/flipt/internal/containers"
+ 	"go.uber.org/zap/zaptest"
+ 	"oras.land/oras-go/v2"
+ 	"oras.land/oras-go/v2/content/oci"
+@@ -226,6 +228,68 @@ func TestStore_Build(t *testing.T) {
+ 	assert.Len(t, resp.Files, 2)
+ }
+ 
++func TestStore_BuildManifestVersion(t *testing.T) {
++	ctx := context.TODO()
++
++	for _, test := range []struct {
++		name                    string
++		opts                    []containers.Option[StoreOptions]
++		expectedArtifactType    string
++		expectedConfigMediaType string
++	}{
++		{
++			// manifest version 1.1 is the default when none is configured
++			name:                    "default",
++			expectedArtifactType:    MediaTypeFliptFeatures,
++			expectedConfigMediaType: v1.MediaTypeEmptyJSON,
++		},
++		{
++			name:                    "manifest version 1.0",
++			opts:                    []containers.Option[StoreOptions]{WithManifestVersion(oras.PackManifestVersion1_0)},
++			expectedConfigMediaType: MediaTypeFliptFeatures,
++		},
++		{
++			name:                    "manifest version 1.1",
++			opts:                    []containers.Option[StoreOptions]{WithManifestVersion(oras.PackManifestVersion1_1)},
++			expectedArtifactType:    MediaTypeFliptFeatures,
++			expectedConfigMediaType: v1.MediaTypeEmptyJSON,
++		},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			dir := testRepository(t)
++
++			ref, err := ParseReference(fmt.Sprintf("flipt://local/%s:latest", repo))
++			require.NoError(t, err)
++
++			store, err := NewStore(zaptest.NewLogger(t), dir, test.opts...)
++			require.NoError(t, err)
++
++			testdata, err := fs.Sub(testdata, "testdata")
++			require.NoError(t, err)
++
++			_, err = store.Build(ctx, testdata, ref)
++			require.NoError(t, err)
++
++			target, err := store.getTarget(ref)
++			require.NoError(t, err)
++
++			desc, err := target.Resolve(ctx, ref.Reference.Reference)
++			require.NoError(t, err)
++
++			rd, err := target.Fetch(ctx, desc)
++			require.NoError(t, err)
++
++			defer rd.Close()
++
++			var manifest v1.Manifest
++			require.NoError(t, json.NewDecoder(rd).Decode(&manifest))
++
++			assert.Equal(t, test.expectedArtifactType, manifest.ArtifactType)
++			assert.Equal(t, test.expectedConfigMediaType, manifest.Config.MediaType)
++		})
++	}
++}
++
+ func TestStore_List(t *testing.T) {
+ 	ctx := context.TODO()
+ 	dir := testRepository(t)
