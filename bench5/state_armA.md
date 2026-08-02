@@ -21,7 +21,7 @@
   can strip files repo-wide -- NodeBB r020/r029: files/root manifests missing
   at every ref incl. HEAD -- verify with language-native syntax check only,
   say so in `self_assessment`, don't block.
-- **`instance_id` often embeds the exact upstream fix commit hash** (22/22
+- **`instance_id` often embeds the exact upstream fix commit hash** (23/23
   confirmed). Check `git merge-base --is-ancestor base_commit <hash>`; if
   true, `git diff base_commit <hash> -- <files>` beats reimplementing (NOT
   `git show`, empty for merge commits, r026). Map every requirement bullet to
@@ -32,9 +32,9 @@
   correct pattern to mirror (r031). Grep every caller of a changed exported
   func/method -- a signature change needs its own hunk, confirm with a build
   (r024/25). If commit is a direct child of `base_commit`, `cherry-pick -n`
-  applies cleanly (r032). Verify via `stash push -- <src>`, confirm new tests
-  fail on `base_commit`, `stash pop`; strip tests unless the test IS the
-  requirement (`diff --cached` after cherry-pick -n, r028).
+  applies cleanly (r032, vuls r033). Verify via `stash push -- <src>`, confirm
+  new tests fail on `base_commit`, `stash pop`; strip tests unless the test IS
+  the requirement (`diff --cached` after cherry-pick -n, r028).
 - **webclients (yarn-berry monorepo)**: no root `jest` script -- `yarn
   workspace <pkg> run test <path> --coverage=false`. `yarn install
   --immutable` fails (lockfile would change) -- use plain `yarn install`;
