@@ -1,0 +1,120 @@
+diff --git a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.test.ts b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.test.ts
+index 3daf9d626e..261f20c54b 100644
+--- a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.test.ts
++++ b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.test.ts
+@@ -59,6 +59,20 @@ const SCHEDULED: SystemFolder = {
+     visible: true,
+ };
+ 
++const ALL_SENT_HIDDEN: SystemFolder = {
++    labelID: MAILBOX_LABEL_IDS.ALL_SENT,
++    display: SYSTEM_FOLDER_SECTION.MAIN,
++    order: 4,
++    payloadExtras: {
++        Color: 'white',
++        Name: 'undefined',
++    },
++    icon: 'alias',
++    ID: 'payloadID',
++    text: 'text',
++    visible: false,
++};
++
+ const ARCHIVE_MORE: SystemFolder = {
+     labelID: MAILBOX_LABEL_IDS.ARCHIVE,
+     display: SYSTEM_FOLDER_SECTION.MORE,
+@@ -129,6 +143,18 @@ describe('moveSystemFolders', () => {
+                 { ...ALL_MAIL_MORE, order: 5 },
+             ]);
+         });
++
++        it('Should move linked ALL_SENT together with SENT and keep it hidden', () => {
++            const navItems: SystemFolder[] = [INBOX, DRAFTS, SENT, ALL_SENT_HIDDEN, SCHEDULED];
++
++            expect(moveSystemFolders(MAILBOX_LABEL_IDS.SENT, MAILBOX_LABEL_IDS.INBOX, navItems)).toEqual([
++                INBOX,
++                { ...ALL_SENT_HIDDEN, order: 2 },
++                { ...SENT, order: 3 },
++                { ...DRAFTS, order: 4 },
++                { ...SCHEDULED, order: 5 },
++            ]);
++        });
+     });
+ 
+     describe('item', () => {
+diff --git a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
+index dee35c1bbe..ef6bdb63c0 100644
+--- a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
++++ b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
+@@ -1,6 +1,6 @@
+ import { c } from 'ttag';
+ 
+-import { ACCENT_COLORS, MAILBOX_LABEL_IDS, SHOW_MOVED } from '@proton/shared/lib/constants';
++import { ACCENT_COLORS, LINKED_LABEL_IDS, MAILBOX_LABEL_IDS, SHOW_MOVED } from '@proton/shared/lib/constants';
+ import move from '@proton/utils/move';
+ import orderBy from '@proton/utils/orderBy';
+ 
+@@ -45,6 +45,21 @@ const reorderItems = (collection: SystemFolder[]): SystemFolder[] =>
+         return nextItem;
+     });
+ 
++const moveItems = (systemFolders: SystemFolder[], draggedItemIndex: number, droppedItemIndex: number) => {
++    const movedItems = move(systemFolders, draggedItemIndex, droppedItemIndex);
++    const draggedID = systemFolders[draggedItemIndex].labelID;
++    const linkedID = LINKED_LABEL_IDS[draggedID as keyof typeof LINKED_LABEL_IDS];
++
++    if (linkedID) {
++        const linkedItemIndex = systemFolders.findIndex((item) => item.labelID === linkedID);
++        if (linkedItemIndex !== -1) {
++            return move(movedItems, linkedItemIndex, droppedItemIndex);
++        }
++    }
++
++    return movedItems;
++};
++
+ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, systemFolders) => {
+     if (draggedID === MAILBOX_LABEL_IDS.INBOX) {
+         return systemFolders;
+@@ -69,7 +84,7 @@ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, syste
+             return systemFolders;
+         }
+         const droppedItem = systemFolders[droppedItemIndex];
+-        const movedItems = move(systemFolders, draggedItemIndex, droppedItemIndex);
++        const movedItems = moveItems(systemFolders, draggedItemIndex, droppedItemIndex);
+         const reorderedItems = reorderItems(movedItems);
+         const nextItems = reorderedItems.map((item) => {
+             const clonedItem = cloneItem(item);
+@@ -91,7 +106,7 @@ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, syste
+             return systemFolders;
+         }
+         const inboxItem = systemFolders[inboxItemIndex];
+-        const movedItems = move(systemFolders, draggedItemIndex, inboxItemIndex + 1);
++        const movedItems = moveItems(systemFolders, draggedItemIndex, inboxItemIndex + 1);
+         const reorderedItems = reorderItems(movedItems);
+         const nextItems = reorderedItems.map((item) => {
+             const clonedItem = cloneItem(item);
+@@ -116,7 +131,7 @@ export const moveSystemFolders: MoveSystemFolders = (draggedID, droppedId, syste
+         const lastMoreSectionItemIndex = getLastSectionElementIndex(systemFolders, SYSTEM_FOLDER_SECTION.MORE);
+         const lastMainSectionItemIndex = getLastSectionElementIndex(systemFolders, SYSTEM_FOLDER_SECTION.MAIN);
+ 
+-        const movedItems = move(
++        const movedItems = moveItems(
+             systemFolders,
+             draggedItemIndex,
+             draggedItem.display === SYSTEM_FOLDER_SECTION.MAIN
+diff --git a/packages/shared/lib/constants.ts b/packages/shared/lib/constants.ts
+index 9235eb5f7d..7b25f50d12 100644
+--- a/packages/shared/lib/constants.ts
++++ b/packages/shared/lib/constants.ts
+@@ -818,6 +818,10 @@ export enum MAILBOX_LABEL_IDS {
+     SCHEDULED = '12',
+ }
+ 
++export const LINKED_LABEL_IDS = {
++    [MAILBOX_LABEL_IDS.SENT]: MAILBOX_LABEL_IDS.ALL_SENT,
++};
++
+ export enum AutoReplyDuration {
+     FIXED = 0,
+     DAILY = 1,
