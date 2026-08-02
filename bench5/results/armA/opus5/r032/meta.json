@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_protonmail__webclients-5e815cfa518b223a088fa9bb232a5fc90ab15691",
+    "model": "opus5",
+    "started_at": "2026-08-02T12:33:41Z",
+    "finished_at": "2026-08-02T12:50:00Z",
+    "turns_estimate": 38,
+    "self_assessment": "All 12 requirement bullets implemented and verified: packages/components tsc + containers/payments jest (10 suites/73 tests incl. an 11-case throwaway spec, removed before delivery) green, prettier clean, eslint 0 errors (4 react/display-name warnings on the new HOCs, which the package's own --quiet lint gate ignores); a targeted negative control flipped exactly the 3 confirmation/refresh-tolerance tests red and left the other 8 green, and the patch git apply --check's onto the clean base. Main judgement call: 'render the provided disableRenewModal' read as a presentational RenewToggle taking useRenewToggle()'s return value as props (default export kept alongside the new named ones); isVPNPlan derived as hasVPN||hasVpnBasic||hasVpnPlus; the VPN copy is invented since only the non-VPN sentence was pinned."
+}
