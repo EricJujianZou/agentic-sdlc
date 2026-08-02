@@ -1,0 +1,8 @@
+{
+	"instance_id": "instance_tutao__tutanota-09c2776c0fce3db5c6e18da92b5a45dce9f013aa-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+	"model": "claude-opus-5",
+	"started_at": "2026-08-02T03:33:10Z",
+	"finished_at": "2026-08-02T03:48:00Z",
+	"turns_estimate": 40,
+	"self_assessment": "Added OperationProgressTracker (main) + wired it through MainInterface/WorkerClient/WorkerLocator, switched CalendarFacade._saveCalendarEvents to an onProgress callback and saveImportedCalendarEvents to an operationId, and made the import dialog show the per-operation progress; tsc clean on src and test, calendar test suites green (618 assertions) incl. a new test proving 10->100 reaches the tracker, but the repo's full `node test` build is red at base on Node 22 (better-sqlite3 node-gyp)."
+}

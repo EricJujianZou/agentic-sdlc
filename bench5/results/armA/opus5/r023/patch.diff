@@ -1,0 +1,397 @@
+diff --git a/src/api/main/MainLocator.ts b/src/api/main/MainLocator.ts
+index 49cb01c..9274fb9 100644
+--- a/src/api/main/MainLocator.ts
++++ b/src/api/main/MainLocator.ts
+@@ -15,6 +15,7 @@ import { CalendarInfo, CalendarModelImpl } from "../../calendar/model/CalendarMo
+ import type { DeferredObject } from "@tutao/tutanota-utils"
+ import { defer, lazyMemoized } from "@tutao/tutanota-utils"
+ import { ProgressTracker } from "./ProgressTracker"
++import { OperationProgressTracker } from "./OperationProgressTracker.js"
+ import { MinimizedMailEditorViewModel } from "../../mail/model/MinimizedMailEditorViewModel"
+ import { SchedulerImpl } from "../common/utils/Scheduler.js"
+ import type { CredentialsProvider } from "../../misc/credentials/CredentialsProvider.js"
+@@ -95,6 +96,7 @@ class MainLocator {
+ 	contactModel!: ContactModel
+ 	entityClient!: EntityClient
+ 	progressTracker!: ProgressTracker
++	operationProgressTracker!: OperationProgressTracker
+ 	credentialsProvider!: CredentialsProvider
+ 	worker!: WorkerClient
+ 	fileController!: FileController
+@@ -393,6 +395,7 @@ class MainLocator {
+ 		this.serviceExecutor = serviceExecutor
+ 		this.eventController = new EventController(logins)
+ 		this.progressTracker = new ProgressTracker()
++		this.operationProgressTracker = new OperationProgressTracker()
+ 		this.search = new SearchModel(this.searchFacade)
+ 		this.entityClient = new EntityClient(restInterface)
+ 		this.cryptoFacade = cryptoFacade
+diff --git a/src/api/main/OperationProgressTracker.ts b/src/api/main/OperationProgressTracker.ts
+new file mode 100644
+index 0000000..f1625c2
+--- /dev/null
++++ b/src/api/main/OperationProgressTracker.ts
+@@ -0,0 +1,41 @@
++import stream from "mithril/stream"
++import Stream from "mithril/stream"
++
++export type OperationId = number
++
++export type ExposedOperationProgressTracker = Pick<OperationProgressTracker, "onProgress">
++
++/**
++ * A multiplexer for tracking progress of individual async operations.
++ *
++ * In contrast to {@link ProgressTracker} the progress of the operations is not combined, each operation is tracked
++ * separately so that it can be displayed on its own (e.g. in the dialog which started the operation).
++ */
++export class OperationProgressTracker {
++	private idCounter: OperationId = 0
++	private readonly operations: Map<OperationId, Stream<number>> = new Map()
++
++	/**
++	 * Register a new operation to track its progress. The progress stream will emit values between 0 and 100.
++	 *
++	 * Make sure to call {@code done()} when the operation is finished, otherwise it will be tracked forever.
++	 */
++	registerOperation(): { id: OperationId; progress: Stream<number>; done: () => unknown } {
++		const id = this.idCounter++
++		const progress = stream(0)
++		this.operations.set(id, progress)
++		return {
++			id,
++			progress,
++			done: () => {
++				this.operations.delete(id)
++				progress.end(true)
++			},
++		}
++	}
++
++	/** Update the progress (between 0 and 100) of a single operation. Can be called from the worker. */
++	async onProgress(operation: OperationId, progressValue: number): Promise<void> {
++		this.operations.get(operation)?.(progressValue)
++	}
++}
+diff --git a/src/api/main/WorkerClient.ts b/src/api/main/WorkerClient.ts
+index 2a85e10..97f8d91 100644
+--- a/src/api/main/WorkerClient.ts
++++ b/src/api/main/WorkerClient.ts
+@@ -117,6 +117,9 @@ export class WorkerClient {
+ 				get progressTracker() {
+ 					return locator.progressTracker
+ 				},
++				get operationProgressTracker() {
++					return locator.operationProgressTracker
++				},
+ 				get eventController() {
+ 					return locator.eventController
+ 				}
+diff --git a/src/api/worker/WorkerImpl.ts b/src/api/worker/WorkerImpl.ts
+index 06088b5..fdc819d 100644
+--- a/src/api/worker/WorkerImpl.ts
++++ b/src/api/worker/WorkerImpl.ts
+@@ -42,6 +42,7 @@ import { WebsocketConnectivityListener } from "../../misc/WebsocketConnectivityM
+ import { EventBusClient } from "./EventBusClient.js"
+ import { EntropyFacade } from "./facades/EntropyFacade.js"
+ import { ExposedProgressTracker } from "../main/ProgressTracker.js"
++import { ExposedOperationProgressTracker } from "../main/OperationProgressTracker.js"
+ import { ExposedEventController } from "../main/EventController.js"
+ 
+ assertWorkerOrNode()
+@@ -90,6 +91,7 @@ export interface MainInterface {
+ 	readonly loginListener: LoginListener
+ 	readonly wsConnectivityListener: WebsocketConnectivityListener
+ 	readonly progressTracker: ExposedProgressTracker
++	readonly operationProgressTracker: ExposedOperationProgressTracker
+ 	readonly eventController: ExposedEventController
+ }
+ 
+diff --git a/src/api/worker/WorkerLocator.ts b/src/api/worker/WorkerLocator.ts
+index c13fd40..47134b0 100644
+--- a/src/api/worker/WorkerLocator.ts
++++ b/src/api/worker/WorkerLocator.ts
+@@ -234,7 +234,7 @@ export async function initLocator(worker: WorkerImpl, browserData: BrowserData)
+ 			locator.groupManagement,
+ 			assertNotNull(cache),
+ 			nativePushFacade,
+-			worker,
++			mainInterface.operationProgressTracker,
+ 			locator.instanceMapper,
+ 			locator.serviceExecutor,
+ 			locator.crypto,
+diff --git a/src/api/worker/facades/CalendarFacade.ts b/src/api/worker/facades/CalendarFacade.ts
+index 66928cc..655fa43 100644
+--- a/src/api/worker/facades/CalendarFacade.ts
++++ b/src/api/worker/facades/CalendarFacade.ts
+@@ -46,7 +46,6 @@ import { elementIdPart, getLetId, getListId, isSameId, listIdPart, uint8arrayToC
+ import { Request } from "../../common/MessageDispatcher"
+ import { GroupManagementFacade } from "./GroupManagementFacade"
+ import type { NativeInterface } from "../../../native/common/NativeInterface"
+-import type { WorkerImpl } from "../WorkerImpl"
+ import { SetupMultipleError } from "../../common/error/SetupMultipleError"
+ import { ImportError } from "../../common/error/ImportError"
+ import { aes128RandomKey, encryptKey, sha256Hash } from "@tutao/tutanota-crypto"
+@@ -60,6 +59,7 @@ import { UserFacade } from "./UserFacade"
+ import { isOfflineError } from "../../common/utils/ErrorCheckUtils.js"
+ import { EncryptedAlarmNotification } from "../../../native/common/EncryptedAlarmNotification.js"
+ import { NativePushFacade } from "../../../native/common/generatedipc/NativePushFacade.js"
++import { ExposedOperationProgressTracker, OperationId } from "../../main/OperationProgressTracker.js"
+ 
+ assertWorkerOrNode()
+ 
+@@ -83,7 +83,7 @@ export class CalendarFacade {
+ 		// We inject cache directly because we need to delete user from it for a hack
+ 		private readonly entityRestCache: DefaultEntityRestCache,
+ 		private readonly nativePushFacade: NativePushFacade,
+-		private readonly worker: WorkerImpl,
++		private readonly operationProgressTracker: ExposedOperationProgressTracker,
+ 		private readonly instanceMapper: InstanceMapper,
+ 		private readonly serviceExecutor: IServiceExecutor,
+ 		private readonly cryptoFacade: CryptoFacade,
+@@ -100,10 +100,11 @@ export class CalendarFacade {
+ 			event: CalendarEvent
+ 			alarms: Array<AlarmInfo>
+ 		}>,
++		operationId: OperationId,
+ 	): Promise<void> {
+ 		// it is safe to assume that all event uids are set here
+ 		eventsWrapper.forEach(({ event }) => this.hashEventUid(event))
+-		return this._saveCalendarEvents(eventsWrapper)
++		return this._saveCalendarEvents(eventsWrapper, (percent) => this.operationProgressTracker.onProgress(operationId, percent))
+ 	}
+ 
+ 	/**
+@@ -112,15 +113,17 @@ export class CalendarFacade {
+ 	 * This function does not perform any checks on the event so it should only be called internally when
+ 	 * we can be sure that those checks have already been performed.
+ 	 * @param eventsWrapper the events and alarmNotifications to be created.
++	 * @param onProgress the progress of the operation, from 0 to 100.
+ 	 */
+ 	async _saveCalendarEvents(
+ 		eventsWrapper: Array<{
+ 			event: CalendarEvent
+ 			alarms: Array<AlarmInfo>
+ 		}>,
++		onProgress: (percent: number) => Promise<void>,
+ 	): Promise<void> {
+ 		let currentProgress = 10
+-		await this.worker.sendProgress(currentProgress)
++		await onProgress(currentProgress)
+ 
+ 		const user = this.userFacade.getLoggedInUser()
+ 
+@@ -137,7 +140,7 @@ export class CalendarFacade {
+ 		)
+ 		eventsWithAlarms.forEach(({ event, alarmInfoIds }) => (event.alarmInfos = alarmInfoIds))
+ 		currentProgress = 33
+-		await this.worker.sendProgress(currentProgress)
++		await onProgress(currentProgress)
+ 		const eventsWithAlarmsByEventListId = groupBy(eventsWithAlarms, (eventWrapper) => getListId(eventWrapper.event))
+ 		let collectedAlarmNotifications: AlarmNotification[] = []
+ 		//we have different lists for short and long events so this is 1 or 2
+@@ -162,7 +165,7 @@ export class CalendarFacade {
+ 			const allAlarmNotificationsOfListId = flat(successfulEvents.map((event) => event.alarmNotifications))
+ 			collectedAlarmNotifications = collectedAlarmNotifications.concat(allAlarmNotificationsOfListId)
+ 			currentProgress += Math.floor(56 / size)
+-			await this.worker.sendProgress(currentProgress)
++			await onProgress(currentProgress)
+ 		}
+ 
+ 		const pushIdentifierList = await this.entityClient.loadAll(PushIdentifierTypeRef, neverNull(this.userFacade.getLoggedInUser().pushIdentifierList).list)
+@@ -171,7 +174,7 @@ export class CalendarFacade {
+ 			await this._sendAlarmNotifications(collectedAlarmNotifications, pushIdentifierList)
+ 		}
+ 
+-		await this.worker.sendProgress(100)
++		await onProgress(100)
+ 
+ 		if (failed !== 0) {
+ 			if (errors.some(isOfflineError)) {
+@@ -193,12 +196,15 @@ export class CalendarFacade {
+ 			await this.entityClient.erase(oldEvent).catch(ofClass(NotFoundError, noOp))
+ 		}
+ 
+-		return await this._saveCalendarEvents([
+-			{
+-				event,
+-				alarms: alarmInfos,
+-			},
+-		])
++		return await this._saveCalendarEvents(
++			[
++				{
++					event,
++					alarms: alarmInfos,
++				},
++			],
++			async () => {},
++		)
+ 	}
+ 
+ 	async updateCalendarEvent(event: CalendarEvent, newAlarms: Array<AlarmInfo>, existingEvent: CalendarEvent): Promise<void> {
+diff --git a/src/calendar/export/CalendarImporterDialog.ts b/src/calendar/export/CalendarImporterDialog.ts
+index 534a381..68d70f1 100644
+--- a/src/calendar/export/CalendarImporterDialog.ts
++++ b/src/calendar/export/CalendarImporterDialog.ts
+@@ -3,7 +3,7 @@ import { CALENDAR_MIME_TYPE, showFileChooser } from "../../file/FileController"
+ import type { CalendarEvent } from "../../api/entities/tutanota/TypeRefs.js"
+ import { CalendarEventTypeRef } from "../../api/entities/tutanota/TypeRefs.js"
+ import { generateEventElementId } from "../../api/common/utils/CommonCalendarUtils"
+-import { showProgressDialog, showWorkerProgressDialog } from "../../gui/dialogs/ProgressDialog"
++import { showProgressDialog } from "../../gui/dialogs/ProgressDialog"
+ import { ParserError } from "../../misc/parsing/ParserCombinator"
+ import { Dialog } from "../../gui/base/Dialog"
+ import { lang } from "../../misc/LanguageViewModel"
+@@ -18,6 +18,7 @@ import { flat, ofClass, promiseMap, stringToUtf8Uint8Array } from "@tutao/tutano
+ import { assignEventId, CalendarEventValidity, checkEventValidity, getTimeZone } from "../date/CalendarUtils"
+ import { ImportError } from "../../api/common/error/ImportError"
+ import { TranslationKeyType } from "../../misc/TranslationKey"
++import { OperationId } from "../../api/main/OperationProgressTracker.js"
+ 
+ export async function showCalendarImportDialog(calendarGroupRoot: CalendarGroupRoot): Promise<void> {
+ 	let parsedEvents: ParsedEvent[][]
+@@ -40,7 +41,7 @@ export async function showCalendarImportDialog(calendarGroupRoot: CalendarGroupR
+ 
+ 	const zone = getTimeZone()
+ 
+-	async function importEvents(): Promise<void> {
++	async function importEvents(operationId: OperationId): Promise<void> {
+ 		const existingEvents = await loadAllEvents(calendarGroupRoot)
+ 		const existingUidToEventMap = new Map()
+ 		existingEvents.forEach((existingEvent) => {
+@@ -120,7 +121,7 @@ export async function showCalendarImportDialog(calendarGroupRoot: CalendarGroupR
+ 			)
+ 		}
+ 
+-		return locator.calendarFacade.saveImportedCalendarEvents(eventsForCreation).catch(
++		return locator.calendarFacade.saveImportedCalendarEvents(eventsForCreation, operationId).catch(
+ 			ofClass(ImportError, (e) =>
+ 				Dialog.message(() =>
+ 					lang.get("importEventsError_msg", {
+@@ -132,7 +133,8 @@ export async function showCalendarImportDialog(calendarGroupRoot: CalendarGroupR
+ 		)
+ 	}
+ 
+-	return showWorkerProgressDialog(locator.worker, "importCalendar_label", importEvents())
++	const operation = locator.operationProgressTracker.registerOperation()
++	return showProgressDialog("importCalendar_label", importEvents(operation.id), operation.progress).finally(() => operation.done())
+ }
+ 
+ export function exportCalendar(calendarName: string, groupRoot: CalendarGroupRoot, userAlarmInfos: Id, now: Date, zone: string) {
+diff --git a/test/tests/api/worker/facades/CalendarFacadeTest.ts b/test/tests/api/worker/facades/CalendarFacadeTest.ts
+index cca3869..ae5583b 100644
+--- a/test/tests/api/worker/facades/CalendarFacadeTest.ts
++++ b/test/tests/api/worker/facades/CalendarFacadeTest.ts
+@@ -24,10 +24,11 @@ import { ImportError } from "../../../../../src/api/common/error/ImportError.js"
+ import { SetupMultipleError } from "../../../../../src/api/common/error/SetupMultipleError.js"
+ import { InstanceMapper } from "../../../../../src/api/worker/crypto/InstanceMapper.js"
+ import { GroupManagementFacade } from "../../../../../src/api/worker/facades/GroupManagementFacade.js"
+-import { object } from "testdouble"
++import { object, verify } from "testdouble"
+ import { IServiceExecutor } from "../../../../../src/api/common/ServiceRequest"
+ import { CryptoFacade } from "../../../../../src/api/worker/crypto/CryptoFacade"
+ import { UserFacade } from "../../../../../src/api/worker/facades/UserFacade"
++import { ExposedOperationProgressTracker } from "../../../../../src/api/main/OperationProgressTracker.js"
+ 
+ o.spec("CalendarFacadeTest", async function () {
+ 	let userAlarmInfoListId: Id
+@@ -44,9 +45,10 @@ o.spec("CalendarFacadeTest", async function () {
+ 	let loadAllMock
+ 	let enitityClientLoadAllMock
+ 	let entityRequestMock
+-	let workerMock
++	let progressMock
+ 	let nativeMock
+ 	let instanceMapper
++	let operationProgressTracker: ExposedOperationProgressTracker
+ 	let serviceExecutor: IServiceExecutor
+ 	let cryptoFacade: CryptoFacade
+ 
+@@ -107,13 +109,12 @@ o.spec("CalendarFacadeTest", async function () {
+ 		groupManagementFacade = downcast({})
+ 
+ 		entityRestCache = downcast(restClientMock)
+-		workerMock = downcast({
+-			sendProgress: () => Promise.resolve(),
+-		})
++		progressMock = o.spy(() => Promise.resolve())
+ 		nativeMock = downcast({
+ 			invokeNative: o.spy(() => Promise.resolve()),
+ 		})
+ 		instanceMapper = new InstanceMapper()
++		operationProgressTracker = object()
+ 		serviceExecutor = object()
+ 		cryptoFacade = object()
+ 		calendarFacade = new CalendarFacade(
+@@ -121,7 +122,7 @@ o.spec("CalendarFacadeTest", async function () {
+ 			groupManagementFacade,
+ 			entityRestCache,
+ 			nativeMock,
+-			workerMock,
++			operationProgressTracker,
+ 			instanceMapper,
+ 			serviceExecutor,
+ 			cryptoFacade,
+@@ -187,7 +188,8 @@ o.spec("CalendarFacadeTest", async function () {
+ 					alarms: [makeAlarmInfo(event2), makeAlarmInfo(event2)],
+ 				},
+ 			]
+-			await calendarFacade._saveCalendarEvents(eventsWrapper)
++			await calendarFacade._saveCalendarEvents(eventsWrapper, progressMock)
++			o(progressMock.calls.map(({ args }) => args[0])).deepEquals([10, 33, 89, 100])
+ 			// @ts-ignore
+ 			o(calendarFacade._sendAlarmNotifications.callCount).equals(1)
+ 			// @ts-ignore
+@@ -196,6 +198,33 @@ o.spec("CalendarFacadeTest", async function () {
+ 			o(entityRestCache.setupMultiple.callCount).equals(2)
+ 		})
+ 
++		o("imported events report progress for the operation", async function () {
++			entityRequest = function (listId, instances) {
++				const typeRef = instances[0]?._type
++				if (isSameTypeRef(typeRef, CalendarEventTypeRef)) {
++					return Promise.resolve(["eventId1"])
++				} else if (isSameTypeRef(typeRef, UserAlarmInfoTypeRef)) {
++					return Promise.resolve(["1"])
++				}
++				throw new Error("should not be reached")
++			}
++
++			const event = makeEvent("listID", "eventId1")
++			event.uid = "uid"
++			const operationId = 42
++			await calendarFacade.saveImportedCalendarEvents(
++				[
++					{
++						event,
++						alarms: [makeAlarmInfo(event)],
++					},
++				],
++				operationId,
++			)
++			verify(operationProgressTracker.onProgress(operationId, 10))
++			verify(operationProgressTracker.onProgress(operationId, 100))
++		})
++
+ 		o("If alarms cannot be saved a user error is thrown and events are not created", async function () {
+ 			entityRequest = function (listId, instances) {
+ 				const typeRef = instances[0]?._type
+@@ -219,7 +248,7 @@ o.spec("CalendarFacadeTest", async function () {
+ 					alarms: [makeAlarmInfo(event2), makeAlarmInfo(event2)],
+ 				},
+ 			]
+-			const result = await assertThrows(ImportError, async () => await calendarFacade._saveCalendarEvents(eventsWrapper))
++			const result = await assertThrows(ImportError, async () => await calendarFacade._saveCalendarEvents(eventsWrapper, progressMock))
+ 			o(result.numFailed).equals(2)
+ 			// @ts-ignore
+ 			o(calendarFacade._sendAlarmNotifications.callCount).equals(0)
+@@ -259,7 +288,7 @@ o.spec("CalendarFacadeTest", async function () {
+ 					alarms: [makeAlarmInfo(event2), makeAlarmInfo(event2)],
+ 				},
+ 			]
+-			const result = await assertThrows(ImportError, async () => await calendarFacade._saveCalendarEvents(eventsWrapper))
++			const result = await assertThrows(ImportError, async () => await calendarFacade._saveCalendarEvents(eventsWrapper, progressMock))
+ 			o(result.numFailed).equals(1)
+ 			// @ts-ignore
+ 			o(calendarFacade._sendAlarmNotifications.callCount).equals(1)
