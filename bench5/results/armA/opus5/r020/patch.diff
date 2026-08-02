@@ -1,0 +1,141 @@
+diff --git a/public/src/client/account/edit.js b/public/src/client/account/edit.js
+index 907b2d7..600c5ea 100644
+--- a/public/src/client/account/edit.js
++++ b/public/src/client/account/edit.js
+@@ -94,6 +94,7 @@ define('forum/account/edit', [
+ 					pictures: pictures,
+ 					uploaded: uploaded,
+ 					icon: { text: ajaxify.data['icon:text'], bgColor: ajaxify.data['icon:bgColor'] },
++					iconBackgrounds: ajaxify.data.iconBackgrounds,
+ 					defaultAvatar: ajaxify.data.defaultAvatar,
+ 					allowProfileImageUploads: ajaxify.data.allowProfileImageUploads,
+ 				}, function (html) {
+@@ -121,6 +122,11 @@ define('forum/account/edit', [
+ 						$(this).addClass('active');
+ 					});
+ 
++					modal.on('click', '[data-bg-color]', function selectBgColor() {
++						modal.find('[data-bg-color]').removeClass('active');
++						$(this).addClass('active');
++					});
++
+ 					handleImageUpload(modal);
+ 
+ 					function updateImages() {
+@@ -138,8 +144,9 @@ define('forum/account/edit', [
+ 
+ 					function saveSelection() {
+ 						var type = modal.find('.list-group-item.active').attr('data-type');
++						var bgColor = modal.find('[data-bg-color].active').attr('data-bg-color');
+ 
+-						changeUserPicture(type, function (err) {
++						changeUserPicture(type, bgColor, function (err) {
+ 							if (err) {
+ 								return app.alertError(err.message);
+ 							}
+@@ -300,10 +307,11 @@ define('forum/account/edit', [
+ 		});
+ 	}
+ 
+-	function changeUserPicture(type, callback) {
++	function changeUserPicture(type, bgColor, callback) {
+ 		socket.emit('user.changePicture', {
+ 			type: type,
+ 			uid: ajaxify.data.theirid,
++			bgColor: bgColor,
+ 		}, callback);
+ 	}
+ 
+diff --git a/src/controllers/accounts/edit.js b/src/controllers/accounts/edit.js
+index 397d7c2..885fe62 100644
+--- a/src/controllers/accounts/edit.js
++++ b/src/controllers/accounts/edit.js
+@@ -32,6 +32,7 @@ editController.get = async function (req, res, next) {
+ 	userData.allowSignature = canUseSignature && (!userData.isSelf || !!meta.config['reputation:disabled'] || userData.reputation >= meta.config['min:rep:signature']);
+ 	userData.profileImageDimension = meta.config.profileImageDimension;
+ 	userData.defaultAvatar = user.getDefaultAvatar();
++	userData.iconBackgrounds = await user.getIconBackgrounds(req.uid);
+ 
+ 	userData.groups = userData.groups.filter(g => g && g.userTitleEnabled && !groups.isPrivilegeGroup(g.name) && g.name !== 'registered-users');
+ 
+diff --git a/src/socket.io/user/picture.js b/src/socket.io/user/picture.js
+index e3cb6e6..d2b35a8 100644
+--- a/src/socket.io/user/picture.js
++++ b/src/socket.io/user/picture.js
+@@ -33,7 +33,13 @@ module.exports = function (SocketUser) {
+ 			picture = returnData && returnData.picture;
+ 		}
+ 
+-		await user.setUserField(data.uid, 'picture', picture);
++		const iconBackgrounds = await user.getIconBackgrounds(socket.uid);
++		const bgColor = iconBackgrounds.includes(data.bgColor) ? data.bgColor : '';
++
++		await user.setUserFields(data.uid, {
++			picture: picture,
++			'icon:bgColor': bgColor,
++		});
+ 	};
+ 
+ 	SocketUser.removeUploadedPicture = async function (socket, data) {
+diff --git a/src/user/data.js b/src/user/data.js
+index bccea4c..94eb006 100644
+--- a/src/user/data.js
++++ b/src/user/data.js
+@@ -19,19 +19,13 @@ const intFields = [
+ ];
+ 
+ module.exports = function (User) {
+-	const iconBackgrounds = [
+-		'#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
+-		'#009688', '#1b5e20', '#33691e', '#827717', '#e65100', '#ff5722',
+-		'#795548', '#607d8b',
+-	];
+-
+ 	const fieldWhitelist = [
+ 		'uid', 'username', 'userslug', 'email', 'email:confirmed', 'joindate',
+ 		'lastonline', 'picture', 'fullname', 'location', 'birthday', 'website',
+ 		'aboutme', 'signature', 'uploadedpicture', 'profileviews', 'reputation',
+ 		'postcount', 'topiccount', 'lastposttime', 'banned', 'banned:expire',
+ 		'status', 'flags', 'followerCount', 'followingCount', 'cover:url',
+-		'cover:position', 'groupTitle',
++		'cover:position', 'groupTitle', 'icon:bgColor',
+ 	];
+ 
+ 	User.guestData = {
+@@ -204,8 +198,14 @@ module.exports = function (User) {
+ 
+ 			// User Icons
+ 			if (user.hasOwnProperty('picture') && user.username && parseInt(user.uid, 10) && !meta.config.defaultAvatar) {
++				const iconBackgrounds = await User.getIconBackgrounds(user.uid);
++				let bgColor = user['icon:bgColor'];
++				if (!iconBackgrounds.includes(bgColor)) {
++					const hash = Array.prototype.reduce.call(user.username, (cur, next) => cur + next.charCodeAt(), 0);
++					bgColor = iconBackgrounds[hash % iconBackgrounds.length];
++				}
+ 				user['icon:text'] = (user.username[0] || '').toUpperCase();
+-				user['icon:bgColor'] = iconBackgrounds[Array.prototype.reduce.call(user.username, (cur, next) => cur + next.charCodeAt(), 0) % iconBackgrounds.length];
++				user['icon:bgColor'] = bgColor;
+ 			}
+ 
+ 			if (user.hasOwnProperty('joindate')) {
+@@ -279,6 +279,20 @@ module.exports = function (User) {
+ 		return meta.config.defaultAvatar.startsWith('http') ? meta.config.defaultAvatar : relative_path + meta.config.defaultAvatar;
+ 	};
+ 
++	User.getIconBackgrounds = async (uid = 0) => {
++		let iconBackgrounds = [
++			'#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
++			'#009688', '#1b5e20', '#33691e', '#827717', '#e65100', '#ff5722',
++			'#795548', '#607d8b',
++		];
++
++		({ iconBackgrounds } = await plugins.hooks.fire('filter:user.iconBackgrounds', {
++			uid: uid,
++			iconBackgrounds: iconBackgrounds,
++		}));
++		return iconBackgrounds;
++	};
++
+ 	User.setUserField = async function (uid, field, value) {
+ 		await User.setUserFields(uid, { [field]: value });
+ 	};
