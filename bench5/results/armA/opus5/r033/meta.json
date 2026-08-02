@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-2923cbc645fbc7a37d50398eb2ab8febda8c3264",
+  "model": "opus5",
+  "started_at": "2026-08-02T13:33:41Z",
+  "finished_at": "2026-08-02T13:43:42Z",
+  "turns_estimate": 30,
+  "self_assessment": "All 8 bullets implemented (detection -> release \"streamN\", MajorVersion strips \"stream\", stream8 EOL 2024-05-31, oval+gost db/HTTP release normalization, rhelDownStream->rhelRebuild rename incl. its test, Alma added to isExecNeedsRestarting); go build/vet clean, full `go test ./...` green, throwaway tests per bullet negative-controlled (config/gost by stashing source, oval by reverting just the ovalRelease lines since the rename won't compile at base); judgement calls: added only \"stream8\" (bullets name only Stream 8, not stream9) and extended the gost normalization to mergePackageStates' RHEL-CPE match, without which a Stream 8 scan matches no package states at all."
+}
