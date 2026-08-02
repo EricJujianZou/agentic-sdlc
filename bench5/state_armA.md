@@ -12,49 +12,49 @@
   the wrong ending fails every assert. Same trick for mechanical test sweeps.
 ## Protocol mechanics
 - Deliverable is `git -C bench5/workspaces/task diff` = worktree-vs-index, so ANYTHING STAGED IS INVISIBLE: a new file needs `git add -N <path>`;
-  `git rm` HIDES a deletion (use plain `rm`); check `grep -c '^new file mode'`. `git stash push -- <p>` then REFUSES ("Entry … not uptodate"):
-  `git restore --staged <newfile>`, stash / run / pop, re-`add -N`.
-- Package managers REWRITE LOCKFILES and install hacks live in package.json: `git -C $W status --short` before diffing, `git checkout --
-  <lockfile> package.json`. Build scratch venvs / node_modules OUTSIDE the workspace.
+  `git rm` HIDES a deletion (use plain `rm`); check `grep -c '^new file mode'`. `git stash push -u -- src` then REFUSES ("Entry … not uptodate"):
+  `git restore --staged <newfile>`, stash / run / pop, re-`add -N` — script that dance, every stashed baseline needs it, and a FAILED stash silently
+  runs your CHANGED tree as the "baseline". A `.ts`->`.tsx` rename = plain `rm` old + write new + `add -N` (git emits a `rename from/to` hunk); finish
+  by stashing src and `git apply --check <patch.diff>` — cheap proof the grader can apply it.
+- Package managers REWRITE LOCKFILES and install hacks live in package.json: `git status --short` before diffing, then `git checkout -- <lockfile> package.json`; build scratch venvs / vendored deps OUTSIDE `workspaces/task` (`workspaces/vendor/` is gitignored too).
 - Clone shallow+partial into the gitignored `bench5/workspaces/task`: `git init`; `git remote add origin <url>`; `git fetch --depth 1 --filter=blob:none
   origin <sha>`; `git checkout FETCH_HEAD`. Never fetch the fix commit. Submodules aren't fetched — `git ls-tree HEAD <path>` gives the pinned SHA.
 - The Requirements list IS the scope contract: one edit each, re-walk it against the diff; the LIST beats a vaguer blurb, its SILENCE on a nearby thing
   means leave that alone. Its FILE PATHS can be WRONG (r019 said `executor/worker.py`, real `executor/process/worker.py`) — locate by symbol. "Interface"
-  is LLM-written, maybe uncompilable: honour its name/default/behaviour. Both show the happy path only — grep EVERY consumer for unused plumbing already there.
-- DEGENERATE lists exist: r020's six bullets all restated "export this one function" (auto-generated from the failing test). Then they are a floor,
-  not the feature — also build the server path the problem statement needs, but do NOT invent UI against markup that lives in another repo (NodeBB
-  .tpl modals ship in the theme, not core).
-- Requirement prose is PARAPHRASE, often of behaviour that ALREADY EXISTS (spacing, sanitizer escaping) — check the base, its tests may pin it
-  already. The bullet with exact call args is the contract; a vague clause is NO licence to invent an API.
-- PLUMB/UNPLUMB-A-PARAM tasks (`fn must receive userSettings`, `drop new_stdin everywhere`): put it right after its sibling at EVERY hop incl. React
-  props parent->child, give EO/offline callers a `<x>Default…` const, then let tsc or pyflakes enumerate the call sites — they find test files grep
-  misses. A REMOVAL also orphans imports: pyflakes the touched files, `git stash`, pyflakes again to separate PRE-EXISTING hits.
-- When the Interface demands a REFACTOR, EXISTING tests pinning the old signature WILL fail: that is the change, not a bug — update them, but PROVE
-  it (stash source only) and say so. Read them BEFORE coding: asserts are free spec.
+  is LLM-written, maybe uncompilable: honour its name/default/behaviour, and its PARAM ORDER — it is derived from the real patch.
+- "Centralize X in <one file>; ALL UI calls it" means every inline copy, not just the file the next bullet names: grep the old body's distinctive call
+  (`checkDeviceTrust`) and convert each. Dropping the now-dead param then trips react-hooks/exhaustive-deps — lint the touched files after.
+- DEGENERATE lists exist (r020: six bullets all restating "export this one function", auto-generated from the failing test) — then they are a FLOOR:
+  build what the problem statement needs, but never invent UI against markup from another repo. Prose is PARAPHRASE, often of behaviour that ALREADY
+  EXISTS — check the base first; the bullet with exact call args is the contract, a vague clause is NO licence to invent an API.
+- PLUMB/UNPLUMB-A-PARAM: put it beside its sibling at EVERY hop incl. React props, then let tsc/pyflakes enumerate the call sites (they find test files grep misses) — a REMOVAL also orphans imports, so stash and re-lint to separate PRE-EXISTING hits.
+- When the Interface demands a REFACTOR, EXISTING tests pinning the old signature WILL fail: that is the change, not a bug — update them, PROVE it
+  (stash source only), say so. Read them BEFORE coding: asserts are free spec.
 ## Repo families
 - Go: pre-2021 repos ship an INCOMPLETE go.sum — `go mod download <mod> <mod>` with the modules NAMED (argless adds nothing, tidy churns); keep and
   declare those. Cold `go build ./...` = minutes; `-tags <x>` may be RED AT BASE; `gofmt -w .` hits base-unformatted files; lint = Makefile + .golangci.yml.
-- Python (ansible/qutebrowser/openlibrary): scratch venv, never edit requirements.txt. Modern pytest on an old repo = a FIXED set of unrelated
-  failures + collection ERRORS (`parametrize` names-vs-values) — `--ignore` that dir, compare FAILED sets, don't chase green. ansible units:
-  `PYTHONPATH=<repo>/lib:<repo>/test`, run SERIALLY (xdist INTERNALERRORs), ignore `test/units/module_utils/basic` + `config/manager`, install `pywinrm
-  pypsrp` or suites SKIP; gates = `pycodestyle --max-line-length=160 --ignore=E402,W503,W504,E741,E203` + pyflakes on touched files; a new module
-  option = argument_spec entry + its OWN DOCUMENTATION block.
-- yarn/jest webapps: element-web = yarn 1, and a blocked dep host dies with a BARE `ECONNRESET` (name it via `curl -sS "$HTTPS_PROXY/__agentproxy/
-  status"` -> `recentRelayFailures`; fix = delete that dep from package.json AND its yarn.lock key); a new data-testid churns .snap in UNRELATED
-  suites (`npx jest -u`). protonmail/webclients: `ls .yarn/releases/`, then `node .yarn/releases/yarn-<v>.cjs install --mode=skip-build` (~1.5 min,
-  rewrites ~900 lock lines — restore; `mv node_modules/canvas node_modules/canvas__off` or components suites die); gates = `tsc -p applications/<app>/
-  tsconfig.json --noEmit` (exhaustive stale-call-site finder), jest from the app dir, eslint --fix + prettier (120).
-- NodeBB: NO root package.json (generated from `install/package.json` — pinned tool versions live there); its mocha suite needs a live mongo/redis,
-  so don't try. `src/promisify.js` re-wraps every exported async fn, so declare `async` (it tests `constructor.name === 'AsyncFunction'`). Feature
-  knobs go through `plugins.hooks.fire('filter:…', payload)`.
+- Python (ansible/qutebrowser/openlibrary): scratch venv, never edit requirements.txt. Modern pytest on an old repo = a FIXED set of unrelated failures
+  + collection ERRORS (`parametrize` names-vs-values) — `--ignore` that dir, compare FAILED sets, don't chase green. ansible units: run SERIALLY (xdist
+  INTERNALERRORs) with `PYTHONPATH=<repo>/lib:<repo>/test`, ignore `test/units/module_utils/basic` + `config/manager`, install `pywinrm pypsrp` or suites
+  SKIP; gates = `pycodestyle --max-line-length=160 --ignore=E402,W503,W504,E741,E203` + pyflakes; a new module option = argument_spec + its OWN DOCS block.
+- yarn/jest webapps: a blocked dep host dies with a BARE `ECONNRESET` or 403 — name it via `curl -sS "$HTTPS_PROXY/__agentproxy/status"` ->
+  `recentRelayFailures`. element-web / matrix-react-sdk (yarn 1) needs THREE fixes before `yarn install` runs at all: `CYPRESS_INSTALL_BINARY=0`;
+  `matrix-js-sdk` is a github tarball (codeload 403) — git-clone the SHA out of yarn.lock into `workspaces/vendor/jsdk` and point package.json at
+  `file:../vendor/jsdk` (no build needed, jest+tsc import `matrix-js-sdk/src/*`); `@matrix-org/olm` is a gitlab.matrix.org URL (403) — plain `3.2.15`
+  off npm works. Drop `--frozen-lockfile`, then `git checkout -- package.json yarn.lock`. Gates: `npx tsc --noEmit --jsx react`, `npx jest --ci -w 4`
+  (~2 min / 3.6k tests), eslint + `prettier --check`; a vendored js-sdk drifting from the lock leaves ~6 tsc errors + 4 suites RED AT BASE, and a new
+  data-testid churns .snap in UNRELATED suites (`npx jest -u`). protonmail/webclients: `node .yarn/releases/yarn-<v>.cjs install --mode=skip-build`
+  (rewrites ~900 lock lines — restore; `mv node_modules/canvas node_modules/canvas__off` or components suites die); gates = `tsc -p applications/<app>/
+  tsconfig.json --noEmit`, jest from the app dir, eslint --fix + prettier (120).
+- NodeBB: NO root package.json (generated from `install/package.json`, where pinned tool versions live); its mocha suite needs a live mongo/redis, so
+  don't try. `src/promisify.js` re-wraps every exported async fn — declare `async` (it tests `constructor.name`); knobs go via `plugins.hooks.fire`.
 ## Verification habits
 - NO DATABASE? Don't skip verification — stub it. Load the module under test directly and intercept its deps by overriding `Module.prototype.require`,
-  gated on `this.filename === <file>` so only that file sees stubs (py: `sys.modules[...]=Mock()`). ~60 lines bought r020 nine behavioural asserts, red at base, green after.
+  gated on `this.filename === <file>` so only that file sees stubs (py: `sys.modules[...]=Mock()`). ~60 lines bought r020 nine behavioural asserts.
 - Baseline FIRST when a suite DOES run: whole suite at base into fails_before.txt, again after, `comm` the sorted FAILED/ERROR sets; only the DELTA
-  counts (r019: 253 fails both sides, 0 new, 2 fixed). A red suite that PASSES when re-run ALONE is load/proxy flakiness, not your regression.
-  STASH SOURCE ONLY: lockfiles unbuild the base.
-- LINT the same delta way: install the repo's PINNED linter into a scratch dir, run it from the repo root so NESTED `.eslintrc`/setup.cfg still apply
-  (never `--no-eslintrc -c <root cfg>`: a browser-JS dir then floods with no-undef), filter errors that exist only because deps are missing
-  (`import/no-unresolved`), and diff the before/after sets.
-- Behavioural tasks (process isolation, I/O, signals) need a SCRATCH PROBE, not just unit tests (r019: a plugin printing `os.getsid/getpgrp/readlink`
-  at base vs after). Throwaway asserts per numbered requirement catch a silent no-op; if one fails suspect the ASSERTION first. Read the diff hunk by hunk.
+  counts (r019: 253 fails both sides, 0 new, 2 fixed). A red suite that PASSES when re-run ALONE is flakiness, not your regression. STASH SOURCE ONLY:
+  lockfiles unbuild the base. Same for tsc/lint — the repo's PINNED linter, run FROM THE REPO ROOT so nested configs apply, before/after sets diffed.
+- NEVER hand-edit a GENERATED file (element-web `src/i18n/strings/en_EN.json`): run its generator (`npx matrix-gen-i18n`) and diff — it re-orders by
+  source traversal (a new file shifts strings) and re-adds "orphans" another component still uses.
+- PURE-EXTRACTION refactors get a free oracle: if every existing .snap passes UNTOUCHED, the markup is provably unchanged. Still probe the NEW behaviour
+  with a throwaway test (r021: 8 asserts on toast title/labels/onAccept/onReject + testids), read the diff hunk by hunk, then DELETE the probe.

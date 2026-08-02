@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_element-hq__element-web-880428ab94c6ea98d3d18dcaeb17e8767adcb461-vnan",
+    "model": "opus5",
+    "started_at": "2026-08-02T01:33:45Z",
+    "finished_at": "2026-08-02T01:49:29Z",
+    "turns_estimate": 34,
+    "self_assessment": "All 8 requirements met: new DeviceMetaData component + isDeviceVerified helper, DeviceTile/DevicesPanel/useOwnDevices delegate to them, toast reworded and embeds DeviceMetaData; tsc delta 0 new errors, full jest suite delta 0 new failures (356 snapshots unchanged), eslint/prettier clean, 8 throwaway behavioural asserts on the toast passed."
+}
