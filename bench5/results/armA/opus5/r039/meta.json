@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_protonmail__webclients-df60460f163fd5c34e844ab9015e3176f1ab1ac0",
+    "model": "opus5",
+    "started_at": "2026-08-02T19:34:01Z",
+    "finished_at": "2026-08-02T19:42:50Z",
+    "turns_estimate": 30,
+    "self_assessment": "Injected verify into createPaymentToken and added getCreatePaymentToken/getDefaultVerifyPayment/VerifyPayment in paymentTokenHelper.tsx, converting all 5 named consumers; tsc (packages/components + applications/account) and prettier clean, payments+invoices jest 123 pass with only the 2 CreditsModal failures that are identical at base, and a 7-case throwaway suite flipped 5 red / 2 green under a stash-source negative control. Judgement calls declared: (a) also converted applications/account/src/app/single-signup/Step1.tsx, a 6th consumer no Requirements bullet names, because the signature change makes it a hard tsc error otherwise; (b) left `process` semantics unchanged - the bullet asking it to 'resolve without throwing' on terminal status/abort contradicts the existing paymentTokenHelper.test.ts which pins rejection, and it is already fake-timer compatible via setTimeout-based wait(); (c) ApprovalURL/ReturnHost are threaded into process() inside onProcess rather than passed as modal props, since PaymentVerificationModal declares no such props - same wiring as the base code."
+}
