@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_element-hq__element-web-9a31cd0fa849da810b4fac6c6c015145e850b282-vnan",
+    "model": "opus5",
+    "started_at": "2026-08-02T08:33:36Z",
+    "finished_at": "2026-08-02T08:46:00Z",
+    "turns_estimate": 30,
+    "self_assessment": "High confidence: feature-flagged Knock option with room-version gate + upgrade pill, centralized upgradeRequiredDialog used by both Knock and Restricted, RoomUpgradeWarningDialog now keys title/invite-toggle off the real join rule; i18n regenerated with the repo's generator; 11 purpose-written tests pass after and 6 of them fail at base (negative control), full suite 4626 passed with the same 3 pre-existing StopGapWidget failures as base, tsc/eslint/prettier deltas clean."
+}
