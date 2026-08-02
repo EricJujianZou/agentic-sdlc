@@ -5,18 +5,18 @@
   relative to it) -- trigger is broad (bare `cd`, even a no-op). Default to
   Monitor (immune) for ALL task-repo ops from turn 1. Once tripped,
   Read/Grep/Glob still work but Bash/Edit/Write die session-wide (no
-  recovery seen within a session; didn't self-heal after ~10min either) --
-  verify w/ `git status --short`. Route ALL mutations (file edits via
-  `python3 - <<PYEOF`/`sed`, meta.json, git commit/push) through Monitor
-  once tripped -- it keeps working end-to-end, incl. pushing.
+  recovery seen within a session or after ~10min) -- verify w/ `git status
+  --short`. Route ALL mutations (edits via `python3 - <<PYEOF`/`sed`,
+  meta.json, git commit/push) through Monitor once tripped -- it keeps
+  working end-to-end, incl. pushing.
 - **On Monitor, don't chain `sleep N`** waiting on a slow build/test/clone
   -- call `TaskOutput(task_id, block=true, timeout<=600000)` on that
   Monitor's own task_id; one call blocks and returns the real output.
 - JS monorepos: `yarn install` rewrites `yarn.lock` with no real changes --
-  exclude it: `git diff -- . ':!yarn.lock' ':!*.test.ts'`.
-- A fresh clone can lack `base_commit` (`fatal: reference is not a tree`) --
-  `git fetch origin <sha> && git checkout FETCH_HEAD`. A mirror can strip
-  files repo-wide (NodeBB) -- verify via syntax check only, note it.
+  exclude it: `git diff -- . ':!yarn.lock' ':!*.test.ts'`. A fresh clone can
+  lack `base_commit` (`fatal: reference is not a tree`) -- `git fetch origin
+  <sha> && git checkout FETCH_HEAD`. A mirror can strip files repo-wide
+  (NodeBB) -- verify via syntax check only, note it.
 - **`instance_id` often embeds the exact upstream fix commit hash** (28/28
   confirmed). Shallow clone: `git merge-base --is-ancestor` needs `git
   fetch --depth 50 origin <hash>` first or it wrongly says false (disjoint
@@ -48,10 +48,12 @@
   `// +build` w/o `//go:build` twin) -- `gofmt -w` adds a `//go:build` line
   as a side effect, strip that stray hunk back out (`git stash` the base
   file to confirm pre-existing). First build downloads full module graph,
-  2-3min -- not a hang.
+  2-3min -- not a hang. Golden commits can carry real printf bugs (bad verb
+  for arg type, or arg count < verb count) that compile but fail `go
+  test`'s vet check -- `go vet ./<pkgs>/...`, fix flagged Infof/Printf calls.
 - **qutebrowser (2019, PyQt5, py3.11)**: `pytest==6.2.5 pluggy==0.13.1
   py==1.11.0 -o addopts=""` + `pip install -U jinja2 pytest-qt pytest-xvfb`
-  (234/234; full-file run segfaults -- scope `-k <cls>`).
+  (234/234 pass; full-file run segfaults -- scope with `-k <cls>`).
 - **openlibrary (python monolith)**: needs **python3.12** venv specifically.
   `pip install -U setuptools` FIRST. `git submodule update --init
   vendor/infogami` + `PYTHONPATH=vendor/infogami:$PYTHONPATH`. `apt-get
