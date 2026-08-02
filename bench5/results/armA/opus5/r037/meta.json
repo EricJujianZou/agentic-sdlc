@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-6a117fab6c963b74dc1ba907d838e74f76d34a4b-v13642507b4fc1f8d234172bf8129942da2c2ca26",
+  "model": "opus5",
+  "started_at": "2026-08-02T17:37:53Z",
+  "finished_at": "2026-08-02T18:19:40Z",
+  "turns_estimate": 34,
+  "self_assessment": "Added ProjectRunebergProvider (short_name 'runeberg', identifier_key 'project_runeberg' -> solr_key id_project_runeberg) + the two templates, and threaded id_project_runeberg through the work-search fetched fields and get_doc so every work doc carries it (defaulting to []); full suite 2190 passed / same 4 pre-existing failures as base, ruff+black+mypy+doctests clean, 12-case throwaway suite flipped 10 red at base while the two preserved-behaviour cases stayed green, and the saved patch git-apply --checks against a pristine base. Uncertain only on the download template's exact runeberg.org download.pl mode names (runeberg.org is 403 through the proxy, so the facsimile/jpeg/html/txt/ocr modes are my best reconstruction of the listed formats); messages.pot was deliberately left un-regenerated since no bullet named it."
+}
