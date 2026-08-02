@@ -14,10 +14,10 @@
   exclude it: `git diff -- . ':!yarn.lock' ':!*.test.ts'`, or `git checkout
   base_commit -- yarn.lock` right before saving `patch.diff`.
 - A fresh clone can still lack `base_commit` (`fatal: reference is not a
-  tree`) -- `git fetch origin <sha> && git checkout FETCH_HEAD`. A mirror can
-  strip files repo-wide -- verify via language-native syntax check only, say
-  so in `self_assessment`.
-- **`instance_id` often embeds the exact upstream fix commit hash** (26/26
+  tree`) -- `git fetch origin <sha> && git checkout FETCH_HEAD`. A mirror
+  can strip files repo-wide, even `package.json` (NodeBB) -- verify via
+  language-native syntax check only, say so in `self_assessment`.
+- **`instance_id` often embeds the exact upstream fix commit hash** (27/27
   confirmed; ids w/ two hex tokens -- check ancestry of both, only one real).
   `git merge-base --is-ancestor base_commit <hash>`; if true, `git diff
   base_commit <hash> -- <files>` beats reimplementing (NOT `git show`, empty
