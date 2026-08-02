@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "model": "opus5",
+  "started_at": "2026-08-02T21:34:05Z",
+  "finished_at": "2026-08-02T21:47:29Z",
+  "turns_estimate": 34,
+  "self_assessment": "Renamed CpeNameMatch->CpeVersionMatch, added CpeVendorProductMatch{10}, JVN-aware confidence in DetectCpeURIsCves, TUI 'score / method', score-primary SortByConfident (SortOrder kept as tiebreak so equal-score cases keep their established order); the unlisted go-cve-dictionary v0.15.14->v0.6.0 bump is required because IsJvn() and JVN vendor/product CPE matching live there - proved end-to-end on a seeded sqlite3 CVE DB (base detects 0, fixed detects 1) with 5 disjoint negative controls; full go build/vet/test green."
+}
