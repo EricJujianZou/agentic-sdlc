@@ -4,11 +4,10 @@
   SUCCEEDS; the NEXT one dies, so it feels unrelated (r022 did it twice, having read this line). cwd PERSISTS and the PreToolUse hook is the *relative*
   `hooks/pretooluse_guard.py`. FIX: `Write` a .sh that `cd`s inside, or `git -C <dir>`. UNSTICK (~1 min): load `Monitor` (unhooked) -> `ln -sfn
   <repo>/hooks <stuck>/hooks`, plain `cd <repo>` in Bash, `rm -f <stuck>/hooks`.
-- The guard denies force-deletes if the command holds ANY absolute/`..` token (use `rm -f … && rmdir`), and bare `sleep N && cmd`; it scans the LITERAL text, so a heredoc merely QUOTING one is denied — use Write (r023 lost a whole compound call, python edit included, to an `rm -rf` inside a heredoc).
-  Long installs blow the 120s timeout: background them, ending `echo exit=$? >>log`; block via `until grep -q '^exit=' log; do sleep 5; done`.
-- Multi-point edits: one `python3 - <<'PYEOF'` script of `assert s.count(old)==1; s=s.replace(old,new)` beats N Edit calls, and the asserts catch a
-  stale assumption instantly. CHECK LINE ENDINGS FIRST (`b'\r\n' in open(f,'rb').read()`) — a Linux clone of a CRLF-authored repo is LF on disk, and
-  the wrong ending fails every assert. Same trick for mechanical test sweeps, and for slicing out a whole func by index("start")..index("next decl").
+- The guard denies force-deletes if the command holds ANY absolute/`..` token (use `rm -f … && rmdir`), and bare `sleep N && cmd`; it scans the LITERAL text, so a heredoc merely QUOTING one is denied — use Write (r023 lost a whole compound call, python edit included, to an `rm -rf` inside a heredoc). Long installs blow the 120s timeout: background them, ending `echo exit=$? >>log`; block via `until grep -q '^exit=' log; do sleep 5; done`.
+- Multi-point edits: `Write` a .py of `assert s.count(old)==1; s=s.replace(old,new)` and run it — beats N Edit calls, the asserts catch a stale assumption instantly, and a revert-and-rerun NEGATIVE CONTROL is two more runs of it. NOT `python3 -c "..."`: inside double quotes `'\''` is NOT an escape, so one apostrophe in the payload (a Go comment's "doesn't") makes the pattern silently unmatchable (r024).
+  CHECK LINE ENDINGS FIRST (`b'\r\n' in open(f,'rb').read()`) — a Linux clone of a CRLF-authored repo is LF on disk, and the wrong ending fails every
+  assert. Same trick for mechanical test sweeps, and for slicing out a whole func by index("start")..index("next decl").
 ## Protocol mechanics
 - Deliverable is `git -C bench5/workspaces/task diff` = worktree-vs-index, so ANYTHING STAGED IS INVISIBLE: a new file needs `git add -N <path>`;
   `git rm` HIDES a deletion (use plain `rm`); check `grep -c '^new file mode'`. `git stash push -u -- src` then REFUSES ("Entry … not uptodate"):
@@ -28,7 +27,8 @@
 - DELETING a cross-cutting middleware/feature orphans more than imports: its private helper types+funcs, its test cases, AND the spies in the package's support_test. The compiler flags only unused imports and locals, so grep every symbol the deleted body touched and drop the ones only it used.
 - When the Interface demands a REFACTOR, EXISTING tests pinning the old signature WILL fail: that is the change, not a bug — update them, PROVE it (stash source only), say so. Read them BEFORE coding: asserts are free spec.
 ## Repo families
-- Go: pre-2021 repos ship an INCOMPLETE go.sum — `go mod download <mod> <mod>` with the modules NAMED (argless adds nothing, tidy churns); keep and declare those. Cold `go build ./...` = minutes; `-tags <x>` may be RED AT BASE; `gofmt -w .` hits base-unformatted files; lint = Makefile + .golangci.yml.
+- Go: pre-2021 repos ship an INCOMPLETE go.sum — `go mod download <mod> <mod>` with the modules NAMED (argless adds nothing, tidy churns); keep and declare those. Cold `go build ./...` = minutes of downloads (background it); `-tags <x>` may be RED AT BASE; `gofmt -l` flags BASE-unformatted files, so format only YOURS; lint = Makefile + .golangci.yml; `go vet ./<pkg>/...` type-checks _test.go too — the real gate when a package's own suite is integration-only (teleport tool/tsh).
+  A BUILD-TAGGED PLATFORM file (darwin cgo + .m/.h) CANNOT be compiled on linux: gofmt proves it parses, then mirror the sibling func exactly; one new native method touches the .h decl, the .m body, the tagged Go impl, the `!tag` noop impl, AND the test fake (which must satisfy the interface).
 - Go with a `go.work` (flipt): GOFLAGS=-mod=mod is REJECTED in workspace mode (drop it); every build/test run dirties `go.work.sum`, so `git checkout -- go.work.sum` right before diffing. `_tools/go.mod` pins an ancient golangci-lint that won't run on a modern toolchain — practical gate is `gofmt -l
   <touched>` + `go vet ./<pkg>/...`. Packages needing live redis/network (internal/cache/redis, gitfs) are RED AT BASE — prove it by stashing source and re-running just those, not the whole suite.
 - Python (ansible/qutebrowser/openlibrary): scratch venv, never edit requirements.txt. Modern pytest on an old repo = a FIXED set of unrelated failures

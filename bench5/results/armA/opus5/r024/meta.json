@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_gravitational__teleport-65438e6e44b6ce51458d09b7bb028a2797cfb0ea-vce94f93ad1030e3136852817f2423c1b3ac37bc4",
+  "model": "opus5",
+  "started_at": "2026-08-02T04:33:20Z",
+  "finished_at": "2026-08-02T04:41:41Z",
+  "turns_estimate": 32,
+  "self_assessment": "Added touchid.Registration (CCR/credentialID/done) with atomic Confirm/Rollback, DeleteNonInteractive across nativeTID + darwin cgo/objc + noop, Register now returns *Registration, and tsh mfa add confirms on ack / rolls back otherwise; go vet + gofmt clean, touchid tests pass and the two new subtests were negative-controlled."
+}
