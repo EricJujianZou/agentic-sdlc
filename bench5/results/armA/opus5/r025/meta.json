@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_gravitational__teleport-0415e422f12454db0c22316cf3eaa5088d6b6322",
+  "model": "opus5",
+  "started_at": "2026-08-02T05:33:40Z",
+  "finished_at": "2026-08-02T05:56:00Z",
+  "turns_estimate": 52,
+  "self_assessment": "Added auth.U2FAuthenticateChallenge (embeds legacy *u2f.AuthenticateChallenge, adds Challenges list), made U2FSignRequest issue one challenge per registered U2F device, propagated the type through ServerWithRoles/Client/IdentityService/sessionCache, made tsh's SSHAgentU2FLogin pass every challenge (falling back to the embedded one from older proxies), hid `tsh mfa`; repaired the base-red harness (vendored reflect2 v1.0.1 segfaults on go1.24, webassets submodule absent) and confirmed 0 new failures in lib/auth and lib/web plus a passing WebSuite.TestU2FLogin as backward-compat proof."
+}
