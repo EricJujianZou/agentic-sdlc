@@ -1,0 +1,138 @@
+diff --git a/report/report.go b/report/report.go
+index c0feb41..011e625 100644
+--- a/report/report.go
++++ b/report/report.go
+@@ -225,14 +225,14 @@ func DetectGitHubCves(r *models.ScanResult) error {
+ 
+ // DetectWordPressCves detects CVEs of WordPress
+ func DetectWordPressCves(r *models.ScanResult) error {
+-	token := c.Conf.Servers[r.ServerName].WordPress.WPVulnDBToken
+-	if token == "" {
++	wpCnf := c.Conf.Servers[r.ServerName].WordPress
++	if wpCnf.WPVulnDBToken == "" {
+ 		return nil
+ 	}
+ 	wpVulnCaches := map[string]string{}
+ 	wpOpt := WordPressOption{
+-		token,
+-		&wpVulnCaches,
++		wpCnf,
++		wpVulnCaches,
+ 	}
+ 
+ 	ints := &integrationResults{}
+@@ -509,15 +509,15 @@ func (g GithubSecurityAlertOption) apply(r *models.ScanResult, ints *integration
+ 
+ // WordPressOption :
+ type WordPressOption struct {
+-	token        string
+-	wpVulnCaches *map[string]string
++	cnf          config.WordPressConf
++	wpVulnCaches map[string]string
+ }
+ 
+ func (g WordPressOption) apply(r *models.ScanResult, ints *integrationResults) (err error) {
+-	if g.token == "" {
++	if g.cnf.WPVulnDBToken == "" {
+ 		return nil
+ 	}
+-	n, err := wordpress.FillWordPress(r, g.token, g.wpVulnCaches)
++	n, err := wordpress.FillWordPress(r, g.cnf, g.wpVulnCaches)
+ 	if err != nil {
+ 		return xerrors.Errorf("Failed to fetch from WPVulnDB. Check the WPVulnDBToken in config.toml. err: %w", err)
+ 	}
+diff --git a/wordpress/wordpress.go b/wordpress/wordpress.go
+index 470edbf..6b18390 100644
+--- a/wordpress/wordpress.go
++++ b/wordpress/wordpress.go
+@@ -48,7 +48,7 @@ type References struct {
+ 
+ // FillWordPress access to wpvulndb and fetch scurity alerts and then set to the given ScanResult.
+ // https://wpscan.com/
+-func FillWordPress(r *models.ScanResult, token string, wpVulnCaches *map[string]string) (int, error) {
++func FillWordPress(r *models.ScanResult, cnf c.WordPressConf, wpVulnCaches map[string]string) (int, error) {
+ 	// Core
+ 	ver := strings.Replace(r.WordPressPackages.CoreVersion(), ".", "", -1)
+ 	if ver == "" {
+@@ -59,7 +59,7 @@ func FillWordPress(r *models.ScanResult, token string, wpVulnCaches *map[string]
+ 	if !ok {
+ 		url := fmt.Sprintf("https://wpscan.com/api/v3/wordpresses/%s", ver)
+ 		var err error
+-		body, err = httpRequest(url, token)
++		body, err = httpRequest(url, cnf.WPVulnDBToken)
+ 		if err != nil {
+ 			return 0, err
+ 		}
+@@ -67,7 +67,7 @@ func FillWordPress(r *models.ScanResult, token string, wpVulnCaches *map[string]
+ 			util.Log.Warnf("A result of REST access is empty: %s", url)
+ 		}
+ 
+-		(*wpVulnCaches)[ver] = body
++		wpVulnCaches[ver] = body
+ 	}
+ 
+ 	wpVinfos, err := convertToVinfos(models.WPCore, body)
+@@ -78,7 +78,7 @@ func FillWordPress(r *models.ScanResult, token string, wpVulnCaches *map[string]
+ 	themes := r.WordPressPackages.Themes()
+ 	plugins := r.WordPressPackages.Plugins()
+ 
+-	if c.Conf.WpIgnoreInactive {
++	if cnf.IgnoreInactive {
+ 		themes = removeInactives(themes)
+ 		plugins = removeInactives(plugins)
+ 	}
+@@ -89,11 +89,11 @@ func FillWordPress(r *models.ScanResult, token string, wpVulnCaches *map[string]
+ 		if !ok {
+ 			url := fmt.Sprintf("https://wpscan.com/api/v3/themes/%s", p.Name)
+ 			var err error
+-			body, err = httpRequest(url, token)
++			body, err = httpRequest(url, cnf.WPVulnDBToken)
+ 			if err != nil {
+ 				return 0, err
+ 			}
+-			(*wpVulnCaches)[p.Name] = body
++			wpVulnCaches[p.Name] = body
+ 		}
+ 
+ 		if body == "" {
+@@ -132,11 +132,11 @@ func FillWordPress(r *models.ScanResult, token string, wpVulnCaches *map[string]
+ 		if !ok {
+ 			url := fmt.Sprintf("https://wpscan.com/api/v3/plugins/%s", p.Name)
+ 			var err error
+-			body, err = httpRequest(url, token)
++			body, err = httpRequest(url, cnf.WPVulnDBToken)
+ 			if err != nil {
+ 				return 0, err
+ 			}
+-			(*wpVulnCaches)[p.Name] = body
++			wpVulnCaches[p.Name] = body
+ 		}
+ 
+ 		if body == "" {
+@@ -300,10 +300,7 @@ func removeInactives(pkgs models.WordPressPackages) (removed models.WordPressPac
+ 	return removed
+ }
+ 
+-func searchCache(name string, wpVulnCaches *map[string]string) (string, bool) {
+-	value, ok := (*wpVulnCaches)[name]
+-	if ok {
+-		return value, true
+-	}
+-	return "", false
++func searchCache(name string, wpVulnCaches map[string]string) (string, bool) {
++	value, ok := wpVulnCaches[name]
++	return value, ok
+ }
+diff --git a/wordpress/wordpress_test.go b/wordpress/wordpress_test.go
+index eba9531..537cc70 100644
+--- a/wordpress/wordpress_test.go
++++ b/wordpress/wordpress_test.go
+@@ -122,7 +122,7 @@ func TestSearchCache(t *testing.T) {
+ 	}
+ 
+ 	for i, tt := range tests {
+-		value, ok := searchCache(tt.name, &tt.wpVulnCache)
++		value, ok := searchCache(tt.name, tt.wpVulnCache)
+ 		if value != tt.value || ok != tt.ok {
+ 			t.Errorf("[%d] searchCache error ", i)
+ 		}

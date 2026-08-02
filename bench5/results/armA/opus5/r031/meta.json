@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-aaea15e516ece43978cf98e09e52080478b1d39f",
+  "model": "opus5",
+  "started_at": "2026-08-02T11:34:19Z",
+  "finished_at": "2026-08-02T11:41:31Z",
+  "turns_estimate": 20,
+  "self_assessment": "searchCache and the wpVulnCaches plumbing now take the map by value; FillWordPress takes the per-server config.WordPressConf (replacing the token param) and gates removeInactives on cnf.IgnoreInactive instead of the global c.Conf.WpIgnoreInactive; build+vet+full go test green before and after, negative control flips the two config-source tests red; left the now-unread -wp-ignore-inactive global flag in place since the Requirements are silent on removing it."
+}
