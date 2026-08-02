@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_flipt-io__flipt-e88e93990e3ec1e7697754b423decc510d5dd5fe",
+  "model": "opus5",
+  "started_at": "2026-08-02T07:33:39Z",
+  "finished_at": "2026-08-02T07:42:10Z",
+  "turns_estimate": 32,
+  "self_assessment": "Added flag_key (field 6 boolean / field 9 variant) to the evaluation protos, regenerated evaluation.pb.go with buf+protoc-gen-go v1.31.0 in a deps-free scratch dir (buf.build is 403 through the proxy) after proving the toolchain reproduces the committed file byte-for-byte from the unchanged proto; set FlagKey from flag.Key in both boolean (single construction site, so every threshold/segment/default path carries it) and variant; extended 10 existing assertions incl. both batch responses. gofmt clean, go vet + go build + go test ./internal/server/... green, negative control (removing both assignments) fails 9 tests, patch applies to a clean base. Requirement 10 (serialized responses) verified out-of-band via a scratch proto round-trip showing tags 0x32/0x4A appended after existing fields; no permanent wire test added since append-only field numbering is what guarantees it."
+}
