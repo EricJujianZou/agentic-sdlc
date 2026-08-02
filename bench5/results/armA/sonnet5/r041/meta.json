@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "model": "sonnet5",
+  "started_at": "2026-08-02T21:10:49Z",
+  "finished_at": "2026-08-02T21:17:18Z",
+  "turns_estimate": 25,
+  "self_assessment": "Renamed CpeNameMatch to CpeVersionMatch, added CpeVendorProductMatch (score 10, sortOrder 9), made DetectCpeURIsCves pick JVN-only confidence via detail.NvdJSON==nil && detail.Jvn!=nil (no IsJvn() method exists in the vendored go-cve-dictionary v0.15.14, so implemented the equivalent inline rather than downgrading the dependency as the real upstream commit did), and updated the TUI template to show score/method; full test suite (go build ./..., go test ./...) passes."
+}
