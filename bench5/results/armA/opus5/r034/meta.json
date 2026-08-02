@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-25858f9f0c165df25742acf8309ce909773f0cdd-v13642507b4fc1f8d234172bf8129942da2c2ca26",
+  "model": "opus5",
+  "started_at": "2026-08-02T14:34:06Z",
+  "finished_at": "2026-08-02T14:44:43Z",
+  "turns_estimate": 38,
+  "self_assessment": "Pure extraction of solr config/state/helpers (load_config, get/set_solr_base_url, get/set_solr_next, SolrUpdateState, solr_update, solr_insert_documents) into new openlibrary/solr/utils.py; update_work re-imports them so scripts/solr_updater.py and solr_builder.py keep working, update_edition drops its deferred cycle-dodging import, index_subjects pulls solr_insert_documents from utils, and the TestSolrUpdate class moved to a new tests/solr/test_utils.py. Whole repo suite 1604 passed / 0 failed both at base and after (verified by re-applying the saved patch to a stashed-clean tree), doctests 1314 passed, ruff and mypy finding sets identical to base, black clean; the moved-out solr_next flag was proved to still reach update_edition by a throwaway test that went red when update_edition.py alone was reverted."
+}
