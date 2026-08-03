@@ -46,5 +46,12 @@
   `codeload.github.com` tarballs for `github:org/repo#branch` deps (proxy allows `git clone`, not
   raw codeload); part-rewrites `yarn.lock` -- exclude from diff. Fallback: `npm install --legacy-
   peer-deps --package-lock=false`; if `jest` fails on npm-vs-yarn mismatch, fall back to `npx tsc
-  --noEmit -p .` (grep pre-existing `test/` tsc errors for your file) and note it in
-  `self_assessment`.
+  --noEmit -p .` and note it in `self_assessment`. Two more npm-install-only blockers there: `npm`
+  also 403s fetching `@matrix-org/olm` from `gitlab.matrix.org` (devDependency, unrelated to most
+  tasks) -- `sed -i '/"@matrix-org\/olm":/d' package.json` before install, restore from a backup
+  copy before the final diff; Cypress postinstall ECONNRESETs downloading its binary --
+  `CYPRESS_INSTALL_BINARY=0 npm install ...`. The npm fallback still resolves `matrix-js-sdk` to a
+  registry version w/ different types than the pinned `github:` one, so whole-repo `tsc --noEmit`
+  is full of unrelated errors (1000s) -- don't eyeball it; `git stash push -- <your files>`, rerun
+  tsc, `git stash pop`, diff the two error-code histograms (`grep -oE "TS[0-9]+" ... | sort | uniq
+  -c`) -- identical before/after confirms zero new errors from your change.
