@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_element-hq__element-web-f0359a5c180b8fec4329c77adcf967c8d3b7b787-vnan",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-03T05:33:45Z",
+  "finished_at": "2026-08-03T05:44:55Z",
+  "turns_estimate": 30,
+  "self_assessment": "Gated Sign in with QR on a new labs flag feature_qr_signin_reciprocate_show (default false, LabGroup.Experimental, description naming MSC3882/MSC3886) checked inside LoginWithQRSection alongside the two MSC checks, plus the flag guard in both tabs per bullets 2+4 (SessionManagerTab needed the new SettingsStore import); en_EN.json regenerated with matrix-gen-i18n, not hand-edited. Verified: throwaway copies of the three affected suites with the flag mocked on show the section renders and clicking Show QR code yields data-testid=login-with-qr in both tabs; 4 per-bullet negative controls -- reverting the section's flag check flips exactly the flag-off/flag-read cases, removing the Settings.tsx entry flips the default-is-false case, while reverting either tab guard flips nothing, so those two guards are behaviourally redundant given the section's own check and are declared here as scope taken from bullets 2/4 rather than from observable behaviour. Gates: eslint + prettier clean on touched files, tsc has only one pre-existing unrelated error (RoomView-test.tsx), and 54 settings suites / 313 tests run with exactly 5 failures -- the LoginWithQRSection snapshot and the 4 tab tests that mock SettingsStore.getValue to false and therefore pin the pre-flag behaviour the issue asks to change; the golden test patch must update those. Uncertain: the exact displayName/description wording is unknowable and the tab guards may be over-scope if the golden only touched LoginWithQRSection."
+}
