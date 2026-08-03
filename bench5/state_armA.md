@@ -3,10 +3,10 @@
 - **Harness bug: any Bash/Edit/Write call can permanently corrupt the
   session's persisted cwd to a cloned task repo** (`hooks/*.py` resolve
   relative to it) -- trigger is broad (bare `cd`). Default to Monitor
-  (immune) for ALL task-repo ops from turn 1. Once tripped, Read/Grep/Glob
-  still work but Bash/Edit/Write die session-wide -- verify w/ `git status
-  --short`. Route ALL mutations (edits, meta.json, git commit/push)
-  through Monitor once tripped -- it keeps working end-to-end incl. push.
+  (immune) for ALL task-repo ops from turn 1; once tripped, Read/Grep/Glob
+  still work but Bash/Edit/Write die session-wide (verify w/ `git status
+  --short`) -- route ALL mutations (edits, meta.json, git commit/push)
+  through Monitor, which keeps working end-to-end incl. push.
 - **On Monitor, don't chain `sleep N`** waiting on a slow build/test/clone
   -- call `TaskOutput(task_id, block=true, timeout<=600000)` on that
   Monitor's own task_id; one call blocks and returns the real output.
@@ -30,31 +30,31 @@
   <pkg> run test <path> --coverage=false`; typecheck via `yarn workspace
   <pkg> run check-types`. `yarn install --immutable` fails -- use plain
   `yarn install`; `canvas` needs `apt-get install libpango1.0-dev
-  libjpeg-dev libgif-dev librsvg2-dev libcairo2-dev` + `yarn rebuild canvas`.
-  Native postinstall builds fail sandboxed but exit 0 -- ignore.
+  libjpeg-dev libgif-dev librsvg2-dev libcairo2-dev` + `yarn rebuild canvas`. Native postinstall builds fail sandboxed but exit 0, ignore.
 - **tutanota (TS)**: `apt-get install libsecret-1-dev` (keytar); sqlcipher
   `make` fails -- `npx tsc --noEmit` fallback. **ansible**: venv + `pip
   install -e . pytest pytest-mock mock cffi`; `ansible.legacy`
   `ModuleNotFoundError` under bare pytest -- confirm via stash-check.
   **Go**: real-diff `go.mod`/`go.sum` verbatim unless unrelated drift;
   `gofmt -l` can flag pre-existing base-commit failures (old `// +build`
-  w/o `//go:build` twin) -- strip `gofmt -w`'s stray `//go:build` line
-  back out. First build downloads full module graph, 2-3min -- not a
-  hang. Golden commits can carry real printf bugs that compile but fail
-  `go test`'s vet check -- `go vet ./<pkgs>/...`, fix flagged calls.
-  After stripping test hunks off a direct-child cherry-pick, run `go test`
-  w/ the ORIGINAL unmodified test file in place -- an old assertion now
-  failing (not panicking) on a case the golden commit deletes confirms it.
+  w/o `//go:build` twin) -- strip `gofmt -w`'s stray line back out. First
+  build downloads the full module graph, 2-3min, not a hang. Golden
+  commits can carry real printf bugs that compile but fail `go test`'s
+  vet check -- `go vet ./<pkgs>/...`, fix flagged calls. After stripping
+  test hunks off a direct-child cherry-pick, run `go test` w/ the
+  ORIGINAL test file in place -- an old assertion now failing (not
+  panicking) confirms it. `go.work.sum` (workspace monorepos) gets
+  rewritten by EVERY `go build`/`vet`/`test` like `yarn.lock` -- re-revert
+  it as the LAST step, right before the final diff.
 - **qutebrowser (2019, PyQt5, py3.11)**: `pytest==6.2.5 pluggy==0.13.1
   py==1.11.0 -o addopts=""` + `pip install -U jinja2 pytest-qt pytest-xvfb`.
-- **openlibrary**: needs **python3.12** venv, `pip install -U setuptools`
-  FIRST, `git submodule update --init vendor/infogami` +
+  **openlibrary**: **python3.12** venv, `pip install -U setuptools` FIRST,
+  `git submodule update --init vendor/infogami` +
   `PYTHONPATH=vendor/infogami:$PYTHONPATH`; `libpq-dev` 404s, use `psycopg2-binary`.
 - **element-web/matrix-react-sdk (yarn v1, github: deps)**: `yarn install`
   403s on `codeload.github.com` tarballs for `github:org/repo#branch` deps
-  (proxy allows `git clone`, not raw codeload); part-rewrites `yarn.lock`
-  on the failed attempt -- exclude from diff. Fallback: `npm install
-  --legacy-peer-deps --package-lock=false`; if `jest` then fails on an
-  npm-vs-yarn resolution mismatch, fall back to `npx tsc --noEmit -p .`
-  (grep pre-existing `test/` tsc errors for your file) and note it in
-  `self_assessment`.
+  (proxy allows `git clone`, not raw codeload); part-rewrites `yarn.lock` --
+  exclude from diff. Fallback: `npm install --legacy-peer-deps
+  --package-lock=false`; if `jest` then fails on npm-vs-yarn resolution
+  mismatch, fall back to `npx tsc --noEmit -p .` (grep pre-existing `test/`
+  tsc errors for your file) and note it in `self_assessment`.
