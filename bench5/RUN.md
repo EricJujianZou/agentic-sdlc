@@ -457,3 +457,33 @@ labeled, not deleted.
 
 This amendment is committed to `bench5/base` before the first v2
 session fires.
+
+## 2026-08-03 22:52 UTC — SA RERUN (v2) LAUNCHED
+
+Branch `bench5/armA-sonnet5-v2` at 4e4ef94 (scrub verified: git grep of
+the full branch tree for all 60 fix-commit SHAs and for `instance_`
+strings — zero matches). Pre-launch artifacts on `bench5/base`:
+amendment 93c01c7, tasks_v2 + protocol_armA_v2 3975e63.
+
+Two mechanics notes vs the amendment as written:
+
+1. The trigger API rejects sub-hourly cron, so the 30-min cadence is
+   implemented as TWO hourly triggers offset 30 min (same kickoff
+   message): `trig_01Nz3HmKs9xvSKtoUWiaGsqs` (:09) and
+   `trig_01M1iC8xh1nmuZo1ca1h6Rqo` (:39). First fire 23:09 UTC —
+   after this entry. Old SA trigger `trig_01KM6k7Ywx7UUaYLrY9wrEL7`
+   remains disabled.
+2. Kickoff framing anchors owner authorization to
+   `bench5/protocol_armA_v2.md` on the arm branch instead of pointing
+   subjects at `bench5/base` docs (the original kickoff cited PLAN.md
+   there): the base branch now contains the contamination review and
+   this amendment, i.e. the exploit recipe, so directing subjects to it
+   would undo the sanitization. The kickoff also restates the
+   provenance rule inline. Full kickoff text is stored in the trigger
+   config (IDs above); mechanics otherwise identical to the original
+   SA kickoff (first-missing rank, rebase-on-reject, abandon
+   duplicates, stop-when-complete).
+
+Projected completion ~30h (60 ranks at 2 sessions/h, minus collision
+waste). Stall rule unchanged: silent-death sessions relaunched
+per-instance (protocol-legal), logged here.
