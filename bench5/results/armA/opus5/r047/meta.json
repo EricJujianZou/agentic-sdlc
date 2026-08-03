@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_future-architect__vuls-436341a4a522dc83eb8bddd1164b764c8dd6bc45",
+  "model": "opus5",
+  "started_at": "2026-08-03T03:33:58Z",
+  "finished_at": "2026-08-03T03:52:12Z",
+  "turns_estimate": 40,
+  "self_assessment": "All bullets implemented and verified: Fedora 37/38 corrected + 40 added, macOS 11 Ended + 15 added, 13/14 dates set to 2026-04-30/2028-11-30, and 37 named-literal rollup entries appended (Win10 22H2 x14, Win11 22621 x14, mirrored on 22631 x14, Server 2022 x9) with revisions confirmed against Microsoft's published build numbers; repo-wide go build/vet/gofmt/go test all green and 10 per-bullet negative controls each flipped a disjoint test set. JUDGEMENT CALL: the bullet labelled 'SUSE Enterprise Desktop/Server version 13/14' was applied to FreeBSD 13/14 -- no SLES/SLED 13 or 14 release exists and FreeBSD is the only map in os.go with '13'/'14' keys, whose base dates (2026-01-31/2028-11-21) are the stale form of exactly the two dates the bullet names; SUSE entries were left untouched."
+}
