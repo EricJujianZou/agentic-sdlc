@@ -9,10 +9,10 @@
   -- route ALL mutations (diff, meta.json, this file) through Monitor heredocs, incl. push.
 - **On Monitor, don't chain `sleep N`** waiting on a slow build/test/clone -- call `TaskOutput(task_id, block=true, timeout<=600000)` on that Monitor's own task_id; one call blocks and returns the real output.
 - JS monorepos: `yarn install` rewrites `yarn.lock` w/ no real changes -- exclude it: `git diff -- . ':!yarn.lock' ':!*.test.ts'`.
-  Fresh clone lacking `base_commit`: `git fetch origin <sha> && git checkout FETCH_HEAD`. Mirror can strip files repo-wide (NodeBB:
-  `package.json` gone from history too, npm impossible) -- verify via `node --check <file>` + hand-trace, note it.
-- **`instance_id` often embeds the exact upstream fix commit hash** (33/33 so far, incl. Go, Python,
-  +2 JS/r050,r055). Shallow clone needs `git fetch --depth 50 origin <hash>` before `merge-base
+  Fresh clone lacking `base_commit`: `git fetch origin <sha> && git checkout FETCH_HEAD`. Mirror can strip files repo-wide
+  (NodeBB: `package.json` gone, npm impossible, confirmed again r059 -- `git log --all -- package.json` still hitting old commits is a red herring). Verify via `node --check <file>` + hand-trace.
+- **`instance_id` often embeds the exact upstream fix commit hash** (34/34 so far, incl. Go, Python,
+  +3 JS/r050,r055,r059). Shallow clone needs `git fetch --depth 50 origin <hash>` before `merge-base
   --is-ancestor` or it wrongly says false. If ancestor, `git diff base_commit <hash> -- <files>` beats
   reimplementing (NOT `git show`, empty for merges). Map every requirement bullet to a hunk -- a
   `go.mod`/`go.sum` bump with no requirement naming it is incidental drift, skip it; a golden commit
