@@ -55,3 +55,6 @@
   rev-parse HEAD` == the intended hash after checkout, retrying the fetch in a loop till it does.
   Prefer plain `git checkout FETCH_HEAD` over `-- .` for distant commits -- the latter re-stages
   the whole tree file-by-file and can exceed a Monitor timeout.
+- **teleport (Go), r056**: `instance_id` can embed TWO 40-char hashes -- only one is an ancestor of
+  `base_commit` (check both). Post-strip, `go vet`/build against the untouched BASE test file can
+  fail (it still calls a symbol your real fix removed) -- expected, grading's test_patch replaces it.
