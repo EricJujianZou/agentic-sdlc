@@ -1,0 +1,8 @@
+{
+    "instance_id": "instance_element-hq__element-web-f3534b42df3dcfe36dc48bddbf14034085af6d30-vnan",
+    "model": "opus5",
+    "started_at": "2026-08-03T11:32:00Z",
+    "finished_at": "2026-08-03T11:41:00Z",
+    "turns_estimate": 24,
+    "self_assessment": "Added a combined join-membership branch in textForMemberEvent returning _t(\"%(oldDisplayName)s changed their display name and profile picture\") when displayname changes AND avatar_url differs, regenerated en_EN.json with matrix-gen-i18n (one added key, no reordering); throwaway suite 8/8 green with the 2 combined cases flipping red at base and the 6 preserved-behaviour cases staying green, TextForEvent + messages + EventListSummary = 20 suites/278 tests green, eslint/prettier/tsc all exit 0. Judgement call declared: the avatar side uses a plain inequality (any avatar set/changed/removed) rather than the narrow set-and-changed form, because requirement 3 forbids extra variants for the combined case, so a set-avatar+rename now yields the combined message instead of \"changed their display name to X\"."
+}

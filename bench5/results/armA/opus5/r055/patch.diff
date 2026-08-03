@@ -1,0 +1,42 @@
+diff --git a/src/TextForEvent.tsx b/src/TextForEvent.tsx
+index c8aa993..c5c7bcc 100644
+--- a/src/TextForEvent.tsx
++++ b/src/TextForEvent.tsx
+@@ -114,7 +114,24 @@ function textForMemberEvent(ev: MatrixEvent, allowJSX: boolean, showHiddenEvents
+                     : _t("%(senderName)s banned %(targetName)s", { senderName, targetName });
+         case "join":
+             if (prevContent && prevContent.membership === "join") {
+-                if (prevContent.displayname && content.displayname && prevContent.displayname !== content.displayname) {
++                if (
++                    prevContent.displayname &&
++                    content.displayname &&
++                    prevContent.displayname !== content.displayname &&
++                    prevContent.avatar_url !== content.avatar_url
++                ) {
++                    return () =>
++                        _t("%(oldDisplayName)s changed their display name and profile picture", {
++                            // We're taking the display name directly from the event content here so we need
++                            // to strip direction override chars which the js-sdk would normally do when
++                            // calculating the display name
++                            oldDisplayName: removeDirectionOverrideChars(prevContent.displayname!),
++                        });
++                } else if (
++                    prevContent.displayname &&
++                    content.displayname &&
++                    prevContent.displayname !== content.displayname
++                ) {
+                     return () =>
+                         _t("%(oldDisplayName)s changed their display name to %(displayName)s", {
+                             // We're taking the display namke directly from the event content here so we need
+diff --git a/src/i18n/strings/en_EN.json b/src/i18n/strings/en_EN.json
+index 0b68dd9..59e30ff 100644
+--- a/src/i18n/strings/en_EN.json
++++ b/src/i18n/strings/en_EN.json
+@@ -501,6 +501,7 @@
+     "%(senderName)s invited %(targetName)s": "%(senderName)s invited %(targetName)s",
+     "%(senderName)s banned %(targetName)s: %(reason)s": "%(senderName)s banned %(targetName)s: %(reason)s",
+     "%(senderName)s banned %(targetName)s": "%(senderName)s banned %(targetName)s",
++    "%(oldDisplayName)s changed their display name and profile picture": "%(oldDisplayName)s changed their display name and profile picture",
+     "%(oldDisplayName)s changed their display name to %(displayName)s": "%(oldDisplayName)s changed their display name to %(displayName)s",
+     "%(senderName)s set their display name to %(displayName)s": "%(senderName)s set their display name to %(displayName)s",
+     "%(senderName)s removed their display name (%(oldDisplayName)s)": "%(senderName)s removed their display name (%(oldDisplayName)s)",
