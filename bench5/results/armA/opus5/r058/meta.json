@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_ansible__ansible-d30fc6c0b359f631130b0e979d9a78a7b3747d48-v1055803c3a812189a1133297f7f5468579283f86",
+  "model": "claude-opus-5",
+  "started_at": "2026-08-03T14:33:44Z",
+  "finished_at": "2026-08-03T15:12:00Z",
+  "turns_estimate": 30,
+  "self_assessment": "All 6 bullets built in lib/ansible/galaxy/collection.py (new _is_child_path + _extract_tar_dir; _tarfile_extract/_get_tar_file_member now yield (TarInfo, obj); _walk stops at symlinked dirs; _build_collection_tar emits SYMTYPE entries with a linkname relative to the link's own dir; install_artifact routes dirs through _extract_tar_dir). Verified with a 7-case untracked scratch suite (removed before delivery) covering one bullet each, all green, plus 8 negative controls that each flipped a non-empty, largely disjoint set and each ran all 7 cases; test/units/galaxy+cli before/after failure sets differ by exactly 3 tests that pin the pre-fix behaviour the Requirements supersede (test_build_copy_symlink_target_inside_collection, test_build_with_symlink_inside_collection, test_get_tar_file_member) - left them untouched since the golden's test patch owns that file. pycodestyle --max-line-length 160 clean; the one pyflakes hit is pre-existing. Judgement call declared: an in-tar symlink whose target is absent from the archive still raises tarfile's KeyError from extractfile before reaching the new _is_child_path guard (kept base's unguarded contextmanager rather than widening scope); the escape guard is reachable and tested for members whose link target is present."
+}
