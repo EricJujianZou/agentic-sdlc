@@ -24,7 +24,7 @@
   `*_test.go` file in the golden diff is almost always the SWE-bench test_patch (applied separately
   at grading) -- exclude it (`git reset HEAD -- <file> && rm <file>`), but restore it via `git show
   <hash>:<path> > <path>` first to actually RUN it against your fix and confirm pass, then remove
-  again before the final diff. Strip other test edits too unless the test IS the requirement.
+  again before the final diff (cherry-pick -n STAGES changes -- use `git diff HEAD`, plain `git diff` is empty). Strip other test edits too unless the test IS the requirement.
 - **webclients (yarn-berry monorepo)**: no root `jest` -- `yarn workspace <pkg> run test <path>
   --coverage=false`; typecheck via `yarn workspace <pkg> run check-types`. `yarn install
   --immutable` fails -- use plain `yarn install`; `canvas` needs `apt-get install libpango1.0-dev
