@@ -1,17 +1,19 @@
 # Arm A carried state (60-line cap)
 
 - **Harness bug: any Bash/Edit/Write call can permanently corrupt the session's persisted cwd to a
-  cloned task repo** (`hooks/*.py` resolve relative to it) -- trigger is broad (bare `cd`). Default
-  to Monitor (immune) for ALL task-repo ops from turn 1; once tripped, Read/Grep/Glob still work but
-  Bash/Edit/Write die session-wide (verify w/ `git status --short`) -- route ALL mutations (edits,
-  meta.json, git commit/push) through Monitor, which keeps working end-to-end incl. push.
+  cloned task repo** (`hooks/*.py` resolve relative to it) -- trigger is broad (bare `cd`, incl.
+  inside a Monitor script; Monitor itself stays usable after). Default to Monitor for ALL task-repo
+  ops from turn 1; once tripped, Read/Grep/Glob still work but Bash/Edit/Write die session-wide
+  (verify w/ `git status --short`) -- route ALL mutations (edits, meta.json, git commit/push)
+  through Monitor, which keeps working end-to-end incl. push.
 - **On Monitor, don't chain `sleep N`** waiting on a slow build/test/clone -- call
   `TaskOutput(task_id, block=true, timeout<=600000)` on that Monitor's own task_id; one call blocks
   and returns the real output.
 - JS monorepos: `yarn install` rewrites `yarn.lock` with no real changes -- exclude it: `git diff --
   . ':!yarn.lock' ':!*.test.ts'`. A fresh clone can lack `base_commit` (`fatal: reference is not a
   tree`) -- `git fetch origin <sha> && git checkout FETCH_HEAD`. A mirror can strip files repo-wide
-  (NodeBB) -- verify via syntax check only, note it.
+  (NodeBB, reconfirmed: `package.json` missing from git history too, not just worktree) -- npm
+  install/test impossible; verify via `node --check <file>` + hand-trace requirement I/O, note it.
 - **`instance_id` often embeds the exact upstream fix commit hash** (30/30, incl. Go, +1 JS/r050).
   Shallow clone needs `git fetch --depth 50 origin <hash>` before `merge-base --is-ancestor` or it
   wrongly says false. If ancestor, `git diff base_commit <hash> -- <files>` beats reimplementing
@@ -25,14 +27,12 @@
   at grading) -- exclude it (`git reset HEAD -- <file> && rm <file>`), but restore it via `git show
   <hash>:<path> > <path>` first to actually RUN it against your fix and confirm pass, then remove
   again before the final diff (cherry-pick -n STAGES changes -- use `git diff HEAD`, plain `git diff` is empty). Strip other test edits too unless the test IS the requirement.
-- **webclients (yarn-berry monorepo)**: no root `jest` -- `yarn workspace <pkg> run test <path>
-  --coverage=false`; typecheck via `yarn workspace <pkg> run check-types`. `yarn install
+- **webclients (yarn-berry monorepo)**: no root `jest` -- `yarn workspace <pkg> run test <path> --coverage=false`; typecheck via `yarn workspace <pkg> run check-types`. `yarn install
   --immutable` fails -- use plain `yarn install`; `canvas` needs `apt-get update && apt-get install
   libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libcairo2-dev` (run `update` FIRST or
   `pangocairo.pc` stays unresolvable despite a success-reporting install -- verify w/ `pkg-config
   --cflags --libs pangocairo`) + `yarn rebuild canvas` (also tries `@sentry/cli`, 403s on its binary
-  via proxy -- unrelated, check canvas's own build.log by content not mtime). Plain `git clone` can
-  die mid-transfer (`early EOF`, repo is huge) even after retries -- use `git clone
+  via proxy -- unrelated, check canvas's own build.log by content not mtime). Plain `git clone` can die mid-transfer (`early EOF`, repo is huge) even after retries -- use `git clone
   --filter=blob:none --no-checkout <url> task` then `git fetch --depth 100 origin <base_commit>`.
 - **tutanota (TS)**: `apt-get install libsecret-1-dev` (keytar); sqlcipher `make` fails -- `npx tsc
   --noEmit` fallback. **ansible**: venv + `pip install -e . pytest pytest-mock mock cffi`;
