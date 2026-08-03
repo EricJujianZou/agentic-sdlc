@@ -27,33 +27,34 @@
   again before the final diff (cherry-pick -n STAGES changes -- use `git diff HEAD`, plain `git diff` is empty). Strip other test edits too unless the test IS the requirement.
 - **webclients (yarn-berry monorepo)**: no root `jest` -- `yarn workspace <pkg> run test <path>
   --coverage=false`; typecheck via `yarn workspace <pkg> run check-types`. `yarn install
-  --immutable` fails -- use plain `yarn install`; `canvas` needs `apt-get install libpango1.0-dev
-  libjpeg-dev libgif-dev librsvg2-dev libcairo2-dev` + `yarn rebuild canvas`.
+  --immutable` fails -- use plain `yarn install`; `canvas` needs `apt-get update && apt-get install
+  libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libcairo2-dev` (run `update` FIRST or
+  `pangocairo.pc` stays unresolvable despite a success-reporting install -- verify w/ `pkg-config
+  --cflags --libs pangocairo`) + `yarn rebuild canvas` (also tries `@sentry/cli`, 403s on its binary
+  via proxy -- unrelated, check canvas's own build.log by content not mtime). Plain `git clone` can
+  die mid-transfer (`early EOF`, repo is huge) even after retries -- use `git clone
+  --filter=blob:none --no-checkout <url> task` then `git fetch --depth 100 origin <base_commit>`.
 - **tutanota (TS)**: `apt-get install libsecret-1-dev` (keytar); sqlcipher `make` fails -- `npx tsc
   --noEmit` fallback. **ansible**: venv + `pip install -e . pytest pytest-mock mock cffi`;
   `ansible.legacy` `ModuleNotFoundError` under bare pytest -- confirm via stash-check. **Go**: real-
   diff `go.mod`/`go.sum` verbatim unless unrelated drift; `gofmt -l` can flag pre-existing base-
-  commit failures (old `// +build` w/o `//go:build` twin) -- strip `gofmt -w`'s stray line back out.
-  First build downloads full module graph, 2-3min, not a hang. Golden commits can carry real printf
-  bugs that compile but fail `go test`'s vet check -- `go vet ./<pkgs>/...`, fix flagged calls.
-  After stripping test hunks off a cherry-pick, run `go test` w/ ORIGINAL test file in place -- an
-  old assertion now failing (not panicking) confirms it. `go.work.sum` (workspace monorepos) gets
-  rewritten by EVERY build/vet/test like `yarn.lock` -- re-revert it as the LAST step, before the
-  final diff.
+  commit failures -- strip stray `gofmt -w` lines back out. First build downloads full module graph
+  (2-3min, not a hang). Golden commits can carry real printf bugs failing `go vet` -- fix flagged
+  calls. After stripping test hunks, rerun `go test` w/ ORIGINAL test file -- an old assertion
+  failing (not panicking) confirms it. `go.work.sum` gets rewritten by every build/test like
+  `yarn.lock` -- re-revert it LAST, before the final diff.
 - **qutebrowser (2019, PyQt5, py3.11)**: `pytest==6.2.5 pluggy==0.13.1 py==1.11.0 -o addopts=""` +
   `pip install -U jinja2 pytest-qt pytest-xvfb`. **openlibrary**: python3.12 venv, `pip install -U
-  setuptools` FIRST, `git submodule update --init vendor/infogami` +
-  `PYTHONPATH=vendor/infogami:$PYTHONPATH`; `libpq-dev` 404s, use `psycopg2-binary`.
+  setuptools` FIRST, `git submodule update --init vendor/infogami` + `PYTHONPATH=vendor/infogami:$PYTHONPATH`; `libpq-dev` 404s, use `psycopg2-binary`.
 - **element-web/matrix-react-sdk (yarn v1, github: deps)**: `yarn install` 403s on
   `codeload.github.com` tarballs for `github:org/repo#branch` deps (proxy allows `git clone`, not
   raw codeload); part-rewrites `yarn.lock` -- exclude from diff. Fallback: `npm install --legacy-
   peer-deps --package-lock=false`; if `jest` fails on npm-vs-yarn mismatch, fall back to `npx tsc
-  --noEmit -p .` and note it in `self_assessment`. Two more npm-install-only blockers there: `npm`
-  also 403s fetching `@matrix-org/olm` from `gitlab.matrix.org` (devDependency, unrelated to most
-  tasks) -- `sed -i '/"@matrix-org\/olm":/d' package.json` before install, restore from a backup
-  copy before the final diff; Cypress postinstall ECONNRESETs downloading its binary --
-  `CYPRESS_INSTALL_BINARY=0 npm install ...`. The npm fallback still resolves `matrix-js-sdk` to a
-  registry version w/ different types than the pinned `github:` one, so whole-repo `tsc --noEmit`
-  is full of unrelated errors (1000s) -- don't eyeball it; `git stash push -- <your files>`, rerun
-  tsc, `git stash pop`, diff the two error-code histograms (`grep -oE "TS[0-9]+" ... | sort | uniq
-  -c`) -- identical before/after confirms zero new errors from your change.
+  --noEmit -p .` and note it in `self_assessment`. Two more npm-install-only blockers: `npm` also
+  403s fetching `@matrix-org/olm` from `gitlab.matrix.org` -- `sed -i '/"@matrix-org\/olm":/d'
+  package.json` before install, restore before final diff; Cypress postinstall ECONNRESETs --
+  `CYPRESS_INSTALL_BINARY=0 npm install ...`. npm fallback resolves `matrix-js-sdk` to a registry
+  version w/ different types than the pinned `github:` one, so whole-repo `tsc --noEmit` is full of
+  unrelated errors -- don't eyeball it; `git stash push -- <your files>`, rerun tsc, `git stash pop`,
+  diff the error-code histograms (`grep -oE "TS[0-9]+" ... | sort | uniq -c`) -- identical
+  before/after confirms zero new errors from your change.
