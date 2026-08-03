@@ -372,3 +372,88 @@ scaffolding effect in the series; rounds 1-4 found none at ceiling).
 The interaction (smaller-model-benefits-more) is directionally positive
 but not established. Replicate-2 decision per the adaptive rule is the
 owner's call.
+
+## 2026-08-03 — AMENDMENT: cell SA disqualified; SA rerun (v2) pre-registered
+
+**Finding.** Cell SA (sonnet-5, arm A) is disqualified for answer-key
+retrieval: task files embedded `instance_id`, whose suffix is the SHA of
+the real upstream fix commit; SA discovered this, wrote the recipe into
+its carried `state_armA.md`, and on ~45/60 instances diffed against or
+cherry-picked the actual fix — including retrieving the held-out test
+patch as a private oracle. Full evidence and detection commands:
+`REVIEW-2026-08-03-armA-sonnet-contamination.md` (committed with this
+amendment). OA, SB, OB are audited clean (0/60 metas) and their results
+stand unchanged. Consequences for the 2026-08-03 primary analysis: the
+SA row, the Sonnet McNemar (p=0.0129), the interaction estimate, and the
+SA-dependent parts of H4/H5 are **withdrawn**; wherever the matrix is
+reported, the original SA row is labeled "disqualified (answer-key
+retrieval)" — part of the record, not hidden.
+
+**Remedy (owner-approved): rerun cell SA only.** Plan of record:
+`RERUN-SA-HANDOFF.md` (committed with this amendment). Changes vs the
+original SA run, pre-registered here before any v2 session launches:
+
+1. **Sanitized task files** `tasks_v2/r001..r060.md`: identical to
+   `tasks/` minus the `instance_id` line (subjects get repo, base_commit,
+   problem statement, requirements, interface). The orchestrator joins
+   results back privately via `results/main_matrix.json`
+   `rank_to_instance`; the subject's `meta.json` reports `rank` instead
+   of `instance_id`.
+2. **Scrubbed subject-visible branch** `bench5/armA-sonnet5-v2`: under
+   `bench5/` it carries ONLY `protocol_armA_v2.md`, `tasks_v2/`, a fresh
+   `state_armA.md`, and `.gitignore`. All other bench5 content (old
+   `tasks/`, `instances.json`, `probe/`, `data/`, `results/`, RUN.md,
+   review/handoff docs) is removed from that branch because it leaks
+   instance_ids, the rank→instance map, gold patches, or the exploit
+   recipe. Verified before launch by grepping the branch tree for all 60
+   fix-commit SHAs (derived from `rank_to_instance`) and for
+   `instance_` id strings. Mechanics change only; the treatment
+   (protocol + one task file + carried state) is untouched.
+3. **Explicit prohibition** in `protocol_armA_v2.md` (the original
+   `protocol_armA.md` is frozen evidence, not rewritten): the workspace
+   is cloned shallow at `base_commit`; fetching, checking out, diffing
+   against, or consulting any commit not an ancestor of `base_commit` —
+   or obtaining the published fix or held-out tests by any other means
+   (upstream repo history, the SWE-bench dataset, web search) — is a
+   protocol violation that invalidates the instance. No network
+   sandboxing; the residual channel is accepted and audited (per
+   handoff §5).
+4. **Fresh state file.** `state_armA.md` seeded empty on the v2 branch.
+   `bench5/armA-sonnet5` is preserved untouched as evidence (never
+   force-pushed or deleted).
+5. **Cadence (mechanics change): one session every 30 minutes**
+   (cron `9,39 * * * *`, new trigger; the old SA trigger stays disabled).
+   Rationale: owner approved faster wall-clock; fire→push runs ~25–40
+   min, so a 20-min cadence would systematically collide sessions on the
+   same first-missing rank, while 30 min halves wall-clock (~30h
+   projected) with only occasional collisions, already handled by the
+   kickoff's first-missing + rebase + abandon-duplicate rule. Treatment
+   unchanged: each instance is one fresh session; arm-A wall-clock
+   remains serialization-dominated, so per-instance
+   `started_at`/`finished_at` stay the honest process metric.
+6. **Mandatory post-run audit before reporting:** (a) grep all 60 v2
+   metas with the review note's detection pattern; (b) diff each
+   submitted patch against the gold patch and flag high line-overlap for
+   manual adjudication (similarity alone is not guilt; similarity plus a
+   retrieval-describing meta is); (c) read the final carried state file
+   end to end. Any flag, any battery/model-pin deviation, or anything
+   touching the three clean cells escalates to the owner.
+
+Everything else is identical to the original SA cell: frozen battery
+ranks 1–60 in order, `claude-sonnet-5` pinned and verified per session
+from session metadata (wrong-model sessions discarded), one fresh cloud
+session per instance, verify-before-commit, one commit + push per
+instance as the only reporting channel, grading via `tools/grade_batch.py`
+(official harness, serial, per-patch pull + post-use rmi) against
+`fail_to_pass ∪ pass_to_pass`.
+
+**Analysis plan:** recompute with `tools/analyze_main.py` (seed
+20260803) substituting SA-v2 for SA: McNemar SA-v2 vs SB (paired,
+n=60); interaction (ΔSonnet − ΔOpus) bootstrap CI with OA/OB unchanged;
+low-probe sensitivity subset. Results to `results/main_matrix_v2.json`
+plus a dated entry here; `TELEMETRY.md` updated; the
+`scaffold-bench/rounds/round5/` mirror synced with superseded items
+labeled, not deleted.
+
+This amendment is committed to `bench5/base` before the first v2
+session fires.
