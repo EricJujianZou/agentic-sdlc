@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_NodeBB__NodeBB-bad15643013ca15affe408b75eba9e47cc604bb2-vd59a5728dfc977f44533186ace531248c2917516",
+  "model": "opus5",
+  "started_at": "2026-08-03T08:34:33Z",
+  "finished_at": "2026-08-03T08:42:35Z",
+  "turns_estimate": 30,
+  "self_assessment": "High confidence. meta.userOrGroupExists now branches on Array.isArray for validation (rejects any falsy element), slugify mapping, and per-index OR of the user/group results; Groups.existsBySlug already handled arrays, so the new work is User.existsBySlug's array branch plus the Interface-named User.getUidsByUserslugs (db.sortedSetScores on 'userslug:uid', mirroring the existing getUidByUsername/getUidsByUsernames pair). Throwaway suite of 13 cases (one per Requirements bullet) went 4 pass/9 fail at base -> 13/13 after, the 4 base-green cases being exactly the pre-existing single-slug behaviour; three per-bullet negative controls flipped coherent sets (validation 2, slugify map 4, existsBySlug branch 6) with single-slug cases never flipping. test/user.js + test/groups.js are 356 pass / 44 fail with an IDENTICAL failure set before and after (44 pre-existing, templates not built). eslint on both touched files exit 0; patch re-applies to a stashed base. One judgement call: the empty-array input is unspecified by the bullets and returns [] rather than rejecting."
+}
