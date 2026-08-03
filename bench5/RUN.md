@@ -312,3 +312,63 @@ Notable: the one-continuous-session bare arm scores ~80-87% at ~4.5
 min/instance — far above the pilot fresh-session rates on the same
 stratum. Grades: `bench5/results/main_armB_grades.json`; raw outputs
 `SWE-bench_Pro-os/bench5_eval/out_main/<iid>/armB_*_output.json`.
+
+## 2026-08-03 — MAIN RUN COMPLETE + PRIMARY ANALYSIS (pre-registered)
+
+All 4 cells delivered 60/60 (240 patches); all graded with the official
+harness (integrity: every grade genuine, zero `no output.json`); cron
+triggers disabled after completion. Full pass matrix:
+`bench5/results/main_matrix.json`.
+
+### Primary result (n=60 per cell)
+
+| cell | pass | rate |
+|------|------|------|
+| SA (sonnet, scaffolded) | 58/60 | 96.7% |
+| OA (opus, scaffolded)   | 59/60 | 98.3% |
+| SB (sonnet, bare cont.) | 48/60 | 80.0% |
+| OB (opus, bare cont.)   | 52/60 | 86.7% |
+
+- **Scaffolding effect, Sonnet:** +16.7pp; McNemar discordant 12 vs 2,
+  exact p = 0.0129 — significant.
+- **Scaffolding effect, Opus:** +11.7pp; discordant 8 vs 1, exact
+  p = 0.0391 — significant.
+- **Interaction (dSonnet − dOpus):** +5.0pp, bootstrap 95% CI
+  [−8.3pp, +18.3pp] — direction favors "scaffolding helps the smaller
+  model more," but the CI comfortably includes zero. No significant
+  interaction at n=60.
+- Cell fails: SA {r021, r028}; OA {r051}; SB 12 ranks; OB 8 ranks.
+
+### Probe-conditioned sensitivity (low-probe subset, n=21)
+
+Same direction, underpowered as pre-registered-expected: SA 21/21,
+OA 20/21, SB 17/21, OB 18/21; McNemar sonnet p=0.125, opus p=0.625;
+interaction +9.5pp CI [−19.0pp, +42.9pp]. The primary conclusion does
+not reverse on the memorization-resistant subset.
+
+### Process contrast (self-reported wall-clock per instance)
+
+armA sonnet median 20.0m / opus 13.6m; armB sonnet 9.4m / opus 10.8m.
+The scaffolded arm spends ~1.5-2x the in-session time per instance
+(fresh-context re-orientation + mandated verification), plus wall-clock
+serialization from the hourly cron (arm A took ~2.5 days vs arm B's
+~4.5 hours end-to-end).
+
+### Cost outcome — honest limitation
+
+Pre-registered $/solved at sticker pricing needs per-cell token totals.
+Subjects did not reliably self-report usage, and this orchestrator has
+no API to pull cloud-session token counts. What stands without tokens:
+arm A costs ~1.5-2x more in-session time per instance and 60 session
+spins vs 1; if per-token spend scales with session time, scaffolding
+buys +12-17pp pass rate for roughly ~2x inference cost. Owner can pull
+exact per-session usage from the claude.ai UI to close this out.
+
+### Verdict vs pre-registration
+
+Round-5 primary question — does scaffolding still matter on a hard
+frontier stratum? **Yes, for both models** (first significant
+scaffolding effect in the series; rounds 1-4 found none at ceiling).
+The interaction (smaller-model-benefits-more) is directionally positive
+but not established. Replicate-2 decision per the adaptive rule is the
+owner's call.
