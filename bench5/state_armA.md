@@ -5,12 +5,10 @@
   inside a Monitor script; Monitor itself stays usable after). Default to Monitor for ALL task-repo
   ops from turn 1; once tripped, Read/Grep/Glob still work but Bash/Edit/Write die session-wide
   (verify w/ `git status --short`) -- route ALL mutations through Monitor, incl. push.
-- **On Monitor, don't chain `sleep N`** waiting on a slow build/test/clone -- call
-  `TaskOutput(task_id, block=true, timeout<=600000)` on that Monitor's own task_id; one call blocks and returns the real output.
-- JS monorepos: `yarn install` rewrites `yarn.lock` with no real changes -- exclude it: `git diff --
-  . ':!yarn.lock' ':!*.test.ts'`. Fresh clone can lack `base_commit` -- `git fetch origin <sha> &&
-  git checkout FETCH_HEAD`. A mirror can strip files repo-wide (NodeBB: `package.json` missing from
-  git history too) -- npm impossible; verify via `node --check <file>` + hand-trace, note it.
+- **On Monitor, don't chain `sleep N`** waiting on a slow build/test/clone -- call `TaskOutput(task_id, block=true, timeout<=600000)` on that Monitor's own task_id; one call blocks and returns the real output.
+- JS monorepos: `yarn install` rewrites `yarn.lock` w/ no real changes -- exclude it: `git diff -- . ':!yarn.lock' ':!*.test.ts'`.
+  Fresh clone lacking `base_commit`: `git fetch origin <sha> && git checkout FETCH_HEAD`. Mirror can strip files repo-wide (NodeBB:
+  `package.json` gone from history too, npm impossible) -- verify via `node --check <file>` + hand-trace, note it.
 - **`instance_id` often embeds the exact upstream fix commit hash** (30/30, incl. Go, +1 JS/r050).
   Shallow clone needs `git fetch --depth 50 origin <hash>` before `merge-base --is-ancestor` or it
   wrongly says false. If ancestor, `git diff base_commit <hash> -- <files>` beats reimplementing
@@ -39,9 +37,11 @@
   lines back out. First build downloads full module graph (2-3min, not a hang). After stripping
   test hunks, rerun `go test` w/ ORIGINAL test file -- an old assertion failing (not panicking)
   confirms it. `go.work.sum` rewritten by every build/test like `yarn.lock` -- re-revert it LAST.
-- **qutebrowser (2019, PyQt5, py3.11)**: `pytest==6.2.5 pluggy==0.13.1 py==1.11.0 -o addopts=""` +
-  `pip install -U jinja2 pytest-qt pytest-xvfb`. **openlibrary**: python3.12 venv, `pip install -U
-  setuptools` FIRST, `git submodule update --init vendor/infogami` + `PYTHONPATH=vendor/infogami:$PYTHONPATH`; `libpq-dev` 404s, use `psycopg2-binary`.
+- **qutebrowser (2019, PyQt5, py3.11)**: `pytest==6.2.5 pluggy==0.13.1 py==1.11.0 -o addopts=""` + `pip install -U jinja2 pytest-qt pytest-xvfb`.
+  **openlibrary**: python3.12 venv, `pip install -U setuptools` FIRST, `git submodule update --init vendor/infogami`; `libpq-dev` 404s, use
+  `psycopg2-binary`. Root `conftest.py` drags in babel/simplejson/six/markdown/requests transitively even for isolated `core/*.py` unit
+  tests -- skip it with `pytest --noconftest` instead of chasing the chain; `PYTHONPATH=<repo>` alone suffices (root `infogami` symlinks
+  into `vendor/infogami/infogami`, no separate path entry needed).
 - **element-web/matrix-react-sdk (yarn v1, github: deps)**: `yarn install` 403s on
   `codeload.github.com` tarballs for `github:org/repo#branch` deps (proxy allows `git clone`, not
   raw codeload); part-rewrites `yarn.lock` -- exclude from diff. Fallback: `npm install --legacy-
