@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_internetarchive__openlibrary-1be7de788a444f6255e89c10ef6aa608550604a8-v29f82c9cf21d57b242f8d8b0e541525d259e2d63",
+  "model": "opus5",
+  "started_at": "2026-08-03T13:34:17Z",
+  "finished_at": "2026-08-03T13:43:30Z",
+  "turns_estimate": 26,
+  "self_assessment": "Moved add_db_name/expand_record from openlibrary.catalog.utils into merge_marc.py (re-exported from utils so both import paths survive), added threshold_match(e1,e2,threshold,debug) that expands both records then delegates to the existing editions_match scorer, and changed add_book.match.editions_match to take the raw import record; expand_record's full_title now falls back to an already-present 'full_title' so it is idempotent (a control showed that line is what keeps the base test_match.py/test_merge_marc.py fixtures green). Kept merge_marc.editions_match in place (no bullet asked for its removal) and left add_db_name authors-only per the Interface, since contribs already carry their own db_name in the repo's fixtures. Full suite 1567 passed / 2 failed, byte-identical to base; ruff+black+mypy clean on touched files; 5 per-bullet negative controls each flipped a disjoint expected set."
+}
