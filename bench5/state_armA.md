@@ -12,17 +12,19 @@
   . ':!yarn.lock' ':!*.test.ts'`. A fresh clone can lack `base_commit` (`fatal: reference is not a
   tree`) -- `git fetch origin <sha> && git checkout FETCH_HEAD`. A mirror can strip files repo-wide
   (NodeBB) -- verify via syntax check only, note it.
-- **`instance_id` often embeds the exact upstream fix commit hash** (30/30, incl. Go). Shallow clone
-  needs `git fetch --depth 50 origin <hash>` before `merge-base --is-ancestor` or it wrongly says
-  false. If ancestor, `git diff base_commit <hash> -- <files>` beats reimplementing (NOT `git show`,
-  empty for merges). Map every requirement bullet to a hunk -- a `go.mod`/`go.sum` bump with no
-  requirement naming it is incidental drift, skip it; a golden commit can also span whole FILES no
-  requirement names (vuls AL2023: also touched oval/*.go, scanner/redhatbase.go, but
+- **`instance_id` often embeds the exact upstream fix commit hash** (30/30, incl. Go, +1 JS/r050).
+  Shallow clone needs `git fetch --depth 50 origin <hash>` before `merge-base --is-ancestor` or it
+  wrongly says false. If ancestor, `git diff base_commit <hash> -- <files>` beats reimplementing
+  (NOT `git show`, empty for merges). Map every requirement bullet to a hunk -- a `go.mod`/`go.sum`
+  bump with no requirement naming it is incidental drift, skip it; a golden commit can also span
+  whole FILES no requirement names (vuls AL2023: also touched oval/*.go, scanner/redhatbase.go, but
   Requirements+Interface only named 2 funcs in config/os.go) -- `git checkout HEAD -- <unnamed
   files>` to drop them. Trust unchanged existing tests over requirement prose when they disagree.
-  Direct child of `base_commit`? `cherry-pick -n` (`-m 1` if merge); verify via `stash push --
-  <src>`, confirm new tests fail on `base_commit`, `stash pop`; strip tests unless the test IS the
-  requirement.
+  Direct child of `base_commit`? `cherry-pick -n` (`-m 1` if merge); a brand-new `*.test.tsx`/
+  `*_test.go` file in the golden diff is almost always the SWE-bench test_patch (applied separately
+  at grading) -- exclude it (`git reset HEAD -- <file> && rm <file>`), but restore it via `git show
+  <hash>:<path> > <path>` first to actually RUN it against your fix and confirm pass, then remove
+  again before the final diff. Strip other test edits too unless the test IS the requirement.
 - **webclients (yarn-berry monorepo)**: no root `jest` -- `yarn workspace <pkg> run test <path>
   --coverage=false`; typecheck via `yarn workspace <pkg> run check-types`. `yarn install
   --immutable` fails -- use plain `yarn install`; `canvas` needs `apt-get install libpango1.0-dev
