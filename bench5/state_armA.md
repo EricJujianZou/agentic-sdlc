@@ -13,10 +13,10 @@
 - JS monorepos: `yarn install` rewrites `yarn.lock` with no real changes --
   exclude it: `git diff -- . ':!yarn.lock' ':!*.test.ts'`. A fresh clone can
   lack `base_commit` (`fatal: reference is not a tree`) -- `git fetch origin
-  <sha> && git checkout FETCH_HEAD`. A mirror can strip files repo-wide
-  (NodeBB) -- verify via syntax check only, note it.
-- **`instance_id` often embeds the exact upstream fix commit hash** (28/28
-  confirmed). Shallow clone needs `git fetch --depth 50 origin <hash>`
+  <sha> && git checkout FETCH_HEAD`. A mirror can strip files repo-wide (NodeBB)
+  -- verify via syntax check only, note it.
+- **`instance_id` often embeds the exact upstream fix commit hash** (29/29,
+  incl. Go). Shallow clone needs `git fetch --depth 50 origin <hash>`
   before `merge-base --is-ancestor` or it wrongly says false. If ancestor,
   `git diff base_commit <hash> -- <files>` beats reimplementing (NOT
   `git show`, empty for merges). Map every requirement bullet to a hunk --
@@ -42,19 +42,19 @@
   back out. First build downloads full module graph, 2-3min -- not a
   hang. Golden commits can carry real printf bugs that compile but fail
   `go test`'s vet check -- `go vet ./<pkgs>/...`, fix flagged calls.
+  After stripping test hunks off a direct-child cherry-pick, run `go test`
+  w/ the ORIGINAL unmodified test file in place -- an old assertion now
+  failing (not panicking) on a case the golden commit deletes confirms it.
 - **qutebrowser (2019, PyQt5, py3.11)**: `pytest==6.2.5 pluggy==0.13.1
   py==1.11.0 -o addopts=""` + `pip install -U jinja2 pytest-qt pytest-xvfb`.
 - **openlibrary**: needs **python3.12** venv, `pip install -U setuptools`
   FIRST, `git submodule update --init vendor/infogami` +
-  `PYTHONPATH=vendor/infogami:$PYTHONPATH`; `libpq-dev` 404s, use
-  `psycopg2-binary`.
+  `PYTHONPATH=vendor/infogami:$PYTHONPATH`; `libpq-dev` 404s, use `psycopg2-binary`.
 - **element-web/matrix-react-sdk (yarn v1, github: deps)**: `yarn install`
   403s on `codeload.github.com` tarballs for `github:org/repo#branch` deps
-  (proxy allows `git clone`, not raw codeload) and part-rewrites
-  `yarn.lock` on the failed attempt -- exclude from diff. Fallback: `npm
-  install --legacy-peer-deps --package-lock=false` (plain npm errors on an
-  unrelated peer conflict, e.g. react17 vs a sub-dep's react18 peer). Even
-  then `jest` can fail transform/globalSetup on an npm-vs-yarn resolution
-  mismatch unrelated to your change -- fall back to `npx tsc --noEmit -p .`
-  (pre-existing unrelated tsc errors exist in `test/`; grep for your file)
-  and note it in `self_assessment`.
+  (proxy allows `git clone`, not raw codeload); part-rewrites `yarn.lock`
+  on the failed attempt -- exclude from diff. Fallback: `npm install
+  --legacy-peer-deps --package-lock=false`; if `jest` then fails on an
+  npm-vs-yarn resolution mismatch, fall back to `npx tsc --noEmit -p .`
+  (grep pre-existing `test/` tsc errors for your file) and note it in
+  `self_assessment`.
