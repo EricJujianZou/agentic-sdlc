@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_NodeBB__NodeBB-97c8569a798075c50e93e585ac741ab55cb7c28b-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+  "model": "opus5",
+  "started_at": "2026-08-03T15:34:07Z",
+  "finished_at": "2026-08-03T15:43:18Z",
+  "turns_estimate": 33,
+  "self_assessment": "Added User.hidePrivateData to src/user/data.js (copy-then-filter email/fullname on showemail/showfullname + meta.config.hideEmail/hideFullname, bypassed for self/admin/global-mod via parseInt UID compare) and called it from the GET /api/v3/users/:uid controller; logic copied verbatim from the existing inline block in src/controllers/accounts/helpers.js:46-53 rather than re-derived, that block left untouched since no bullet named it; 13 throwaway mocha cases all pass and 10 one-line negative controls each flip a disjoint expected set, test/user.js+test/api.js are 1713 pass / 46 fail identically before and after (the single differing entry is a flaky ECONNRESET cascade in 'profile methods' that does not reproduce in isolation), eslint clean, patch re-applies to a stashed base."
+}
