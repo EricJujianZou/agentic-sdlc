@@ -1,0 +1,8 @@
+{
+  "instance_id": "instance_NodeBB__NodeBB-84e065752f6d7fbe5c08cbf50cb173ffb866b8fa-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+  "model": "opus5",
+  "started_at": "2026-08-03T00:34:07Z",
+  "finished_at": "2026-08-03T00:44:30Z",
+  "turns_estimate": 34,
+  "self_assessment": "validateTags now takes an optional tid, diffs the submitted list against the topic's current tags, and blocks non-privileged adds ([[error:cant-use-system-tag]]) and removes ([[error:cant-remove-system-tag]]) of system tags; posts/edit.js passes the tid (both HTTP and socket edits funnel through it), SocketTopics.canRemoveTag added, en-GB error string added; a 16-case throwaway suite passed with the fix and split 6 green / 10 red at base, four single-line controls flipped disjoint sets, eslint clean and test/topics.js + test/posts.js + test/categories.js show zero new failures vs base."
+}
