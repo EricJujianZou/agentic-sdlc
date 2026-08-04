@@ -5,22 +5,25 @@
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit for the rest of the session (Read still works). NOT
   session-local: a subagent hits it on its first Bash call too.
-- CONFIRMED r014 (tested, not just reasoned): EnterWorktree ALSO reads the
-  corrupted cwd, silently creating a worktree of the WRONG repo; ExitWorktree
-  then restores you to that same corrupted path. Neither fixes the bug --
-  don't spend calls on either.
+- CONFIRMED r014, r016 (tested, not just reasoned): EnterWorktree ALSO reads
+  the corrupted cwd, silently creating a worktree of the WRONG repo;
+  ExitWorktree then restores you to that same corrupted path. Neither fixes
+  the bug -- don't spend calls on either.
 - RULE: never write `cd` as a bare/standalone token, in any wrapper. Use
   `ls <path>`, `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir &&
   cmd)` with load-bearing parens.
-- RECOVERY (confirmed r006/r009-r012/r014): stop retrying Bash/Write/
-  Edit/EnterWorktree. GitHub MCP push_files/get_file_contents isn't
-  hook-gated -- land patch.diff+meta.json+state.md as one commit through
-  it. add_repo CANNOT add a repo from a different owner mid-session; if
-  task repo owner != bench repo owner, use your own pre-edit Read output
-  (verbatim in transcript) as the original text. Reconstruct patch.diff as
-  small per-location hunks: new-side line = old_line (from the pre-edit
-  Read) + running delta (prior hunks' line-count diffs in that file) --
-  VERIFY by Read-ing that exact new line back before trusting it.
+- RECOVERY (confirmed r006/r009-r012/r014/r016): stop retrying Bash/Write/
+  Edit/EnterWorktree -- test each with ONE call max, not a retry loop.
+  mcp__github__push_files (no blob SHA needed, unlike create_or_update_file)
+  landed patch.diff+meta.json in one call, then state.md in a second --
+  confirmed working end-to-end r016. add_repo CANNOT add a repo from a
+  different owner mid-session; if task repo owner != bench repo owner, use
+  your own pre-edit Read output (verbatim in transcript) as the original
+  text. Reconstruct patch.diff as small per-location hunks: new-side line =
+  old_line (from the pre-edit Read) + running delta (prior hunks' line-count
+  diffs in that file) -- VERIFY by Read-ing that exact new line back before
+  trusting it, and re-Read the post-edit file at the predicted new line
+  number as a second cross-check (r016: caught one off-by-one this way).
 - Stop hooks inherit the corrupted cwd and WILL KEEP RE-FIRING every turn
   (stop_checklist.py errors, git-check flags workspaces/task as dirty) --
   expected, not fixable in-session. Once your push is verified via a
@@ -39,9 +42,11 @@
 - JS monorepos generally can't `yarn install` here (github: deps 403 on
   codeload.github.com, berry 404s) -- confirmed again r015 (element-web's
   matrix-js-sdk pinned via `github:`). No-install checks instead:
-  `ts.transpileModule()` per file (syntax only); `node --check` for plain
-  JS; `npm install` a throwaway sandbox dir *outside* the workspace to
-  inspect a pinned dep's real runtime behavior.
+  `ts.transpileModule()` per file (syntax only, but jsx:React on a plain
+  .ts file with generics false-positives as broken JSX -- pass no jsx
+  option for .ts, jsx:React only for .tsx); `node --check` for plain JS;
+  `npm install` a throwaway sandbox dir *outside* the workspace to inspect
+  a pinned dep's real runtime behavior.
 - Ansible module_utils/urls.py: a new HTTP/SSL knob threads through
   ~15-20 call sites -- grep every one, task file won't list them all.
 - RTL/jest snapshots: when jest can't run, hand-patch `.snap` files for
