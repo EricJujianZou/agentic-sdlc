@@ -10,10 +10,17 @@ it strictly.
 2. **Carried memory.** Read `bench5/state_armA.md` on the arm branch
    BEFORE starting: it holds up to 60 lines of process lessons from
    earlier sessions. It is your only inherited context.
-3. **Work.** Clone the task's repository into `bench5/workspaces/task/`
+3. **Work.** Prepare the task's repository in `bench5/workspaces/task/`
    (gitignored) SHALLOW at the base commit — fetch exactly that commit
-   and nothing newer (`git init` + `git fetch --depth 1 origin
-   <base_commit>` + `git checkout FETCH_HEAD`, or equivalent).
+   and nothing newer. Use cd-free commands ONLY (a leaked `cd` outside
+   a `(...)` subshell breaks this sandbox's tool hooks for the rest of
+   the session — see the state file's warning):
+
+       git init bench5/workspaces/task
+       git -C bench5/workspaces/task remote add origin <repo_url>
+       git -C bench5/workspaces/task fetch --depth 1 origin <base_commit>
+       git -C bench5/workspaces/task checkout FETCH_HEAD
+
    Understand the issue before editing: locate the failing
    behavior, read the surrounding code, satisfy every listed requirement
    and the specified interface exactly.

@@ -487,3 +487,28 @@ Two mechanics notes vs the amendment as written:
 Projected completion ~30h (60 ranks at 2 sessions/h, minus collision
 waste). Stall rule unchanged: silent-death sessions relaunched
 per-instance (protocol-legal), logged here.
+
+## 2026-08-04 02:25 UTC — SA-v2 mechanics fix: protocol step-3 clone recipe
+
+Three consecutive sessions on r002 (23:09v?/01:09, 01:39, 02:09 fires;
+state-only commits 9c9ce9f, 8b77bb3/07833ed, 00053db) were bricked by
+the sandbox's cwd trap: the repo's PreToolUse hook invokes
+`hooks/pretooluse_guard.py` by RELATIVE path, so a `cd` that leaks out
+of a subshell kills every later tool call in that session. Root cause
+of the cluster is protocol_armA_v2.md itself: v2's step-3 shallow-fetch
+recipe (`git init` + `git fetch` + `git checkout FETCH_HEAD`) reads
+naturally as `cd task-dir && git init && ...` — the exact leak — where
+v1's plain `git clone` needed no cd. A v2-only, systematic session
+killer is a mechanics defect biasing against SA-v2, so step 3 is
+reworded to an explicit cd-free `git -C` command sequence (both on
+`bench5/base` and the arm branch). The treatment and the provenance
+rule are unchanged; no graded result is affected (all three bricked
+sessions correctly delivered nothing rather than an unverified patch —
+noted as an integrity observation).
+
+The underlying environment trap (relative hook path) is deliberately
+left in place for fidelity with the original arms, which ran with it;
+it should be fixed engine-side AFTER the run (system-repair candidate:
+hook command should use an absolute/`$CLAUDE_PROJECT_DIR` path).
+Filing the issue is deferred until the run completes so the hourly ADW
+task doesn't start git surgery on this tree mid-run.
