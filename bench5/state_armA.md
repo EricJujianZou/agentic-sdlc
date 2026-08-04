@@ -5,9 +5,11 @@
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit for the rest of the session (Read/Grep/Glob still work).
   NOT session-local: a subagent hits it on its first Bash call too.
-  CONFIRMED r006/r009-r012/r014/r016/r017/r019 (r019: `cd dir &&
+  CONFIRMED r006/r009-r012/r014/r016/r017/r019/r021 (r019: `cd dir &&
   python3 - <<'EOF'...EOF` -- heredoc body ran, but the leading `cd &&`
-  still corrupted every later call). No one-off `cd` is ever safe.
+  still corrupted every later call; r021: `cd dir 2>&1; npm ls ...`
+  one-liner chained with `;` after an unrelated npm check -- same result).
+  No one-off `cd` is ever safe, including as a throwaway diagnostic.
 - EnterWorktree/ExitWorktree do NOT fix it (r014, r016): both read/restore
   the same corrupted cwd. Don't spend calls on either.
 - RULE: never write `cd` as a bare/standalone token, even in a heredoc.
@@ -18,13 +20,24 @@
   patch.diff+meta.json+state.md as one commit through it. Rebuild
   patch.diff by hand:
   - Edits already applied via Edit calls before the corruption: trust
-    your own old_string/new_string verbatim, not memory of a Read.
+    your own old_string/new_string verbatim, not memory of a Read -- the
+    Edit tool only succeeds on an exact match, so a landed edit's content
+    is tool-verified; only the hunk's start line number needs deriving.
+  - Derive a hunk's start line by counting forward from the nearest
+    confidently-known anchor (e.g. right after the license-header, or
+    right after a prior hunk's end) through short unchanged spans, not by
+    recalling a mid-file number cold -- cross-check with the net
+    old-vs-new line-count delta against the two files' total line counts
+    (both ends read via Read, still safe) to catch drift before pushing.
   - A bulk sed/regex edit run right before the bad `cd` likely already
     succeeded (Bash fails on the *next* call) -- confirm with Grep.
   - N single-line removals in one file: new_line = old_line - (removals
     before it); verify 2-3 against Grep/Read to catch off-by-ones early.
   - add_repo CANNOT add a repo from a different owner mid-session; use
-    your own pre-edit Read output instead.
+    your own pre-edit Read output instead. GitHub MCP tools are also
+    scoped to the harness repo only -- they cannot fetch the task repo's
+    base_commit either, so original file text must come from your own
+    earlier Read calls, not a fresh fetch.
 - Stop hooks inherit the corrupted cwd and re-fire every turn (expected).
   Once your push is verified via a GitHub MCP fetch-back, stop.
 
@@ -36,7 +49,7 @@
   imports/refs to emptypb/timestamppb in hand-written .go is behavior-
   preserving (protoc/protoc-gen-go NOT installed -- never regen *.pb.go).
 - JS monorepos with `github:` deps can't `yarn install` here (403 on
-  codeload.github.com; r015 element-web/matrix-js-sdk) -- use
+  codeload.github.com; r015/r021 element-web/matrix-js-sdk) -- use
   `ts.transpileModule()`/`node --check` for syntax-only checks instead. BUT
   plain npm-registry yarn-berry repos (e.g. protonmail/webclients r018) DO
   install: global `yarn` is 1.22 and chokes on `packageManager`, so invoke
