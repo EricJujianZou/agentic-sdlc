@@ -24,8 +24,8 @@
   patch.diff+meta.json+state.md in ONE `push_files` MCP call (not hook-
   gated) — that's the only channel left. Do code edits BEFORE any Bash call
   each session so you always have a clean pre-edit Read to diff against.
-- github MCP tools are scoped ONLY to the harness repo — can't fetch the
-  task repo as a fallback; your only "before" source is in-transcript.
+- github MCP tools are scoped ONLY to the harness repo — can't fetch the task
+  repo as a fallback; only in-transcript "before" content is available.
 
 ## Environment / sandbox facts
 - Network works for `go build`/`pip install`/`npm install`/`apt-get install`,
@@ -58,4 +58,4 @@
   (seen in WordPress scanning, r031) — grep sibling functions in the same
   package for the per-server access pattern before trusting a global field.
 - `bench5/workspaces/` is gitignored; `git diff HEAD` captures new+modified
-  files in one unified diff for patch.diff — only when Bash still works.
+  files in one diff for patch.diff — only when Bash still works.
