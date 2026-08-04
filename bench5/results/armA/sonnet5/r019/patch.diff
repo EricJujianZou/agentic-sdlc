@@ -1,0 +1,388 @@
+diff --git a/lib/ansible/executor/process/worker.py b/lib/ansible/executor/process/worker.py
+--- a/lib/ansible/executor/process/worker.py
++++ b/lib/ansible/executor/process/worker.py
+@@ -19,22 +19,34 @@
+ 
+ import os
+ import sys
+ import traceback
++import types
++import typing as t
+ 
+ from jinja2.exceptions import TemplateNotFound
+ from multiprocessing.queues import Queue
+ 
++from ansible import context
+ from ansible.errors import AnsibleConnectionFailure, AnsibleError
+ from ansible.executor.task_executor import TaskExecutor
++from ansible.module_utils.common.collections import is_sequence
+ from ansible.module_utils.common.text.converters import to_text
+ from ansible.utils.display import Display
+ from ansible.utils.multiprocessing import context as multiprocessing_context
+ 
++if t.TYPE_CHECKING:
++    from ansible.executor.task_queue_manager import FinalQueue
++    from ansible.inventory.host import Host
++    from ansible.parsing.dataloader import DataLoader
++    from ansible.playbook.play_context import PlayContext
++    from ansible.playbook.task import Task
++    from ansible.vars.manager import VariableManager
++
+ __all__ = ['WorkerProcess']
+ 
+ display = Display()
+ 
+ current_worker = None
+ 
+ 
+ class WorkerQueue(Queue):
+@@ -55,56 +67,55 @@
+ 
+-    def __init__(self, final_q, task_vars, host, task, play_context, loader, variable_manager, shared_loader_obj, worker_id):
++    def __init__(
++        self,
++        *,
++        final_q: FinalQueue,
++        task_vars: dict[str, t.Any],
++        host: Host,
++        task: Task,
++        play_context: PlayContext,
++        loader: DataLoader,
++        variable_manager: VariableManager,
++        shared_loader_obj: types.ModuleType,
++        worker_id: int,
++    ) -> None:
+ 
+         super(WorkerProcess, self).__init__()
+         # takes a task queue manager as the sole param:
+         self._final_q = final_q
+         self._task_vars = task_vars
+         self._host = host
+         self._task = task
+         self._play_context = play_context
+         self._loader = loader
+         self._variable_manager = variable_manager
+         self._shared_loader_obj = shared_loader_obj
++        self._cli_args = context.CLIARGS
+ 
+         # NOTE: this works due to fork, if switching to threads this should change to per thread storage of temp files
+         # clear var to ensure we only delete files for this child
+         self._loader._tempfiles = set()
+ 
+         self.worker_queue = WorkerQueue(ctx=multiprocessing_context)
+         self.worker_id = worker_id
+ 
+-    def _save_stdin(self):
+-        self._new_stdin = None
+-        try:
+-            if sys.stdin.isatty() and sys.stdin.fileno() is not None:
+-                try:
+-                    self._new_stdin = os.fdopen(os.dup(sys.stdin.fileno()))
+-                except OSError:
+-                    # couldn't dupe stdin, most likely because it's
+-                    # not a valid file descriptor
+-                    pass
+-        except (AttributeError, ValueError):
+-            # couldn't get stdin's fileno
+-            pass
+-
+-        if self._new_stdin is None:
+-            self._new_stdin = open(os.devnull)
+-
+-    def start(self):
+-        """
+-        multiprocessing.Process replaces the worker's stdin with a new file
+-        but we wish to preserve it if it is connected to a terminal.
+-        Therefore dup a copy prior to calling the real start(),
+-        ensuring the descriptor is preserved somewhere in the new child, and
+-        make sure it is closed in the parent when start() completes.
+-        """
+-
+-        self._save_stdin()
+-        # FUTURE: this lock can be removed once a more generalized pre-fork thread pause is in place
+-        with display._lock:
+-            try:
+-                return super(WorkerProcess, self).start()
+-            finally:
+-                self._new_stdin.close()
++    def _detach(self):
++        """
++        Detach the worker from the parent process, isolating it from the
++        controlling terminal and any standard I/O streams it inherited.
++
++        The worker is moved into its own session and process group, and
++        stdin/stdout/stderr are redirected to ``os.devnull``, so direct
++        terminal interaction and stray writes to the terminal are no
++        longer possible. Display output must flow through ``self._final_q``.
++        """
++
++        os.setsid()
++
++        fd = os.open(os.devnull, os.O_RDWR)
++        os.dup2(fd, 0)
++        os.dup2(fd, 1)
++        os.dup2(fd, 2)
++        if fd > 2:
++            os.close(fd)
+ 
+     def _hard_exit(self, e):
+@@ -128,28 +139,42 @@
+     def run(self):
+         """
+         Wrap _run() to ensure no possibility an errant exception can cause
+         control to return to the StrategyBase task loop, or any other code
+         higher in the stack.
+ 
+         As multiprocessing in Python 2.x provides no protection, it is possible
+         a try/except added in far-away code can cause a crashed child process
+         to suddenly assume the role and prior state of its parent.
+         """
+         try:
+-            return self._run()
++            # Set the queue on Display so calls to Display.display are proxied over the queue
++            display.set_queue(self._final_q)
++            self._detach()
++
++            if multiprocessing_context.get_start_method() != 'fork':
++                # A non-fork start method does not inherit the parent's memory, so the
++                # CLI arguments and plugin loader state must be re-established here
++                # before any task execution can take place.
++                context.CLIARGS = self._cli_args
++                collections_path = context.CLIARGS.get('collections_path') or []
++                if not is_sequence(collections_path):
++                    collections_path = [collections_path]
++                self._shared_loader_obj.init_plugin_loader(collections_path)
++
++            return self._run()
+         except BaseException as e:
+             self._hard_exit(e)
+         finally:
+             # This is a hack, pure and simple, to work around a potential deadlock
+             # in ``multiprocessing.Process`` when flushing stdout/stderr during process
+             # shutdown.
+             #
+             # We should no longer have a problem with ``Display``, as it now proxies over
+             # the queue from a fork. However, to avoid any issues with plugins that may
+             # be doing their own printing, this has been kept.
+             #
+             # This happens at the very end to avoid that deadlock, by simply side
+             # stepping it. This should not be treated as a long term fix.
+             #
+             # TODO: Evaluate migrating away from the ``fork`` multiprocessing start method.
+             sys.stdout = sys.stderr = open(os.devnull, 'w')
+@@ -157,33 +182,29 @@
+     def _run(self):
+         """
+         Called when the process is started.  Pushes the result onto the
+         results queue. We also remove the host from the blocked hosts list, to
+         signify that they are ready for their next task.
+         """
+ 
+         # import cProfile, pstats, StringIO
+         # pr = cProfile.Profile()
+         # pr.enable()
+ 
+-        # Set the queue on Display so calls to Display.display are proxied over the queue
+-        display.set_queue(self._final_q)
+-
+         global current_worker
+         current_worker = self
+ 
+         try:
+             # execute the task and build a TaskResult from the result
+             display.debug("running TaskExecutor() for %s/%s" % (self._host, self._task))
+             executor_result = TaskExecutor(
+                 self._host,
+                 self._task,
+                 self._task_vars,
+                 self._play_context,
+-                self._new_stdin,
+                 self._loader,
+                 self._shared_loader_obj,
+                 self._final_q,
+                 self._variable_manager,
+             ).run()
+ 
+             display.debug("done running TaskExecutor() for %s/%s [%s]" % (self._host, self._task, self._task._uuid))
+diff --git a/lib/ansible/executor/task_executor.py b/lib/ansible/executor/task_executor.py
+--- a/lib/ansible/executor/task_executor.py
++++ b/lib/ansible/executor/task_executor.py
+@@ -93,10 +93,9 @@
+     """
+ 
+-    def __init__(self, host, task, job_vars, play_context, new_stdin, loader, shared_loader_obj, final_q, variable_manager):
++    def __init__(self, host, task, job_vars, play_context, loader, shared_loader_obj, final_q, variable_manager):
+         self._host = host
+         self._task = task
+         self._job_vars = job_vars
+         self._play_context = play_context
+-        self._new_stdin = new_stdin
+         self._loader = loader
+         self._shared_loader_obj = shared_loader_obj
+@@ -992,7 +991,6 @@
+         connection, plugin_load_context = self._shared_loader_obj.connection_loader.get_with_context(
+             conn_type,
+             self._play_context,
+-            self._new_stdin,
+             task_uuid=self._task._uuid,
+             ansible_playbook_pid=to_text(os.getppid())
+         )
+ diff --git a/lib/ansible/executor/task_queue_manager.py b/lib/ansible/executor/task_queue_manager.py
+--- a/lib/ansible/executor/task_queue_manager.py
++++ b/lib/ansible/executor/task_queue_manager.py
+@@ -160,9 +160,13 @@
+         try:
+             self._final_q = FinalQueue()
+         except OSError as e:
+             raise AnsibleError("Unable to use multiprocessing, this is normally caused by lack of access to /dev/shm: %s" % to_native(e))
+ 
++        # Ensure worker processes (and anything they exec) do not inherit the
++        # controlling terminal's standard I/O file descriptors.
++        for fd in (0, 1, 2):
++            os.set_inheritable(fd, False)
++
+         self._callback_lock = threading.Lock()
+ 
+         # A temporary file (opened pre-fork) used by connection
+         # plugins for inter-process locking.
+         self._connection_lockfile = tempfile.TemporaryFile()
+diff --git a/lib/ansible/plugins/connection/__init__.py b/lib/ansible/plugins/connection/__init__.py
+--- a/lib/ansible/plugins/connection/__init__.py
++++ b/lib/ansible/plugins/connection/__init__.py
+@@ -30,9 +30,16 @@
+ __all__ = ['ConnectionBase', 'ensure_connect']
+ 
+ BUFSIZE = 65536
+ 
+ P = t.ParamSpec('P')
+ T = t.TypeVar('T')
+ 
+ 
++class ConnectionKwargs(t.TypedDict):
++    """Keyword arguments accepted by connection plugin initialization, in addition to a required positional `PlayContext` arg."""
++    task_uuid: str
++    ansible_playbook_pid: str
++    shell: t.NotRequired[ShellBase]
++
++
+ def ensure_connect(
+diff --git a/lib/ansible/plugins/strategy/__init__.py b/lib/ansible/plugins/strategy/__init__.py
+--- a/lib/ansible/plugins/strategy/__init__.py
++++ b/lib/ansible/plugins/strategy/__init__.py
+@@ -408,7 +408,15 @@
+                     }
+ 
+                     # Pass WorkerProcess its strategy worker number so it can send an identifier along with intra-task requests
+                     worker_prc = WorkerProcess(
+-                        self._final_q, task_vars, host, task, play_context, self._loader, self._variable_manager, plugin_loader, self._cur_worker,
++                        final_q=self._final_q,
++                        task_vars=task_vars,
++                        host=host,
++                        task=task,
++                        play_context=play_context,
++                        loader=self._loader,
++                        variable_manager=self._variable_manager,
++                        shared_loader_obj=plugin_loader,
++                        worker_id=self._cur_worker,
+                     )
+                     self._workers[self._cur_worker] = worker_prc
+diff --git a/test/units/executor/test_task_executor.py b/test/units/executor/test_task_executor.py
+--- a/test/units/executor/test_task_executor.py
++++ b/test/units/executor/test_task_executor.py
+@@ -43,5 +43,4 @@
+         mock_play_context = MagicMock()
+         mock_shared_loader = MagicMock()
+-        new_stdin = None
+         job_vars = dict()
+         mock_queue = MagicMock()
+@@ -51,5 +50,4 @@
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=mock_shared_loader,
+@@ -71,5 +69,4 @@
+         mock_queue = MagicMock()
+ 
+-        new_stdin = None
+         job_vars = dict()
+ 
+@@ -79,5 +76,4 @@
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=mock_shared_loader,
+@@ -102,5 +98,5 @@
+ 
+     def test_task_executor_run_clean_res(self):
+-        te = TaskExecutor(None, MagicMock(), None, None, None, None, None, None, None)
++        te = TaskExecutor(None, MagicMock(), None, None, None, None, None, None)
+         te._get_loop_items = MagicMock(return_value=[1])
+         te._run_loop = MagicMock(
+@@ -137,5 +133,4 @@
+         mock_shared_loader.lookup_loader = lookup_loader
+ 
+-        new_stdin = None
+         job_vars = dict()
+         mock_queue = MagicMock()
+@@ -146,5 +141,4 @@
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=mock_shared_loader,
+@@ -177,5 +171,4 @@
+         mock_queue = MagicMock()
+ 
+-        new_stdin = None
+         job_vars = dict()
+ 
+@@ -185,5 +178,4 @@
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=mock_shared_loader,
+@@ -206,5 +198,4 @@
+             job_vars={},
+             play_context=MagicMock(),
+-            new_stdin=None,
+             loader=DictDataLoader({}),
+             shared_loader_obj=MagicMock(),
+@@ -243,5 +234,4 @@
+             job_vars={},
+             play_context=MagicMock(),
+-            new_stdin=None,
+             loader=DictDataLoader({}),
+             shared_loader_obj=MagicMock(),
+@@ -282,5 +272,4 @@
+             job_vars={},
+             play_context=MagicMock(),
+-            new_stdin=None,
+             loader=DictDataLoader({}),
+             shared_loader_obj=MagicMock(),
+@@ -359,5 +348,4 @@
+ 
+         shared_loader = MagicMock()
+-        new_stdin = None
+         job_vars = dict(omit="XXXXXXXXXXXXXXXXXXX")
+ 
+@@ -367,5 +355,4 @@
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=shared_loader,
+@@ -416,5 +403,4 @@
+         shared_loader.action_loader = action_loader
+ 
+-        new_stdin = None
+         job_vars = dict(omit="XXXXXXXXXXXXXXXXXXX")
+ 
+@@ -424,5 +410,4 @@
+             job_vars=job_vars,
+             play_context=mock_play_context,
+-            new_stdin=new_stdin,
+             loader=fake_loader,
+             shared_loader_obj=shared_loader,

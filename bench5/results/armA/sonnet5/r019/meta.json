@@ -1,0 +1,8 @@
+{
+  "rank": 19,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T00:00:00Z",
+  "finished_at": "2026-08-04T00:00:00Z",
+  "turns_estimate": 40,
+  "self_assessment": "Implemented worker-process stdio detachment (WorkerProcess._detach, keyword-only typed __init__, non-fork CLIARGS/plugin-loader re-init), dropped new_stdin end-to-end (WorkerProcess/TaskExecutor/connection_loader call), added ConnectionKwargs TypedDict, and marked TQM's 0/1/2 fds non-inheritable; hit the session's cwd-corruption bug midway (one stray bare `cd &&` in a Bash call) which permanently broke Bash/Edit/Write, so the back half of the diff (one test-file fix plus this delivery) was hand-built as a unified diff from verified Read/Grep output and landed via GitHub MCP push_files instead of git; unable to run the test suite to confirm, so treat as unverified pending CI."
+}
