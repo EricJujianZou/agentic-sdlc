@@ -1,0 +1,91 @@
+diff --git a/models/scanresults.go b/models/scanresults.go
+--- a/models/scanresults.go
++++ b/models/scanresults.go
+@@ -269,6 +269,17 @@ func (r ScanResult) FormatAlertSummary() string {
+ 	}
+ 	return fmt.Sprintf("cisa: %d, uscert: %d, jpcert: %d alerts", cisaCnt, uscertCnt, jpcertCnt)
+ }
+ 
++// FormatKEVCveSummary returns a summary of KEV(Known Exploited Vulnerabilities) cve
++func (r ScanResult) FormatKEVCveSummary() string {
++	nKEV := 0
++	for _, vuln := range r.ScannedCves {
++		if 0 < len(vuln.KEVs) {
++			nKEV++
++		}
++	}
++	return fmt.Sprintf("%d KEVs", nKEV)
++}
++
+ func (r ScanResult) isDisplayUpdatableNum(mode config.ScanMode) bool {
+ 	if r.Family == constant.FreeBSD {
+diff --git a/models/vulninfos.go b/models/vulninfos.go
+--- a/models/vulninfos.go
++++ b/models/vulninfos.go
+@@ -268,6 +268,7 @@ type VulnInfo struct {
+ 	Mitigations          []Mitigation         `json:"mitigations,omitempty"`
+ 	Ctis                 []string             `json:"ctis,omitempty"`
+ 	AlertDict            AlertDict            `json:"alertDict,omitempty"`
++	KEVs                 []KEV                `json:"kevs,omitempty"`
+ 	CpeURIs              []string             `json:"cpeURIs,omitempty"` // CpeURIs related to this CVE defined in config.toml
+ 	GitHubSecurityAlerts GitHubSecurityAlerts `json:"gitHubSecurityAlerts,omitempty"`
+ 	WpPackageFixStats    WpPackageFixStats    `json:"wpPackageFixStats,omitempty"`
+@@ -283,6 +284,58 @@ type Alert struct {
+ 	Title string `json:"title,omitempty"`
+ 	Team  string `json:"team,omitempty"`
+ }
++
++// KEVType is a type of Known Exploited Vulnerabilities information source
++type KEVType string
++
++const (
++	// CISAKEVType is a KEV type of CISA
++	CISAKEVType KEVType = "cisa"
++	// VulnCheckKEVType is a KEV type of VulnCheck
++	VulnCheckKEVType KEVType = "vulncheck"
++)
++
++// KEV has Known Exploited Vulnerabilities information
++type KEV struct {
++	Type                       KEVType    `json:"type"`
++	VendorProject              string     `json:"vendorProject"`
++	Product                    string     `json:"product"`
++	VulnerabilityName          string     `json:"vulnerabilityName"`
++	ShortDescription           string     `json:"shortDescription"`
++	RequiredAction             string     `json:"requiredAction"`
++	KnownRansomwareCampaignUse string     `json:"knownRansomwareCampaignUse"`
++	DateAdded                  time.Time  `json:"dateAdded"`
++	DueDate                    *time.Time `json:"dueDate,omitempty"`
++
++	CISA      *CISAKEV      `json:"cisa,omitempty"`
++	VulnCheck *VulnCheckKEV `json:"vulnCheck,omitempty"`
++}
++
++// CISAKEV has CISA specific KEV information
++type CISAKEV struct {
++	Note string `json:"note,omitempty"`
++}
++
++// VulnCheckKEV has VulnCheck specific KEV information
++type VulnCheckKEV struct {
++	XDB                  []VulnCheckXDB                  `json:"xdb,omitempty"`
++	ReportedExploitation []VulnCheckReportedExploitation `json:"reportedExploitation,omitempty"`
++}
++
++// VulnCheckXDB has VulnCheck XDB information
++type VulnCheckXDB struct {
++	XDBID       string    `json:"xdbID"`
++	XDBURL      string    `json:"xdbURL"`
++	DateAdded   time.Time `json:"dateAdded"`
++	ExploitType string    `json:"exploitType"`
++	CloneSSHURL string    `json:"cloneSSHURL"`
++}
++
++// VulnCheckReportedExploitation has VulnCheck reported exploitation information
++type VulnCheckReportedExploitation struct {
++	URL       string    `json:"url"`
++	DateAdded time.Time `json:"dateAdded"`
++}
+ 
+ // GitHubSecurityAlerts is a list of GitHubSecurityAlert
+ type GitHubSecurityAlerts []GitHubSecurityAlert

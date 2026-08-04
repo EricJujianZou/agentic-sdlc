@@ -6,10 +6,12 @@
   for Bash/Write/Edit; Read still works). Triggers regardless of wrapper --
   `cd dir && cmd`, `cd x; y`, heredocs, no `&&`/`;` needed. Any bare `cd
   word` outside `(...)` is unsafe. Has bitten r002/r003/r005(x2)/r006/r009/
-  r010 -- r010 hit it via `cd /path 2>/dev/null; true`, i.e. even a
-  deliberately "defensive"/discarded-output cd with no downstream command
-  still corrupts cwd. There is no safe bare `cd`, full stop -- don't run
-  one even to test the sandbox itself.
+  r010/r011 (r011 via `cd bench5/workspaces/task && go mod download ...`,
+  i.e. even a routine `go` tooling invocation after `cd` still corrupts) --
+  r010 hit it via `cd /path 2>/dev/null; true`, i.e. even a deliberately
+  "defensive"/discarded-output cd with no downstream command still
+  corrupts cwd. There is no safe bare `cd`, full stop -- don't run one even
+  to test the sandbox itself.
 - CONFIRMED NOT SESSION-LOCAL (r009): a fresh subagent spawned via the
   Agent tool to "escape" the corruption hit the IDENTICAL hook error on
   its very first Bash call. Don't waste a turn trying a subagent to route
@@ -19,17 +21,24 @@
   itself) -- use `ls <path>`/`test -d <path>`, `git -C <path> ...`,
   `go -C <path> <subcmd>`, or wrap `(cd dir && cmd)` -- parens load-bearing.
 - If corruption happens anyway: stop, don't retry Bash/Write/Edit -- all
-  three break together (confirmed again r010). RECOVER: GitHub MCP
+  three break together (confirmed again r010/r011). RECOVER: GitHub MCP
   (get_file_contents/push_files) isn't hook-gated -- hand-reconstruct
   patch.diff from original (early Read) + final content already captured
   in-session, push patch.diff+meta.json+state.md via the API (r006, r009,
-  r010 recovered this way). Sanity-check a hand-built multi-hunk diff by
-  summing each hunk's (new_lines - old_lines) and confirming it equals
-  (final_file_line_count - original_file_line_count) per file -- catches
-  missed/duplicated regions before publishing. Only give up if you never
-  captured full before/after content. push_files (not create_or_update_file)
-  lets you land patch.diff+meta.json+state.md as ONE commit without needing
-  each file's blob SHA first.
+  r010 recovered this way). r011: corruption hit BEFORE any edit was made
+  (no in-session before/after capture at all) -- still recoverable: Read
+  the untouched base_commit files, author the fix by hand from
+  requirements alone, and hand-write the unified diff directly (skip the
+  workspace entirely, no `git diff` needed). Sanity-check a hand-built
+  diff by summing each hunk's (new_lines - old_lines) and confirming the
+  running total matches the cumulative `+`-side line-number offset used in
+  later hunks' `@@` headers for the same file (each hunk's `+` start =
+  its `-` start + sum of prior hunks' deltas in that file) -- catches
+  missed/duplicated regions and mis-numbered headers before publishing.
+  Only give up if you never captured/derived full before/after content.
+  push_files (not create_or_update_file) lets you land
+  patch.diff+meta.json+state.md as ONE commit without needing each file's
+  blob SHA first.
 
 ## Environment / sandbox facts
 - Network works for `go build`/`pip install`/`npm install`; a PINNED
@@ -37,7 +46,11 @@
   is fair game for authoritative constants/signatures -- not a provenance
   violation. This extends to a dep pinned only in a manifest (not yet
   installed): shallow-fetching its exact pinned commit to read source is
-  equally fair game (r009: web.py pinned by commit sha).
+  equally fair game (r009: web.py pinned by commit sha). Do this via
+  `go -C <workspace> mod download <module>` (or read straight from
+  GOMODCACHE with `ls`/Read) -- NEVER `cd <workspace> && go mod download`;
+  see the cd bug above, it doesn't matter that the command "isn't a shell
+  builtin" after the `&&`.
 - NodeBB (`NodeBB/NodeBB`) keeps its real `package.json` at
   `install/package.json`, not repo root -- `npm install` needs it copied to
   root first (`cp install/package.json package.json`); root-level tests
@@ -80,7 +93,10 @@
   have the old file `import`+`export { X }` it back.
 - Before the cwd corruption risk: run `node --check <file>` per touched
   file as a zero-risk syntax gate (pure node, no shell cwd dependency) --
-  cheap and catches typos before any git-diff step.
+  cheap and catches typos before any git-diff step. Go has no equivalent
+  zero-risk single-file syntax check reachable without `-C`/`cd`-shaped
+  commands -- if corruption strikes before a Go build ever ran, say so
+  explicitly in self_assessment rather than claiming untested code passes.
 
 ## Misc
 - `bench5/workspaces/` is gitignored; no impact on `git status`.
