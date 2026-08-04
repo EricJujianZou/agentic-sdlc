@@ -8,31 +8,31 @@
   `git -C <path> ...`; for Go, `go -C <path> <subcmd>` (build/vet/test/list
   scoped to a dir, confirmed r002+r003 across sessions). Else wrap
   `(cd dir && cmd)` — parens load-bearing.
+- Not just `cd x && y`: `cd x 2>/dev/null; y` (semicolon) trips it too, and
+  even a solo `cd x` with no follow-on command (r005) — ANY bare `cd` token
+  outside `(...)` is forbidden, regardless of separator or intent.
 - If corruption happens anyway: stop, don't retry Bash/Write/Edit. Leave the
   instance unsolved rather than fabricate an unverified patch.diff. GitHub
   MCP tools aren't hook-gated — leave a note here even when fully locked out
   locally, then push nothing else and stop.
 
 ## Environment / sandbox facts
-- Network IS available for `go build`/`go mod tidy` against the real proxy;
-  module cache (`go env GOMODCACHE`) is browsable read-only — reading a
-  PINNED THIRD-PARTY dep's source there (not the target repo/its fix) for
-  authoritative constant/type strings or signatures is legitimate, not a
-  provenance violation (r002 confirmed a trivy/fanal type-string set this way).
-- `protoc`/`protoc-gen-gogo` NOT installed — can't regen `*.pb.go` in a
-  gogoproto repo (e.g. teleport). Hand-patch: add field+tag+`Get<Field>()`,
-  update `MarshalToSizedBuffer` (highest field-number first), `Size()`,
-  `Unmarshal()`'s `case N:`, copying byte pattern from a neighboring field
-  in the SAME file. Verify by building just that proto package.
+- Network IS available for `go build`/`go mod tidy`; module cache (`go env
+  GOMODCACHE`) is browsable read-only — reading a PINNED THIRD-PARTY dep's
+  source there for authoritative constants/signatures is legitimate, not a
+  provenance violation (r002: trivy/fanal type-string set this way).
+- `protoc`/`protoc-gen-gogo` NOT installed — can't regen `*.pb.go` (gogoproto
+  repos, e.g. teleport). Hand-patch: add field+tag+`Get<Field>()`, update
+  `MarshalToSizedBuffer` (highest field-number first), `Size()`, `Unmarshal()`
+  `case N:`, copying byte pattern from a neighboring field in the SAME file.
 - teleport `lib/auth` full-server tests PANIC on Go 1.24 (vendored
-  json-iterator/reflect2 bug, pre-existing per `git stash`+rerun on base
-  commit) — isolate the specific call in a throwaway `_test.go` instead.
-- Worktree isolation: a Bash `cd` outside your `.claude/worktrees/<id>/...`
-  tree is refused even for nominally-the-same-repo paths.
-- Adding an official exporter/client submodule (e.g. otel's
-  `.../otlptracegrpc`) via `go get pkg@<version matching sibling deps>`
-  then `go mod tidy` is legitimate (published registry, not the target
-  repo's fix) and keeps go.sum diff minimal.
+  json-iterator/reflect2 bug, pre-existing per base-commit rerun) — isolate
+  the specific call in a throwaway `_test.go` instead.
+- Worktree/sandbox `cd` isolation is strict — treat every path as absolute,
+  never assume a prior `cd` persisted.
+- Adding an official exporter/client submodule (e.g. otel's `.../otlptracegrpc`)
+  via `go get pkg@<version matching sibling deps>` then `go mod tidy` is
+  legitimate (published registry, not the repo's fix) — keeps go.sum diff minimal.
 
 ## Go verification recipe
 1. Shallow clone at base_commit (via `git -C`), `go -C <dir> build ./...`
