@@ -1,0 +1,15 @@
+diff --git a/src/user/data.js b/src/user/data.js
+index bccea4c..11c78a0 100644
+--- a/src/user/data.js
++++ b/src/user/data.js
+@@ -50,6 +50,10 @@ module.exports = function (User) {
+ 		'email:confirmed': 0,
+ 	};
+ 
++	User.getIconBackgrounds = async function (uid = 0) {
++		return iconBackgrounds.slice();
++	};
++
+ 	User.getUsersFields = async function (uids, fields) {
+ 		if (!Array.isArray(uids) || !uids.length) {
+ 			return [];

@@ -15,18 +15,16 @@
   && cmd)` with load-bearing parens.
 - RECOVERY: stop retrying Bash/Write/Edit/EnterWorktree immediately.
   GitHub MCP push_files/get_file_contents isn't hook-gated -- land
-  patch.diff+meta.json+state.md as one commit through it (two if
-  state.md needs a follow-up push). Rebuild patch.diff by hand:
-  - Edits already applied via successful Edit calls BEFORE the corruption:
-    trust your own old_string/new_string verbatim, not memory of a Read.
+  patch.diff+meta.json+state.md as one commit through it. Rebuild
+  patch.diff by hand:
+  - Edits already applied via Edit calls before the corruption: trust
+    your own old_string/new_string verbatim, not memory of a Read.
   - A bulk sed/regex edit run right before the bad `cd` likely already
-    succeeded (Bash fails on the *next* call) -- confirm with Grep, don't
-    assume it's undone.
-  - N repeated single-line removals in one file: new_line = old_line -
-    (removals before it); verify 2-3 against Grep/Read before trusting
-    the rest, to catch an off-by-one early.
-  - add_repo CANNOT add a repo from a different owner mid-session; work
-    from your own pre-edit Read output instead.
+    succeeded (Bash fails on the *next* call) -- confirm with Grep.
+  - N single-line removals in one file: new_line = old_line - (removals
+    before it); verify 2-3 against Grep/Read to catch off-by-ones early.
+  - add_repo CANNOT add a repo from a different owner mid-session; use
+    your own pre-edit Read output instead.
 - Stop hooks inherit the corrupted cwd and re-fire every turn (expected).
   Once your push is verified via a GitHub MCP fetch-back, stop.
 
@@ -45,6 +43,10 @@
   `node .yarn/releases/yarn-*.cjs install --mode=skip-build` directly; then
   per-package `tsc --noEmit -p <pkg>/tsconfig.json` + `yarn jest <path>
   --silent --coverage=false` work -- try before falling back to no-install.
+- No package.json in base_commit (r020 NodeBB) blocks npm install/test.
+  Fix: `npm install --no-save` just the leaf pure-JS deps, stub sibling
+  `require`s via `Module._resolveFilename`+`require.cache`, call the
+  export directly to prove fail-before/pass-after.
 
 ## Misc
 - `bench5/workspaces/` is gitignored; plain `git diff` omits new untracked
