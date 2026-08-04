@@ -1,20 +1,18 @@
 # Arm A process notes (carried memory)
 
 ## FATAL: cwd-corrupting `cd` bug
-- A bare `cd <dir>` (even in `cd dir && cmd`) outside `(...)` can corrupt cwd
-  for the rest of the session (PreToolUse hook shells a RELATIVE path, so
-  once cwd drifts every gated tool crashes). Read still works after.
-- RULE, NO EXCEPTIONS: never write a bare `cd` outside `(...)`. Use
-  `git -C <path> ...`; for Go, `go -C <path> <subcmd>` (build/vet/test/list
-  scoped to a dir, confirmed r002+r003 across sessions). Else wrap
-  `(cd dir && cmd)` — parens load-bearing.
-- Not just `cd x && y`: `cd x 2>/dev/null; y` (semicolon) trips it too, and
-  even a solo `cd x` with no follow-on command (r005) — ANY bare `cd` token
-  outside `(...)` is forbidden, regardless of separator or intent.
-- If corruption happens anyway: stop, don't retry Bash/Write/Edit. Leave the
-  instance unsolved rather than fabricate an unverified patch.diff. GitHub
-  MCP tools aren't hook-gated — leave a note here even when fully locked out
-  locally, then push nothing else and stop.
+- A bare `cd <dir>` (even in `cd dir && cmd`, `cd x; y`, or a solo `cd x`
+  with no follow-on — r005) outside `(...)` corrupts cwd for the REST of
+  the session (PreToolUse hook shells a relative path; every gated tool
+  then crashes — confirmed for Bash/Write/Edit). Read still works after.
+- RULE, NO EXCEPTIONS: never write a bare `cd` outside `(...)`, in ANY
+  language repo (Go, Python/ansible, etc — r002/r003/r005 all tripped it).
+  Use `git -C <path> ...`; `go -C <path> <subcmd>` for Go build/vet/test
+  (scoped to a dir). Else wrap `(cd dir && cmd)` — parens load-bearing.
+- If corruption happens anyway: stop, don't retry Bash/Write/Edit. Leave
+  the instance unsolved rather than fabricate an unverified patch.diff.
+  GitHub MCP tools aren't hook-gated — record the lesson here via the
+  API, then push nothing else and stop.
 
 ## Environment / sandbox facts
 - Network IS available for `go build`/`go mod tidy`; module cache (`go env
@@ -58,3 +56,5 @@
   struct+tag, `setDefaults`/decodeHooks map, JSON+CUE schema, deprecation
   text, example/docs yaml. Grep the WHOLE repo for the old name, not just
   the config package.
+- r005 (ansible/ansible PlayIterator/handlers refactor) hit the cd bug in
+  workspace setup and was abandoned unsolved per the rule above — retry fresh.
