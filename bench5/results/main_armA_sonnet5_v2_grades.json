@@ -288,6 +288,23 @@
   "prefix": "armA_sonnet5_r017",
   "status": "collected"
  },
+ "armA_sonnet5_r018": {
+  "instance_id": "instance_protonmail__webclients-4817fe14e1356789c90165c2a53f6a043c2c5f83",
+  "meta": {
+   "finished_at": "2026-08-04T13:38:00Z",
+   "model": "sonnet5",
+   "rank": 18,
+   "self_assessment": "Threaded userSettings/referral-link support through getProtonSignature, templateBuilder, insertSignature, changeSignature, generateBlockquote, createNewDraft, plainTextToHTML, textToHtml, and the composer component chain (Composer -> ComposerContent -> EditorWrapper/SelectSender), added eoDefaultUserSettings and useGetUserSettings, and added targeted referral-link tests; full existing mail-app jest suite (73 suites/572 tests) and tsc/eslint pass, but exact HTML/plain-text embedding details for the referral link are a best-effort interpretation of the prose spec since no hidden tests or upstream fix were consulted per the provenance rule.",
+   "started_at": "2026-08-04T12:50:00Z",
+   "turns_estimate": 45
+  },
+  "n_needed": 59,
+  "n_passed_needed": 17,
+  "pass": false,
+  "patch_bytes": 32727,
+  "prefix": "armA_sonnet5_r018",
+  "status": "collected"
+ },
  "armA_sonnet5_r019": {
   "instance_id": "instance_ansible__ansible-8127abbc298cabf04aaa89a478fc5e5e3432a6fc-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
   "meta": {
@@ -388,6 +405,108 @@
   "pass": false,
   "patch_bytes": 12762,
   "prefix": "armA_sonnet5_r024",
+  "status": "collected"
+ },
+ "armA_sonnet5_r025": {
+  "instance_id": "instance_gravitational__teleport-0415e422f12454db0c22316cf3eaa5088d6b6322",
+  "meta": {
+   "finished_at": "2026-08-04T01:00:00Z",
+   "model": "sonnet5",
+   "rank": 25,
+   "self_assessment": "Added U2FAuthenticateChallenge (embeds legacy single-device challenge + Challenges list) and generated challenges for every registered U2F device across auth.go/auth_with_roles.go/clt.go/web sessions.go, updated the CLI login flow to sign with any challenge, and hid the tsh mfa command per the requirements; checkU2F already matched responses by key handle across devices so needed no change; web (JS) UI lives in a separate repo not present in this checkout so was left untouched; go build/test could not be re-run after a mid-task cd corrupted the sandbox (recovered per state file, hand-verified via Read + manual diff construction).",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 30
+  },
+  "n_needed": 16,
+  "n_passed_needed": 16,
+  "pass": true,
+  "patch_bytes": 6556,
+  "prefix": "armA_sonnet5_r025",
+  "status": "collected"
+ },
+ "armA_sonnet5_r026": {
+  "instance_id": "instance_qutebrowser__qutebrowser-deeb15d6f009b3ca0c3bd503a7cef07462bd16b4-v363c8a7e5ccdf6968fc7ab84a2053ac78036691d",
+  "meta": {
+   "finished_at": "2026-08-04T17:55:44Z",
+   "model": "sonnet5",
+   "rank": 26,
+   "self_assessment": "Fixed via mask-percent-triplets + FullyEncoded/StrictMode get/set + count>value guard, kept the original reversed (anchor>query>path>host) segment search order for backward compat despite the requirements text literally saying 'path, query, anchor, host' (that literal order broke many pre-existing parametrized tests because of incidental digits like 'v1' in path segments, so I judged it a paraphrase artifact and verified against behavior instead); could not run the real pytest suite (pytest 4.5-era repo incompatible with only-available Python 3.11, and a pre-existing jinja/urlutils circular-import quirk blocks bare imports) so verified by hand-porting all of TestIncDecNumber's parametrized cases plus new percent-encoding/count-validation cases against the live patched module via PyQt5 in a scratch venv, all passing except cases that exercise now-intentionally-removed behavior (port segment, decrement-below-zero).",
+   "started_at": "2026-08-04T17:15:00Z",
+   "turns_estimate": 35
+  },
+  "n_needed": 452,
+  "n_passed_needed": 451,
+  "pass": false,
+  "patch_bytes": 5328,
+  "prefix": "armA_sonnet5_r026",
+  "status": "collected"
+ },
+ "armA_sonnet5_r027": {
+  "instance_id": "instance_flipt-io__flipt-e88e93990e3ec1e7697754b423decc510d5dd5fe",
+  "meta": {
+   "finished_at": "2026-08-04T18:47:17Z",
+   "model": "sonnet5",
+   "rank": 27,
+   "self_assessment": "Added flag_key (field 6) to BooleanEvaluationResponse and flag_key (field 9) to VariantEvaluationResponse in evaluation.proto, regenerated evaluation.pb.go via apt-installed protoc + go-installed protoc-gen-go v1.31.0 (matching the repo's pinned version) so the wire format and generated GetFlagKey() accessors are authentic codegen output rather than hand-edited structs; set FlagKey=flag.Key in both the boolean() and variant() constructors in internal/server/evaluation/evaluation.go (both paths are shared by Boolean/Variant/Batch, so all match/fallback/error-adjacent cases get it for free); extended every existing evaluation_test.go assertion block (variant success/disabled, all boolean rollout/segment paths, batch) to assert FlagKey, plus added a new evaluation_pb_test.go with proto.Marshal/Unmarshal round-trip tests proving the new fields serialize correctly and that unset flag_key on old-schema payloads deserializes to \"\" (proto3 zero-value) without breaking older clients; verified via `go build ./...` (whole module compiles) and `go test` on the touched packages plus internal/server/middleware/grpc (all green) using the base_commit checkout only, no upstream/dataset material consulted; had to git-checkout back an incidental go.work.sum diff (`go build ./...`/`go test` pulled newer transitive go.sum entries) that was unrelated to the fix, twice, since a broad `go test` run re-touched it after the first revert.",
+   "started_at": "2026-08-04T18:05:00Z",
+   "turns_estimate": 25
+  },
+  "n_needed": 8,
+  "n_passed_needed": 8,
+  "pass": true,
+  "patch_bytes": 26822,
+  "prefix": "armA_sonnet5_r027",
+  "status": "collected"
+ },
+ "armA_sonnet5_r028": {
+  "instance_id": "instance_element-hq__element-web-9a31cd0fa849da810b4fac6c6c015145e850b282-vnan",
+  "meta": {
+   "finished_at": "2026-08-04T02:00:00Z",
+   "model": "sonnet5",
+   "rank": 28,
+   "self_assessment": "Implemented all requirements (feature-flagged Knock option gated on feature_ask_to_join, centralized promptUpgradeDialog upgrade helper shared by Knock and Restricted, joinRule-based title/invite-toggle logic replacing the isPrivate heuristic in RoomUpgradeWarningDialog, new i18n strings) via direct source edits made before a session-wide sandbox cwd-corruption bug disabled Bash/Write/Edit entirely (see state_armA.md); could not run yarn install/jest/tsc to verify, and patch.diff was hand-reconstructed as a unified diff from Read-tool captures of the before/after file contents rather than `git diff`, then delivered via the GitHub API push_files recovery path -- diff line/hunk counts were manually cross-checked for internal consistency but not machine-validated by actually applying the patch.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 55
+  },
+  "n_needed": 138,
+  "n_passed_needed": 138,
+  "pass": true,
+  "patch_bytes": 19198,
+  "prefix": "armA_sonnet5_r028",
+  "status": "collected"
+ },
+ "armA_sonnet5_r029": {
+  "instance_id": "instance_NodeBB__NodeBB-bd80d36e0dcf78cd4360791a82966078b3a07712-v4fbcfae8b15e4ce5d132c408bca69ebb9cf146ed",
+  "meta": {
+   "finished_at": "2026-08-04T19:44:16Z",
+   "model": "sonnet5",
+   "rank": 29,
+   "self_assessment": "Traced /confirm/:code through registrationComplete middleware, found both branches (post-registration email-confirmed check and mid-registration allowed-path check) redirected /confirm/ requests away before controllers.confirmEmail ever ran; added /confirm/ (and /edit/email for the second branch) exemptions to both, verified against the pre-existing /recent->/me/edit/email test expectation via a standalone logic simulation since full npm install/DB-backed mocha run was impractical in session time.",
+   "started_at": "2026-08-04T19:25:00Z",
+   "turns_estimate": 20
+  },
+  "n_needed": 180,
+  "n_passed_needed": 179,
+  "pass": false,
+  "patch_bytes": 1079,
+  "prefix": "armA_sonnet5_r029",
+  "status": "collected"
+ },
+ "armA_sonnet5_r030": {
+  "instance_id": "instance_protonmail__webclients-fc9d535e9beb3ae30a52a7146398cadfd6e30606",
+  "meta": {
+   "finished_at": "2026-08-04T01:00:00Z",
+   "model": "sonnet5",
+   "rank": 30,
+   "self_assessment": "Solved from base_commit only (protonmail/webclients moveSystemFolders): when SENT is dropped on Inbox, ALL_SENT (if present) is now moved to immediately follow Inbox with SENT right after it, preserving hidden visibility and relative order of the remaining folders; existing non-linked test cases unaffected. Mid-task a `cd task_workspace && timeout ... corepack yarn install` (no parens) corrupted the sandbox cwd and killed Bash/Edit/Write for the rest of the session (see state file FATAL section), so patch.diff was hand-derived from the pre-corruption Read/Edit transcript and shipped via GitHub MCP push_files per the documented recovery procedure. Verified the new logic (plus all pre-existing test cases, unmodified) against a standalone Node re-implementation of moveSystemFolders using assert.deepStrictEqual, since the repo's real Jest suite could not be run after the corruption (and a full yarn install of this large monorepo was not attempted before it).",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 35
+  },
+  "n_needed": 7,
+  "n_passed_needed": 7,
+  "pass": true,
+  "patch_bytes": 5341,
+  "prefix": "armA_sonnet5_r030",
   "status": "collected"
  }
 }
