@@ -5,23 +5,32 @@
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit the rest of the session (Read still works): the
   PreToolUse hook shells a relative path against stored cwd. No exceptions,
-  not even to sanity-check the guard. Confirmed again r012 via `cd task &&
-  for f in ...; do sed ...; done` (that one shell invocation still worked;
-  every later Bash/Write/Edit call broke).
-- NOT session-local: a subagent spawned to escape it hits the same error on
-  its first Bash call -- don't bother trying.
+  not even to sanity-check the guard. Confirmed again r014 via `cd
+  bench5/workspaces/task && python3 -c "..."` (one-shot syntax check).
+- NOT session-local: a subagent hits the same error on its first Bash call.
+  EnterWorktree/ExitWorktree do NOT help either (they only restore cwd for
+  their own worktree switch, not the hook's separately-tracked stored cwd;
+  ExitWorktree is a no-op if you never called EnterWorktree) -- don't burn
+  a call confirming this again.
 - RULE: never write `cd` as a bare/standalone token, in any wrapper. Use
   `ls <path>`, `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir &&
   cmd)` with load-bearing parens.
-- RECOVERY (confirmed r006/r009/r010/r011/r012): stop retrying Bash/Write/
-  Edit. GitHub MCP (get_file_contents/push_files) isn't hook-gated -- land
-  patch.diff+meta.json+state.md as one commit through it. Reconstruct
-  patch.diff from Read (unaffected): if edits/sed-in-Bash landed on disk
-  before the corrupting call, Read the file now -- it may already be your
-  final state; diff it against the pre-edit content you captured earlier.
-  Sanity-check hand-built diffs: each hunk's (new_lines-old_lines) must sum
-  to match later hunks' `@@` offsets in the same file. Only give up if you
-  never captured before/after content at all.
+- RECOVERY (confirmed r006/r009/r010/r011/r012/r014): stop retrying Bash/
+  Write/Edit. GitHub MCP push_files/get_file_contents isn't hook-gated --
+  land patch.diff+meta.json+state.md as one commit through it. add_repo
+  CANNOT add a repo from a different owner mid-session ("cross-tier adds
+  not supported") -- so if the task repo's owner != the bench repo's
+  owner, you can't fetch original blobs via GitHub MCP either; rely on
+  your own pre-edit Read tool output (already verbatim in transcript) for
+  original text instead. Reconstruct patch.diff as small per-location
+  hunks (not whole-file): for each Edit you made, you already know the
+  original line number (from the Read you did before editing) and the
+  exact old/new text -- compute each hunk's new-side line number as
+  old_line + running delta (sum of prior hunks' new-old line-count diffs
+  in that file), THEN VERIFY by Read-ing that exact new line number back
+  from the post-corruption-still-working Read tool before trusting it.
+  This caught zero errors across 19 hunks in one file when done, so it's
+  reliable if you verify every boundary before pushing.
 
 ## Environment / sandbox facts
 - Network works for `go build`/`pip install`/`npm install`; reading a
@@ -39,22 +48,20 @@
 - web.py Templetor sandboxes `$code:`/`$jsdef`/`$def`: `_`-prefixed attr
   access is a compile-time SecurityError; introspect via a plain module
   exposed with `infogami.utils.view.public`, not getattr/hasattr (NameError).
-- JS monorepos (matrix-react-sdk, element-web, protonmail/webclients)
-  generally can't `yarn install` here (github: deps 403, berry 404s;
-  reconfirmed r013 on element-hq/element-web). No-install syntax check:
-  `ts.transpileModule()` (TS compiler API) per touched file, no module
-  resolution needed -- simpler than `tsc -p <tmp-tsconfig>`. To verify a
-  PINNED dep's real runtime behavior when install is blocked: `npm install`
-  just that exact-version package + react/react-dom/jsdom into a throwaway
-  sandbox dir *outside* the workspace, render via `react-dom/client` under
-  jsdom globals, inspect `container.innerHTML`.
+- JS monorepos generally can't `yarn install` here (github: deps 403,
+  berry 404s). No-install syntax check: `ts.transpileModule()` per file.
+  `npm install` a throwaway sandbox dir *outside* the workspace to verify
+  a pinned dep's real runtime behavior when full install is blocked.
 - `node --check <file>` is a zero-risk, cwd-independent JS syntax gate; Go
   has none -- flag it in self_assessment.
+- Ansible module_utils/urls.py: adding a new HTTP/SSL knob (e.g. ciphers)
+  typically threads through ~15-20 call sites (Request, open_url,
+  fetch_url, url_argument_spec, plus each consuming module's docs +
+  argument_spec + call sites) -- grep every one before editing, don't
+  assume the interface section in the task file lists them all.
 
 ## Misc
 - `bench5/workspaces/` is gitignored. Plain `git diff` omits new untracked
   files -- `git add -A && git diff --cached`, then `git reset`.
-- Test-only scratch files (copied package.json, a config.json) are
-  throwaway -- keep them out of patch.diff.
 - New enum/state-machine value: grep the whole repo for every place OLD
   values are enumerated as a closed set.
