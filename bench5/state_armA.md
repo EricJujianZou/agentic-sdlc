@@ -5,12 +5,10 @@
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit the rest of the session (Read still works): the
   PreToolUse hook shells a relative path against stored cwd. No exceptions,
-  not even to sanity-check the guard. Confirmed again r014 via `cd
-  bench5/workspaces/task && python3 -c "..."` (one-shot syntax check).
+  not even to sanity-check the guard. Confirmed again r014.
 - NOT session-local: a subagent hits the same error on its first Bash call.
-  EnterWorktree/ExitWorktree do NOT help either (they only restore cwd for
-  their own worktree switch, not the hook's separately-tracked stored cwd;
-  ExitWorktree is a no-op if you never called EnterWorktree) -- don't burn
+  EnterWorktree/ExitWorktree do NOT help (they only restore cwd for their
+  own worktree switch, not the hook's separately-tracked cwd) -- don't burn
   a call confirming this again.
 - RULE: never write `cd` as a bare/standalone token, in any wrapper. Use
   `ls <path>`, `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir &&
@@ -19,18 +17,16 @@
   Write/Edit. GitHub MCP push_files/get_file_contents isn't hook-gated --
   land patch.diff+meta.json+state.md as one commit through it. add_repo
   CANNOT add a repo from a different owner mid-session ("cross-tier adds
-  not supported") -- so if the task repo's owner != the bench repo's
-  owner, you can't fetch original blobs via GitHub MCP either; rely on
-  your own pre-edit Read tool output (already verbatim in transcript) for
-  original text instead. Reconstruct patch.diff as small per-location
-  hunks (not whole-file): for each Edit you made, you already know the
-  original line number (from the Read you did before editing) and the
-  exact old/new text -- compute each hunk's new-side line number as
-  old_line + running delta (sum of prior hunks' new-old line-count diffs
-  in that file), THEN VERIFY by Read-ing that exact new line number back
-  from the post-corruption-still-working Read tool before trusting it.
-  This caught zero errors across 19 hunks in one file when done, so it's
-  reliable if you verify every boundary before pushing.
+  not supported") -- if the task repo's owner != the bench repo's owner,
+  you can't fetch original blobs via GitHub MCP; use your own pre-edit
+  Read tool output (already verbatim in transcript) as the original text
+  instead. Reconstruct patch.diff as small per-location hunks, not
+  whole-file: for each Edit, you know the original line number (from the
+  Read before editing) and exact old/new text -- compute each hunk's
+  new-side line as old_line + running delta (sum of prior hunks' line-
+  count diffs in that file), THEN VERIFY by Read-ing that exact new line
+  back before trusting it. Zero errors across 19 hunks in one file this
+  way -- reliable if every boundary is verified before pushing.
 
 ## Environment / sandbox facts
 - Network works for `go build`/`pip install`/`npm install`; reading a
@@ -39,26 +35,23 @@
 - Go: golang/protobuf v1.4+'s `ptypes/{empty,timestamp}` are pure type
   aliases (`type Empty = emptypb.Empty`) to google.golang.org/protobuf's
   known-types -- swapping imports/refs to emptypb/timestamppb in
-  hand-written .go is behavior-preserving, compatible with *_grpc.pb.go
-  generated against the old path (protoc/protoc-gen-go NOT installed --
-  never regen *.pb.go by hand).
+  hand-written .go is behavior-preserving (protoc/protoc-gen-go NOT
+  installed -- never regen *.pb.go by hand).
 - NodeBB: real `package.json` is at `install/package.json`, copy to root
-  before `npm install` (tests need it too); mocha needs root `config.json`
-  (database/driver/test_database); `redis-server --daemonize yes` works.
+  before `npm install` (tests need it too); mocha needs root `config.json`.
 - web.py Templetor sandboxes `$code:`/`$jsdef`/`$def`: `_`-prefixed attr
   access is a compile-time SecurityError; introspect via a plain module
-  exposed with `infogami.utils.view.public`, not getattr/hasattr (NameError).
+  exposed with `infogami.utils.view.public`, not getattr/hasattr.
 - JS monorepos generally can't `yarn install` here (github: deps 403,
-  berry 404s). No-install syntax check: `ts.transpileModule()` per file.
+  berry 404s). No-install syntax check: `ts.transpileModule()` per file;
   `npm install` a throwaway sandbox dir *outside* the workspace to verify
   a pinned dep's real runtime behavior when full install is blocked.
 - `node --check <file>` is a zero-risk, cwd-independent JS syntax gate; Go
   has none -- flag it in self_assessment.
-- Ansible module_utils/urls.py: adding a new HTTP/SSL knob (e.g. ciphers)
-  typically threads through ~15-20 call sites (Request, open_url,
-  fetch_url, url_argument_spec, plus each consuming module's docs +
-  argument_spec + call sites) -- grep every one before editing, don't
-  assume the interface section in the task file lists them all.
+- Ansible module_utils/urls.py: a new HTTP/SSL knob (e.g. ciphers) threads
+  through ~15-20 call sites (Request, open_url, fetch_url,
+  url_argument_spec, each consuming module's docs+argspec+call sites) --
+  grep every one, don't assume the task file's interface section lists them all.
 
 ## Misc
 - `bench5/workspaces/` is gitignored. Plain `git diff` omits new untracked
