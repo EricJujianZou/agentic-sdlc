@@ -1,0 +1,193 @@
+diff --git a/internal/oci/file.go b/internal/oci/file.go
+--- a/internal/oci/file.go
++++ b/internal/oci/file.go
+@@ -47,39 +47,48 @@
+ // StoreOptions are used to configure call to NewStore
+ // This shouldn't be handled directory, instead use one of the function options
+ // e.g. WithBundleDir or WithCredentials
+-type StoreOptions struct {
+-	bundleDir string
+-	auth      *struct {
+-		username string
+-		password string
+-	}
+-}
+-
+-// WithCredentials configures username and password credentials used for authenticating
+-// with remote registries
+-func WithCredentials(user, pass string) containers.Option[StoreOptions] {
+-	return func(so *StoreOptions) {
+-		so.auth = &struct {
+-			username string
+-			password string
+-		}{
+-			username: user,
+-			password: pass,
+-		}
+-	}
+-}
+-
+-// NewStore constructs and configures an instance of *Store for the provided config
+-func NewStore(logger *zap.Logger, dir string, opts ...containers.Option[StoreOptions]) (*Store, error) {
+-	store := &Store{
+-		opts: StoreOptions{
+-			bundleDir: dir,
+-		},
+-		logger: logger,
+-		local:  memory.New(),
+-	}
+-
+-	containers.ApplyAll(&store.opts, opts...)
+-
+-	return store, nil
+-}
++type StoreOptions struct {
++	bundleDir       string
++	manifestVersion oras.PackManifestVersion
++	auth            *struct {
++		username string
++		password string
++	}
++}
++
++// WithCredentials configures username and password credentials used for authenticating
++// with remote registries
++func WithCredentials(user, pass string) containers.Option[StoreOptions] {
++	return func(so *StoreOptions) {
++		so.auth = &struct {
++			username string
++			password string
++		}{
++			username: user,
++			password: pass,
++		}
++	}
++}
++
++// WithManifestVersion configures what OCI Manifest version to build the bundle with
++func WithManifestVersion(version oras.PackManifestVersion) containers.Option[StoreOptions] {
++	return func(so *StoreOptions) {
++		so.manifestVersion = version
++	}
++}
++
++// NewStore constructs and configures an instance of *Store for the provided config
++func NewStore(logger *zap.Logger, dir string, opts ...containers.Option[StoreOptions]) (*Store, error) {
++	store := &Store{
++		opts: StoreOptions{
++			bundleDir:       dir,
++			manifestVersion: oras.PackManifestVersion1_1_RC4,
++		},
++		logger: logger,
++		local:  memory.New(),
++	}
++
++	containers.ApplyAll(&store.opts, opts...)
++
++	return store, nil
++}
+@@ -365,7 +365,7 @@
+ 		return Bundle{}, err
+ 	}
+ 
+-	desc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1_RC4, MediaTypeFliptFeatures, oras.PackManifestOptions{
++	desc, err := oras.PackManifest(ctx, store, s.opts.manifestVersion, MediaTypeFliptFeatures, oras.PackManifestOptions{
+ 		ManifestAnnotations: map[string]string{},
+ 		Layers:              layers,
+ 	})
+diff --git a/internal/config/storage.go b/internal/config/storage.go
+--- a/internal/config/storage.go
++++ b/internal/config/storage.go
+@@ -71,11 +71,12 @@
+ 
+ 	case string(OCIStorageType):
+ 		v.SetDefault("storage.oci.poll_interval", "30s")
++		v.SetDefault("storage.oci.manifest_version", "1.1")
+ 
+ 		dir, err := DefaultBundleDir()
+ 		if err != nil {
+ 			return err
+ 		}
+ 
+ 		v.SetDefault("storage.oci.bundles_directory", dir)
+ 	default:
+@@ -117,9 +117,13 @@
+ 	case OCIStorageType:
+ 		if c.OCI.Repository == "" {
+ 			return errors.New("oci storage repository must be specified")
+ 		}
+ 
+ 		if _, err := oci.ParseReference(c.OCI.Repository); err != nil {
+ 			return fmt.Errorf("validating OCI configuration: %w", err)
+ 		}
++
++		if c.OCI.ManifestVersion != "1.0" && c.OCI.ManifestVersion != "1.1" {
++			return errors.New("wrong manifest version, it should be 1.0 or 1.1")
++		}
+ 	}
+@@ -293,13 +293,16 @@
+ // OCI provides configuration support for OCI target registries as a backend store for Flipt.
+ type OCI struct {
+ 	// Repository is the target repository and reference to track.
+ 	// It should be in the form [<registry>/]<bundle>[:<tag>].
+ 	// When the registry is omitted, the bundle is referenced via the local bundle store.
+ 	// Tag defaults to 'latest' when not supplied.
+ 	Repository string `json:"repository,omitempty" mapstructure:"repository" yaml:"repository,omitempty"`
+ 	// BundlesDirectory is the root directory in which Flipt will store and access local feature bundles.
+ 	BundlesDirectory string `json:"bundlesDirectory,omitempty" mapstructure:"bundles_directory" yaml:"bundles_directory,omitempty"`
+ 	// Authentication configures authentication credentials for accessing the target registry
+ 	Authentication *OCIAuthentication `json:"-,omitempty" mapstructure:"authentication" yaml:"-,omitempty"`
+ 	PollInterval   time.Duration      `json:"pollInterval,omitempty" mapstructure:"poll_interval" yaml:"poll_interval,omitempty"`
++	// ManifestVersion configures the OCI manifest version to use when building bundles.
++	// Valid values are "1.0" and "1.1". Defaults to "1.1".
++	ManifestVersion string `json:"manifestVersion,omitempty" mapstructure:"manifest_version" yaml:"manifest_version,omitempty"`
+ }
+diff --git a/cmd/flipt/bundle.go b/cmd/flipt/bundle.go
+--- a/cmd/flipt/bundle.go
++++ b/cmd/flipt/bundle.go
+@@ -3,10 +3,11 @@
+ import (
+ 	"fmt"
+ 	"os"
+ 	"text/tabwriter"
+ 
+ 	"github.com/spf13/cobra"
+ 	"go.flipt.io/flipt/internal/config"
+ 	"go.flipt.io/flipt/internal/containers"
+ 	"go.flipt.io/flipt/internal/oci"
++	"oras.land/oras-go/v2"
+ )
+@@ -160,13 +160,20 @@
+ 	var opts []containers.Option[oci.StoreOptions]
+ 	if cfg := cfg.Storage.OCI; cfg != nil {
+ 		if cfg.Authentication != nil {
+ 			opts = append(opts, oci.WithCredentials(
+ 				cfg.Authentication.Username,
+ 				cfg.Authentication.Password,
+ 			))
+ 		}
+ 
+ 		if cfg.BundlesDirectory != "" {
+ 			dir = cfg.BundlesDirectory
+ 		}
++
++		switch cfg.ManifestVersion {
++		case "1.0":
++			opts = append(opts, oci.WithManifestVersion(oras.PackManifestVersion1_0))
++		default:
++			opts = append(opts, oci.WithManifestVersion(oras.PackManifestVersion1_1_RC4))
++		}
+ 	}
+ 
+ 	return oci.NewStore(logger, dir, opts...)
+diff --git a/internal/config/config_test.go b/internal/config/config_test.go
+--- a/internal/config/config_test.go
++++ b/internal/config/config_test.go
+@@ -821,6 +821,7 @@
+ 					Type: OCIStorageType,
+ 					OCI: &OCI{
+ 						Repository:       "some.target/repository/abundle:latest",
+ 						BundlesDirectory: "/tmp/bundles",
++						ManifestVersion:  "1.1",
+ 						Authentication: &OCIAuthentication{
+ 							Username: "foo",

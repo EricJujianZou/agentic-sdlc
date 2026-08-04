@@ -1,0 +1,8 @@
+{
+  "rank": 35,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T00:00:00Z",
+  "finished_at": "2026-08-04T00:40:00Z",
+  "turns_estimate": 20,
+  "self_assessment": "Sandbox cwd-corruption hit again (bare 'cd repo && go env' outside parens) before any edit; recovered per state file via Read-only exploration + hand-authored unified diff (no compile/test verification possible) covering internal/oci/file.go (WithManifestVersion option, Build uses it, default 1.1), internal/config/storage.go (OCI.ManifestVersion field, default, validation error), cmd/flipt/bundle.go (wires config to WithManifestVersion), and a minimal one-line fix to the existing OCI config_test.go case so it doesn't break; skipped adding new test cases and JSON/CUE schema edits to keep the hand-built diff low-risk since nothing could be locally verified."
+}
