@@ -57,5 +57,4 @@
   AND a per-server `c.Conf.Servers[name].X` override for the same setting
   (seen in WordPress scanning, r031) — grep sibling functions in the same
   package for the per-server access pattern before trusting a global field.
-- `bench5/workspaces/` is gitignored; `git diff HEAD` captures new+modified
-  files in one diff for patch.diff — only when Bash still works.
+- `bench5/workspaces/` is gitignored; `git diff HEAD` captures new+modified files in one diff — only when Bash works.
