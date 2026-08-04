@@ -13,15 +13,15 @@
   `ls <path>`, `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir &&
   cmd)` with load-bearing parens.
 - RECOVERY (confirmed r006/r009-r012/r014/r016): stop retrying Bash/Write/
-  Edit/EnterWorktree. mcp__github__push_files (no blob SHA needed, unlike
-  create_or_update_file) landed patch.diff+meta.json+state.md as one or two
-  commits -- confirmed working end-to-end r016. add_repo CANNOT add a repo
-  from a different owner mid-session; if task repo owner != bench repo
-  owner, use your own pre-edit Read output (verbatim in transcript) as the
-  original text. Reconstruct patch.diff as small per-location hunks:
-  new-side line = old_line (pre-edit Read) + running delta (prior hunks'
-  line-count diffs in that file) -- VERIFY by re-Reading the post-edit file
-  at that predicted line before trusting it (r016: caught one off-by-one).
+  Edit/EnterWorktree. mcp__github__push_files (no blob SHA needed) landed
+  patch.diff+meta.json+state.md in one or two commits, confirmed working
+  end-to-end r016. add_repo CANNOT add a repo from a different owner
+  mid-session; if task repo owner != bench repo owner, use your own
+  pre-edit Read output (verbatim in transcript) as the original text.
+  Reconstruct patch.diff as small per-location hunks: new-side line =
+  old_line (pre-edit Read) + running delta (prior hunks' line-count diffs)
+  -- VERIFY by re-Reading the post-edit file at that predicted line first
+  (r016: caught one off-by-one this way).
 - Stop hooks inherit the corrupted cwd and WILL KEEP RE-FIRING every turn
   (stop_checklist.py errors, git-check flags workspaces/task as dirty) --
   expected, not fixable in-session. Once your push is verified via a
@@ -40,10 +40,10 @@
 - JS monorepos generally can't `yarn install` here (github: deps 403 on
   codeload.github.com, berry 404s) -- confirmed again r015 (element-web's
   matrix-js-sdk pinned via `github:`). No-install checks instead:
-  `ts.transpileModule()` per file (syntax only; omit the jsx option for
-  plain .ts files -- forcing jsx:React false-positives on generics like
-  `Foo<T>`); `node --check` for plain JS; `npm install` a throwaway sandbox
-  dir *outside* the workspace to inspect a pinned dep's real behavior.
+  `ts.transpileModule()` per file (syntax only; omit jsx option for plain
+  .ts, else generics false-positive as broken JSX); `node --check` for
+  plain JS; `npm install` a throwaway sandbox dir *outside* the workspace
+  to inspect a pinned dep's real behavior.
 - Ansible module_utils/urls.py: a new HTTP/SSL knob threads through
   ~15-20 call sites -- grep every one, task file won't list them all.
 - RTL/jest snapshots: when jest can't run, hand-patch `.snap` files for
