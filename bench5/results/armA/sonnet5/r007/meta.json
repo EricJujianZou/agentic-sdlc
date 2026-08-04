@@ -1,0 +1,8 @@
+{
+  "rank": 7,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T07:20:00Z",
+  "finished_at": "2026-08-04T07:46:05Z",
+  "turns_estimate": 25,
+  "self_assessment": "Fixed hue scaling (mult 359 not 255, rounded) in QtColor._parse_value while preserving int-truncation for sat/value/alpha; verified via direct-import reproduction (real PyQt5 QColor) since full pytest 4.2.0 conftest chain is incompatible with this sandbox's Python 3.11."
+}
