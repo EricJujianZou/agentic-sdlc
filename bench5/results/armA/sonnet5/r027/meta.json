@@ -1,0 +1,8 @@
+{
+  "rank": 27,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T18:05:00Z",
+  "finished_at": "2026-08-04T18:47:17Z",
+  "turns_estimate": 25,
+  "self_assessment": "Added flag_key (field 6) to BooleanEvaluationResponse and flag_key (field 9) to VariantEvaluationResponse in evaluation.proto, regenerated evaluation.pb.go via apt-installed protoc + go-installed protoc-gen-go v1.31.0 (matching the repo's pinned version) so the wire format and generated GetFlagKey() accessors are authentic codegen output rather than hand-edited structs; set FlagKey=flag.Key in both the boolean() and variant() constructors in internal/server/evaluation/evaluation.go (both paths are shared by Boolean/Variant/Batch, so all match/fallback/error-adjacent cases get it for free); extended every existing evaluation_test.go assertion block (variant success/disabled, all boolean rollout/segment paths, batch) to assert FlagKey, plus added a new evaluation_pb_test.go with proto.Marshal/Unmarshal round-trip tests proving the new fields serialize correctly and that unset flag_key on old-schema payloads deserializes to \"\" (proto3 zero-value) without breaking older clients; verified via `go build ./...` (whole module compiles) and `go test` on the touched packages plus internal/server/middleware/grpc (all green) using the base_commit checkout only, no upstream/dataset material consulted; had to git-checkout back an incidental go.work.sum diff (`go build ./...`/`go test` pulled newer transitive go.sum entries) that was unrelated to the fix, twice, since a broad `go test` run re-touched it after the first revert."
+}
