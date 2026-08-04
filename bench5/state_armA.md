@@ -5,39 +5,29 @@
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit for the rest of the session (Read/Grep/Glob still work).
   NOT session-local: a subagent hits it on its first Bash call too.
-  CONFIRMED r006/r009-r012/r014/r016/r017/r019/r021 (r019: `cd dir &&
-  python3 - <<'EOF'...EOF` -- heredoc body ran, but the leading `cd &&`
-  still corrupted every later call; r021: `cd dir 2>&1; npm ls ...`
-  one-liner chained with `;` after an unrelated npm check -- same result).
-  No one-off `cd` is ever safe, including as a throwaway diagnostic.
+  CONFIRMED r006/r009-r012/r014/r016/r017/r019/r021/r022 (r022: a single
+  `cd dir && sed ...`, not chained to anything further -- still corrupted
+  the very next call. There is no "just one cd" exception).
 - EnterWorktree/ExitWorktree do NOT fix it (r014, r016): both read/restore
   the same corrupted cwd. Don't spend calls on either.
-- RULE: never write `cd` as a bare/standalone token, even in a heredoc.
-  Use `ls <path>`, `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir
-  && cmd)` with load-bearing parens.
+- RULE: never write `cd` as a bare/standalone token, even in a heredoc or
+  a solo throwaway check. Use `ls <path>`, `git -C <path>`, `go -C <path>
+  <subcmd>`, or `(cd dir && cmd)` with load-bearing parens.
 - RECOVERY: stop retrying Bash/Write/Edit/EnterWorktree immediately.
   GitHub MCP push_files/get_file_contents isn't hook-gated -- land
-  patch.diff+meta.json+state.md as one commit through it. Rebuild
-  patch.diff by hand:
-  - Edits already applied via Edit calls before the corruption: trust
-    your own old_string/new_string verbatim, not memory of a Read -- the
-    Edit tool only succeeds on an exact match, so a landed edit's content
-    is tool-verified; only the hunk's start line number needs deriving.
-  - Derive a hunk's start line by counting forward from the nearest
-    confidently-known anchor (e.g. right after the license-header, or
-    right after a prior hunk's end) through short unchanged spans, not by
-    recalling a mid-file number cold -- cross-check with the net
-    old-vs-new line-count delta against the two files' total line counts
-    (both ends read via Read, still safe) to catch drift before pushing.
-  - A bulk sed/regex edit run right before the bad `cd` likely already
+  patch.diff+meta.json+state.md as one commit through it.
+  - Edits already applied via Edit before the corruption: trust your own
+    old_string/new_string verbatim (tool-verified exact match), not memory.
+  - Files not yet Edited: Read still works -- re-Read each region fresh
+    right before writing its hunk; don't trust an earlier paraphrase (r022
+    caught itself misremembering a brace this way).
+  - Derive hunk line-counts by arithmetic (lastLine-firstLine+1) off
+    Read's own numbers, and track each file's cumulative added/removed
+    delta so later hunks' new-file start lines stay correct.
+  - A bulk sed/regex run right before the bad `cd` likely already
     succeeded (Bash fails on the *next* call) -- confirm with Grep.
-  - N single-line removals in one file: new_line = old_line - (removals
-    before it); verify 2-3 against Grep/Read to catch off-by-ones early.
-  - add_repo CANNOT add a repo from a different owner mid-session; use
-    your own pre-edit Read output instead. GitHub MCP tools are also
-    scoped to the harness repo only -- they cannot fetch the task repo's
-    base_commit either, so original file text must come from your own
-    earlier Read calls, not a fresh fetch.
+  - add_repo/GitHub MCP can't reach a different-owner repo or the task
+    repo's base_commit -- original file text must come from your own Reads.
 - Stop hooks inherit the corrupted cwd and re-fire every turn (expected).
   Once your push is verified via a GitHub MCP fetch-back, stop.
 
@@ -49,25 +39,22 @@
   imports/refs to emptypb/timestamppb in hand-written .go is behavior-
   preserving (protoc/protoc-gen-go NOT installed -- never regen *.pb.go).
 - JS monorepos with `github:` deps can't `yarn install` here (403 on
-  codeload.github.com; r015/r021 element-web/matrix-js-sdk) -- use
-  `ts.transpileModule()`/`node --check` for syntax-only checks instead. BUT
-  plain npm-registry yarn-berry repos (e.g. protonmail/webclients r018) DO
-  install: global `yarn` is 1.22 and chokes on `packageManager`, so invoke
-  `node .yarn/releases/yarn-*.cjs install --mode=skip-build` directly; then
-  per-package `tsc --noEmit -p <pkg>/tsconfig.json` + `yarn jest <path>
-  --silent --coverage=false` work -- try before falling back to no-install.
-- No package.json in base_commit (r020 NodeBB) blocks npm install/test.
-  Fix: `npm install --no-save` just the leaf pure-JS deps, stub sibling
-  `require`s via `Module._resolveFilename`+`require.cache`, call the
-  export directly to prove fail-before/pass-after.
+  codeload.github.com; r015/r021) -- use `ts.transpileModule()`/`node
+  --check` for syntax-only checks instead. Plain npm-registry yarn-berry
+  repos (r018) install via `node .yarn/releases/yarn-*.cjs install
+  --mode=skip-build`.
+- No package.json in base_commit (r020) blocks npm install/test -- fix
+  with `npm install --no-save` leaf deps + stub sibling `require`s via
+  `Module._resolveFilename`+`require.cache`.
 
 ## Misc
 - `bench5/workspaces/` is gitignored; plain `git diff` omits new untracked
-  files -- `git add -A && git diff --cached`, then `git reset`. If you ran
-  an install, first `git restore --staged --worktree <lockfile>`: `add -A`
-  also stages unrelated lockfile churn (r018: 976 lines of yarn.lock noise).
+  files -- `git add -A && git diff --cached`, then `git reset`.
 - New enum/state-machine value: grep the whole repo for every place OLD
   values are enumerated as a closed set.
-- Multi-file feature spec touching a function with existing positional-arg
-  callers/tests: append each new param at the END with a default, never
-  insert mid-signature -- keeps old call sites/tests compiling unchanged.
+- Multi-file feature spec touching a function with positional-arg callers:
+  append new params at the END with a default, never insert mid-signature.
+- Relocating a cross-cutting concern (e.g. middleware -> storage layer):
+  grep the whole repo for its symbols first -- call site, func body, AND
+  its test file/spy helpers must all be deleted together or it won't
+  compile (r022).
