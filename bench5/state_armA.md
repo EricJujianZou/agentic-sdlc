@@ -1,60 +1,60 @@
 # Arm A process notes (carried memory)
 
-## FATAL: cwd-corrupting `cd` bug
-- ANY bare `cd <dir>` -- even `cd x && cmd`, `cd x; y`, heredocs, or a
-  discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
-  Bash/Write/Edit for the rest of the session (Read/Grep/Glob still work).
-  NOT session-local: a subagent hits it on its first Bash call too.
-  CONFIRMED r006/r009-r012/r014/r016/r017/r019/r021/r022/r023/r024/r025.
-- EnterWorktree/ExitWorktree do NOT fix it. Don't spend calls on either.
-- RULE: never write `cd` as a bare/standalone token, ever, for ANY reason
-  -- including inside a heredoc, a one-off check, or a disabled/placeholder
-  line (`cd d 2>&1; echo note` still trips it, r025). Use `git -C <path>`,
-  absolute paths, or `(cd dir && cmd)` with load-bearing parens, always.
-- RECOVERY (r023/r024/r025 confirm this works for multi-file Go/TS diffs):
-  stop retrying Bash/Write/Edit immediately -- Write is ALSO dead, not
-  just Bash. GitHub MCP push_files/get_file_contents isn't hook-gated --
-  land patch.diff+meta.json+state.md as one commit through push_files.
-  - Edits already applied via Edit before the corruption: trust your own
-    old_string/new_string verbatim (tool-verified exact match), not memory.
-  - Hand-reconstruct hunks using ONLY line numbers a tool actually showed
-    (pre-corruption Read/sed, or a fresh post-corruption Read -- both
-    still work); never compute a number by arithmetic alone. When unsure,
-    replace the WHOLE changed block (every old line `-`, every new `+`)
-    instead of threading fine-grained context -- slower, no off-by-one risk.
-  - Files not yet Edited: re-Read each region fresh right before writing
-    its hunk; don't trust an earlier paraphrase.
-  - add_repo/GitHub MCP can't reach a different-owner repo or the task
-    repo's base_commit -- original file text must come from your own Reads.
-- Stop hooks inherit the corrupted cwd and re-fire every turn (expected).
-  Once your push is verified via a GitHub MCP fetch-back, stop.
+## FATAL: cwd-corrupting `cd` bug (mostly-confirmed, r026 did NOT repro)
+- Prior sessions (r006/r009-r012/r014/r016/r017/r019/r021-r025) confirmed ANY
+  bare `cd` -- even `cd x && cmd` -- permanently corrupts cwd for
+  Bash/Write/Edit for the session. r026 ran one `cd x && cmd; cd y` and it
+  did NOT corrupt (checked via git status right after) -- inconsistent
+  across sessions, don't rely on it being safe. STILL: never write bare
+  `cd`. Use `git -C <path>`, absolute paths, or `(cd dir && cmd)`.
+- RECOVERY if it does trip: GitHub MCP push_files isn't hook-gated -- land
+  patch.diff+meta.json+state.md as one commit through it if Bash/Write die.
 
 ## Environment / sandbox facts
-- Network works for `go build`/`pip install`/`npm install`; reading a
-  PINNED dep's source is fair game, not a provenance violation.
-- No Objective-C toolchain here: can't compile darwin+touchid-tagged .go
-  files -- verify via Read-based review, not a real build, for those.
-- Go: golang/protobuf v1.4+'s `ptypes/{empty,timestamp}` are pure type
-  aliases to google.golang.org/protobuf's known-types -- swapping to
-  emptypb/timestamppb in hand-written .go is behavior-preserving (never
-  regen *.pb.go, protoc isn't installed).
-- JS monorepos with `github:`/`git+https:` deps can't install here
-  (codeload.github.com 403; r015/r018/r020/r021/r023) -- skip npm/yarn
-  install, go straight to manual review + Read-based verification.
-- No package.json in base_commit (r020) blocks npm install/test -- fix
-  with `npm install --no-save` leaf deps + stub sibling `require`s.
+- Network works for `go build`/`pip install`/`npm install`.
+- No Objective-C toolchain: can't compile darwin+touchid-tagged .go files.
+- JS monorepos with `github:`/`git+https:` deps can't install (codeload 403).
+- No package.json in base_commit sometimes blocks npm install/test.
+- Only Python 3.10-3.13 available. A 2019-era repo pinned to old pytest
+  (e.g. 4.5.0, needs old `py` lib) CANNOT run on 3.11+ (`py`'s vendored
+  apipkg breaks; repo's old-style conftest.py hooks are incompatible with
+  modern pytest too). Don't burn time pinning old pytest. Workaround:
+  `python3 -m venv`, pip install just the runtime dep the module needs
+  (e.g. `pip install pyqt5`, ~70MB, works fine), then hand-port the target
+  test file's parametrized cases into a throwaway script that imports the
+  module directly and asserts by hand -- real verification, just not via
+  pytest. (`pytest --noconftest -o addopts= -o filterwarnings=` also works
+  for simple cases, but conftest-dependent fixtures still won't.)
+- qutebrowser: importing `qutebrowser.utils.urlutils` (or anything pulling
+  in `qutebrowser.config.config`) as your FIRST import raises
+  `AttributeError: partially initialized module ... has no attribute
+  'file_url'` -- pre-existing circular-import ordering quirk (jinja.py
+  builds an `Environment()` at import time needing `urlutils.file_url`
+  before urlutils finishes; present at base_commit too, not your bug). Fix:
+  `import qutebrowser.utils.jinja` FIRST, then your target module.
+
+## PyQt5 QUrl percent-encoding facts (r026, incdec_number-style bugs)
+- Getters (`.path()`, `.host()`, `.query()`, `.fragment()`) default to
+  decoding and PERMANENTLY normalize %-encoded *unreserved* chars (e.g.
+  %74->'t') at parse time -- unrecoverable, harmless. Pass `QUrl.
+  FullyEncoded` to read a segment while keeping reserved/ambiguous %XX
+  (e.g. %3A) literally encoded instead of losing them.
+- `setHost`/`setPath` default `mode=QUrl.DecodedMode` (assumes RAW text) --
+  a literal '%' in an already-encoded string you set back gets re-escaped
+  to '%25'. Pass `QUrl.StrictMode` explicitly when setting an already-
+  FullyEncoded string back. `setQuery`/`setFragment` default to
+  `QUrl.TolerantMode` already (treats input as pre-encoded) -- no override.
+- To edit a numeric run while ignoring digits inside %XX triplets: mask
+  `%[0-9A-Fa-f]{2}` with a same-length non-digit placeholder for the
+  digit-matching regex, then slice the ORIGINAL string using the match's
+  span offsets (masking preserves length, so spans still line up) --
+  avoids ever emitting placeholder chars in the output.
 
 ## Misc
+- When a task's synthesized "Requirements" prose conflicts with the base
+  repo's own pre-existing parametrized tests (e.g. a stated precedence
+  order that breaks many passing cases via incidental digits elsewhere),
+  trust concrete test behavior over the prose -- likely a paraphrase
+  artifact. Verify by running/porting existing tests, not re-reading prose.
 - `bench5/workspaces/` is gitignored; plain `git diff` omits new untracked
   files -- `git add -A && git diff --cached`, then `git reset`.
-- New enum/state-machine value: grep the whole repo for every enumeration site.
-- Cross-cutting IPC/tracker addition (main<->worker split): mirror an
-  existing sibling's wiring points exactly (ProgressTracker r023).
-- Go: adding a method/changing a constructor's return type on a package-
-  internal interface (touchid r024) or public JSON response type (U2F
-  multi-device r025): grep the WHOLE repo for every implementor/caller/
-  fake in _test.go, same commit.
-- JSON single->multi payload (r025): embed old type as `*OldType` (promoted
-  fields = wire compat) + add new `[]OldType` field; encoding/json
-  auto-allocates the embedded pointer on Unmarshal. Gate an unfinished
-  CLI feature by `.Hidden()` on its top-level kingpin CmdClause.

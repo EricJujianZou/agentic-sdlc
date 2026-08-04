@@ -1,0 +1,8 @@
+{
+  "rank": 26,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T17:15:00Z",
+  "finished_at": "2026-08-04T17:55:44Z",
+  "turns_estimate": 35,
+  "self_assessment": "Fixed via mask-percent-triplets + FullyEncoded/StrictMode get/set + count>value guard, kept the original reversed (anchor>query>path>host) segment search order for backward compat despite the requirements text literally saying 'path, query, anchor, host' (that literal order broke many pre-existing parametrized tests because of incidental digits like 'v1' in path segments, so I judged it a paraphrase artifact and verified against behavior instead); could not run the real pytest suite (pytest 4.5-era repo incompatible with only-available Python 3.11, and a pre-existing jinja/urlutils circular-import quirk blocks bare imports) so verified by hand-porting all of TestIncDecNumber's parametrized cases plus new percent-encoding/count-validation cases against the live patched module via PyQt5 in a scratch venv, all passing except cases that exercise now-intentionally-removed behavior (port segment, decrement-below-zero)."
+}

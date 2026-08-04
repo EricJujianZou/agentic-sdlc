@@ -1,0 +1,120 @@
+diff --git a/qutebrowser/utils/urlutils.py b/qutebrowser/utils/urlutils.py
+index 59cf313..b20f7a5 100644
+--- a/qutebrowser/utils/urlutils.py
++++ b/qutebrowser/utils/urlutils.py
+@@ -529,26 +529,26 @@ class IncDecError(Exception):
+         return '{}: {}'.format(self.msg, self.url.toString())
+ 
+ 
+-def _get_incdec_value(match, incdec, url, count):
+-    """Get an incremented/decremented URL based on a URL match."""
+-    pre, zeroes, number, post = match.groups()
+-    # This should always succeed because we match \d+
++def _get_incdec_value(zeroes, number, incdec, url, count):
++    """Get an incremented/decremented number, preserving zero-padding."""
++    # This should always succeed because we only ever pass in \d+ matches
+     val = int(number)
+     if incdec == 'decrement':
+-        if val <= 0:
+-            raise IncDecError("Can't decrement {}!".format(val), url)
++        if count > val:
++            raise IncDecError(
++                "Can't decrement {} by {}!".format(val, count), url)
+         val -= count
+     elif incdec == 'increment':
+         val += count
+     else:
+-        raise ValueError("Invalid value {} for indec!".format(incdec))
++        raise ValueError("Invalid value {} for incdec!".format(incdec))
+     if zeroes:
+         if len(number) < len(str(val)):
+             zeroes = zeroes[1:]
+         elif len(number) > len(str(val)):
+             zeroes += '0'
+ 
+-    return ''.join([pre, zeroes, str(val), post])
++    return zeroes + str(val)
+ 
+ 
+ def incdec_number(url, incdec, count=1, segments=None):
+@@ -559,8 +559,9 @@ def incdec_number(url, incdec, count=1, segments=None):
+         incdec: Either 'increment' or 'decrement'
+         count: The number to increment or decrement by
+         segments: A set of URL segments to search. Valid segments are:
+-                  'host', 'port', 'path', 'query', 'anchor'.
+-                  Default: {'path', 'query'}
++                  'host', 'path', 'query', 'anchor'. Port numbers are
++                  never modified.
++                  Default: {'path'}
+ 
+     Return:
+         The new url with the number incremented/decremented.
+@@ -570,9 +571,12 @@ def incdec_number(url, incdec, count=1, segments=None):
+     if not url.isValid():
+         raise InvalidUrlError(url)
+ 
++    if not isinstance(count, int) or count < 1:
++        raise ValueError("count needs to be a positive integer!")
++
+     if segments is None:
+-        segments = {'path', 'query'}
+-    valid_segments = {'host', 'port', 'path', 'query', 'anchor'}
++        segments = {'path'}
++    valid_segments = {'host', 'path', 'query', 'anchor'}
+     if segments - valid_segments:
+         extra_elements = segments - valid_segments
+         raise IncDecError("Invalid segments: {}".format(
+@@ -580,26 +584,43 @@ def incdec_number(url, incdec, count=1, segments=None):
+ 
+     # Make a copy of the QUrl so we don't modify the original
+     url = QUrl(url)
+-    # Order as they appear in a URL
++    # Order as they appear in a URL. Use each segment's fully
++    # percent-encoded form so we never lose or mangle encoded data, and
++    # StrictMode on the setters so the already-encoded string we build
++    # back isn't re-escaped (their default mode assumes a *decoded*
++    # string, which would turn a literal '%' into '%25').
+     segment_modifiers = [
+-        ('host', url.host, url.setHost),
+-        ('port', lambda: str(url.port()) if url.port() > 0 else '',
+-         lambda x: url.setPort(int(x))),
+-        ('path', url.path, url.setPath),
+-        ('query', url.query, url.setQuery),
+-        ('anchor', url.fragment, url.setFragment),
++        ('host', lambda: url.host(QUrl.FullyEncoded),
++         lambda x: url.setHost(x, QUrl.StrictMode)),
++        ('path', lambda: url.path(QUrl.FullyEncoded),
++         lambda x: url.setPath(x, QUrl.StrictMode)),
++        ('query', lambda: url.query(QUrl.FullyEncoded), url.setQuery),
++        ('anchor', lambda: url.fragment(QUrl.FullyEncoded), url.setFragment),
+     ]
+     # We're searching the last number so we walk the url segments backwards
+     for segment, getter, setter in reversed(segment_modifiers):
+         if segment not in segments:
+             continue
+ 
+-        # Get the last number in a string
+-        match = re.fullmatch(r'(.*\D|^)(0*)(\d+)(.*)', getter())
++        encoded = getter()
++        # Mask percent-encoded triplets (e.g. '%3A') with non-digit
++        # placeholders so a digit that's actually part of one (the '3'
++        # in '%3A') is never mistaken for part of a number. The
++        # placeholder is the same length as what it replaces, so the
++        # match's spans still index correctly into `encoded`.
++        masked = re.sub(r'%[0-9A-Fa-f]{2}', 'XXX', encoded)
++        # Get the last number in the (masked) string
++        match = re.fullmatch(r'(.*\D|^)(0*)(\d+)(.*)', masked)
+         if not match:
+             continue
+ 
+-        setter(_get_incdec_value(match, incdec, url, count))
++        zeroes = encoded[match.start(2):match.end(2)]
++        number = encoded[match.start(3):match.end(3)]
++        pre = encoded[:match.start(2)]
++        post = encoded[match.end(3):]
++
++        new_number = _get_incdec_value(zeroes, number, incdec, url, count)
++        setter(pre + new_number + post)
+         return url
+ 
+     raise IncDecError("No number found in URL!", url)
