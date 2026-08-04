@@ -1,11 +1,16 @@
 diff --git a/src/database/redis/main.js b/src/database/redis/main.js
 --- a/src/database/redis/main.js
 +++ b/src/database/redis/main.js
-@@ -59,6 +59,13 @@ module.exports = function (module) {
- 	module.get = async function (key) {
- 		return await module.client.get(key);
- 	};
- 
+@@ -59,5 +59,12 @@
+-	module.get = async function (key) {
+-		return await module.client.get(key);
+-	};
+-
+-	module.set = async function (key, value) {
++	module.get = async function (key) {
++		return await module.client.get(key);
++	};
++
 +	module.mget = async function (keys) {
 +		if (!Array.isArray(keys) || !keys.length) {
 +			return [];
@@ -13,20 +18,24 @@ diff --git a/src/database/redis/main.js b/src/database/redis/main.js
 +		return await module.client.mget(keys);
 +	};
 +
- 	module.set = async function (key, value) {
- 		await module.client.set(key, value);
- 	};
++	module.set = async function (key, value) {
 diff --git a/src/database/mongo/main.js b/src/database/mongo/main.js
 --- a/src/database/mongo/main.js
 +++ b/src/database/mongo/main.js
-@@ -80,6 +80,25 @@ module.exports = function (module) {
- 	module.set = async function (key, value) {
- 		if (!key) {
- 			return;
- 		}
- 		await module.setObject(key, { data: value });
- 	};
- 
+@@ -80,6 +80,30 @@
+-	module.set = async function (key, value) {
+-		if (!key) {
+-			return;
+-		}
+-		await module.setObject(key, { data: value });
+-	};
++	module.set = async function (key, value) {
++		if (!key) {
++			return;
++		}
++		await module.setObject(key, { data: value });
++	};
++
 +	module.mget = async function (keys) {
 +		if (!Array.isArray(keys) || !keys.length) {
 +			return [];
@@ -50,18 +59,17 @@ diff --git a/src/database/mongo/main.js b/src/database/mongo/main.js
 +
 +		return keys.map(key => (map.hasOwnProperty(key) ? map[key] : null));
 +	};
-+
- 	module.increment = async function (key) {
- 		if (!key) {
- 			return;
- 		}
 diff --git a/src/database/postgres/main.js b/src/database/postgres/main.js
 --- a/src/database/postgres/main.js
 +++ b/src/database/postgres/main.js
-@@ -117,6 +117,25 @@ module.exports = function (module) {
- 		return res.rows.length ? res.rows[0].t : null;
- 	};
- 
+@@ -119,4 +119,29 @@
+-		return res.rows.length ? res.rows[0].t : null;
+-	};
+-
+-	module.set = async function (key, value) {
++		return res.rows.length ? res.rows[0].t : null;
++	};
++
 +	module.mget = async function (keys) {
 +		if (!Array.isArray(keys) || !keys.length) {
 +			return [];
@@ -87,17 +95,11 @@ diff --git a/src/database/postgres/main.js b/src/database/postgres/main.js
 +		return keys.map(key => (map.hasOwnProperty(key) ? map[key] : null));
 +	};
 +
- 	module.set = async function (key, value) {
- 		if (!key) {
- 			return;
- 		}
++	module.set = async function (key, value) {
 diff --git a/src/user/email.js b/src/user/email.js
 --- a/src/user/email.js
 +++ b/src/user/email.js
-@@ -45,26 +45,50 @@ UserEmail.remove = async function (uid, sessionId) {
- 	]);
- };
- 
+@@ -46,15 +46,43 @@
 -UserEmail.isValidationPending = async (uid, email) => {
 -	const code = await db.get(`confirm:byUid:${uid}`);
 -
@@ -156,68 +158,113 @@ diff --git a/src/user/email.js b/src/user/email.js
 +	const confirmObj = await db.getObject(`confirm:${code}`);
 +	return confirmObj && confirmObj.expires ? parseInt(confirmObj.expires, 10) - Date.now() : null;
 +};
- 
- UserEmail.expireValidation = async (uid) => {
- 	const code = await db.get(`confirm:byUid:${uid}`);
-@@ -80,9 +104,10 @@ UserEmail.canSendValidation = async (uid, email) => {
- 	const ttl = await UserEmail.getValidationExpiry(uid);
- 	const max = meta.config.emailConfirmExpiry * 60 * 60 * 1000;
- 	const interval = meta.config.emailConfirmInterval * 60 * 1000;
-+	const baseline = ttl === null ? Date.now() : ttl;
- 
+@@ -76,6 +104,7 @@
+-	const ttl = await UserEmail.getValidationExpiry(uid);
+-	const max = meta.config.emailConfirmExpiry * 60 * 60 * 1000;
+-	const interval = meta.config.emailConfirmInterval * 60 * 1000;
+-
 -	return ttl + interval < max;
+-};
++	const ttl = await UserEmail.getValidationExpiry(uid);
++	const max = meta.config.emailConfirmExpiry * 60 * 60 * 1000;
++	const interval = meta.config.emailConfirmInterval * 60 * 1000;
++	const baseline = ttl === null ? Date.now() : ttl;
++
 +	return baseline + interval < max;
- };
- 
- UserEmail.sendValidationEmail = async function (uid, options) {
-@@ -161,12 +186,12 @@ UserEmail.sendValidationEmail = async function (uid, options) {
- 
- 	await UserEmail.expireValidation(uid);
- 	await db.set(`confirm:byUid:${uid}`, confirm_code);
++};
+@@ -151,9 +180,8 @@
+-	await UserEmail.expireValidation(uid);
+-	await db.set(`confirm:byUid:${uid}`, confirm_code);
 -	await db.pexpire(`confirm:byUid:${uid}`, emailConfirmExpiry * 60 * 60 * 1000);
- 
- 	await db.setObject(`confirm:${confirm_code}`, {
- 		email: options.email.toLowerCase(),
- 		uid: uid,
-+		expires: Date.now() + (emailConfirmExpiry * 60 * 60 * 1000),
- 	});
+-
+-	await db.setObject(`confirm:${confirm_code}`, {
+-		email: options.email.toLowerCase(),
+-		uid: uid,
+-	});
 -	await db.pexpire(`confirm:${confirm_code}`, emailConfirmExpiry * 60 * 60 * 1000);
- 
- 	winston.verbose(`[user/email] Validation email for uid ${uid} sent to ${options.email}`);
- 	events.log({
++	await UserEmail.expireValidation(uid);
++	await db.set(`confirm:byUid:${uid}`, confirm_code);
++
++	await db.setObject(`confirm:${confirm_code}`, {
++		email: options.email.toLowerCase(),
++		uid: uid,
++		expires: Date.now() + (emailConfirmExpiry * 60 * 60 * 1000),
++	});
 diff --git a/src/socket.io/admin/user.js b/src/socket.io/admin/user.js
 --- a/src/socket.io/admin/user.js
 +++ b/src/socket.io/admin/user.js
-@@ -62,9 +62,12 @@ User.resetLockouts = async function (socket, uids) {
- 	if (!Array.isArray(uids)) {
- 		throw new Error('[[error:invalid-data]]');
- 	}
- 
- 	for (const uid of uids) {
+@@ -62,19 +62,25 @@
+-User.validateEmail = async function (socket, uids) {
+-	if (!Array.isArray(uids)) {
+-		throw new Error('[[error:invalid-data]]');
+-	}
+-
+-	for (const uid of uids) {
 -		await user.email.confirmByUid(uid);
+-	}
+-};
+-
+-User.sendValidationEmail = async function (socket, uids) {
+-	if (!Array.isArray(uids)) {
+-		throw new Error('[[error:invalid-data]]');
+-	}
+-
+-	const failed = [];
+-	let errorLogged = false;
+-	await async.eachLimit(uids, 50, async (uid) => {
+-		await user.email.sendValidationEmail(uid, { force: true }).catch((err) => {
++User.validateEmail = async function (socket, uids) {
++	if (!Array.isArray(uids)) {
++		throw new Error('[[error:invalid-data]]');
++	}
++
++	for (const uid of uids) {
 +		/* eslint-disable no-await-in-loop */
 +		const email = await user.email.getEmailForValidation(uid);
 +		if (email) {
 +			await user.setUserField(uid, 'email', email);
 +		}
 +		await user.email.confirmByUid(uid);
- 	}
- };
- 
- 	const failed = [];
- 	let errorLogged = false;
- 	await async.eachLimit(uids, 50, async (uid) => {
--		await user.email.sendValidationEmail(uid, { force: true }).catch((err) => {
++	}
++};
++
++User.sendValidationEmail = async function (socket, uids) {
++	if (!Array.isArray(uids)) {
++		throw new Error('[[error:invalid-data]]');
++	}
++
++	const failed = [];
++	let errorLogged = false;
++	await async.eachLimit(uids, 50, async (uid) => {
 +		const email = await user.email.getEmailForValidation(uid);
 +		await user.email.sendValidationEmail(uid, { email, force: true }).catch((err) => {
- 			if (!errorLogged) {
 diff --git a/src/controllers/admin/users.js b/src/controllers/admin/users.js
 --- a/src/controllers/admin/users.js
 +++ b/src/controllers/admin/users.js
-@@ -163,20 +163,29 @@ usersController.search = async function (req, res) {
- 	await render(req, res, searchData);
- };
- 
+@@ -163,23 +163,36 @@
+-async function loadUserInfo(callerUid, uids) {
+-	async function getIPs() {
+-		return await Promise.all(uids.map(uid => db.getSortedSetRevRange(`uid:${uid}:ip`, 0, -1)));
+-	}
+-	const [isAdmin, userData, lastonline, ips] = await Promise.all([
+-		user.isAdministrator(uids),
+-		user.getUsersWithFields(uids, userFields, callerUid),
+-		db.sortedSetScores('users:online', uids),
+-		getIPs(),
+-	]);
+-	userData.forEach((user, index) => {
+-		if (user) {
+-			user.administrator = isAdmin[index];
+-			user.flags = userData[index].flags || 0;
+-			const timestamp = lastonline[index] || user.joindate;
+-			user.lastonline = timestamp;
+-			user.lastonlineISO = utils.toISOString(timestamp);
+-			user.ips = ips[index];
+-			user.ip = ips[index] && ips[index][0] ? ips[index][0] : null;
+-		}
+-	});
+-	return userData;
+-}
 +async function getConfirmObjs(uids) {
 +	const codes = await db.mget(uids.map(uid => `confirm:byUid:${uid}`));
 +	const confirmKeys = codes.map(code => (code ? `confirm:${code}` : null));
@@ -226,43 +273,44 @@ diff --git a/src/controllers/admin/users.js b/src/controllers/admin/users.js
 +	return confirmKeys.map(key => (key ? validObjs[i++] : null));
 +}
 +
- async function loadUserInfo(callerUid, uids) {
- 	async function getIPs() {
- 		return await Promise.all(uids.map(uid => db.getSortedSetRevRange(`uid:${uid}:ip`, 0, -1)));
- 	}
--	const [isAdmin, userData, lastonline, ips] = await Promise.all([
++async function loadUserInfo(callerUid, uids) {
++	async function getIPs() {
++		return await Promise.all(uids.map(uid => db.getSortedSetRevRange(`uid:${uid}:ip`, 0, -1)));
++	}
 +	const [isAdmin, userData, lastonline, ips, confirmObjs] = await Promise.all([
- 		user.isAdministrator(uids),
- 		user.getUsersWithFields(uids, userFields, callerUid),
- 		db.sortedSetScores('users:online', uids),
- 		getIPs(),
++		user.isAdministrator(uids),
++		user.getUsersWithFields(uids, userFields, callerUid),
++		db.sortedSetScores('users:online', uids),
++		getIPs(),
 +		getConfirmObjs(uids),
- 	]);
- 	userData.forEach((user, index) => {
- 		if (user) {
- 			user.administrator = isAdmin[index];
- 			user.flags = userData[index].flags || 0;
- 			const timestamp = lastonline[index] || user.joindate;
- 			user.lastonline = timestamp;
- 			user.lastonlineISO = utils.toISOString(timestamp);
- 			user.ips = ips[index];
- 			user.ip = ips[index] && ips[index][0] ? ips[index][0] : null;
++	]);
++	userData.forEach((user, index) => {
++		if (user) {
++			user.administrator = isAdmin[index];
++			user.flags = userData[index].flags || 0;
++			const timestamp = lastonline[index] || user.joindate;
++			user.lastonline = timestamp;
++			user.lastonlineISO = utils.toISOString(timestamp);
++			user.ips = ips[index];
++			user.ip = ips[index] && ips[index][0] ? ips[index][0] : null;
 +			const confirmObj = confirmObjs[index];
 +			const expired = !!confirmObj && !(parseInt(confirmObj.expires, 10) > Date.now());
 +			user['email:pending'] = !!confirmObj && !expired;
 +			user['email:expired'] = expired;
- 		}
- 	});
- 	return userData;
- }
++		}
++	});
++	return userData;
++}
 diff --git a/src/user/delete.js b/src/user/delete.js
 --- a/src/user/delete.js
 +++ b/src/user/delete.js
-@@ -148,6 +148,7 @@ module.exports = function (User) {
- 			groups.leaveAllGroups(uid),
- 			flags.resolveFlag('user', uid, uid),
- 			User.reset.cleanByUid(uid),
+@@ -149,4 +149,5 @@
+-			groups.leaveAllGroups(uid),
+-			flags.resolveFlag('user', uid, uid),
+-			User.reset.cleanByUid(uid),
+-		]);
++			groups.leaveAllGroups(uid),
++			flags.resolveFlag('user', uid, uid),
++			User.reset.cleanByUid(uid),
 +			User.email.expireValidation(uid),
- 		]);
- 		await db.deleteAll([`followers:${uid}`, `following:${uid}`, `user:${uid}`]);
- 		delete deletesInProgress[uid];
++		]);
