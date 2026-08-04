@@ -1,0 +1,299 @@
+diff --git a/config/config.go b/config/config.go
+--- a/config/config.go
++++ b/config/config.go
+@@ -303,7 +303,8 @@
+ 	if l.Family == constant.Amazon {
+ 		return strconv.Atoi(getAmazonLinuxVersion(l.Release))
+ 	}
+ 	if 0 < len(l.Release) {
+-		return strconv.Atoi(strings.Split(l.Release, ".")[0])
++		release := strings.TrimPrefix(l.Release, "stream")
++		return strconv.Atoi(strings.Split(release, ".")[0])
+ 	}
+ 	return 0, xerrors.New("Release is empty")
+diff --git a/config/os.go b/config/os.go
+--- a/config/os.go
++++ b/config/os.go
+@@ -64,11 +64,11 @@
+ 	case constant.CentOS:
+ 		// https://en.wikipedia.org/wiki/CentOS#End-of-support_schedule
+-		// TODO Stream
+ 		eol, found = map[string]EOL{
+-			"3": {Ended: true},
+-			"4": {Ended: true},
+-			"5": {Ended: true},
+-			"6": {Ended: true},
+-			"7": {StandardSupportUntil: time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC)},
+-			"8": {StandardSupportUntil: time.Date(2021, 12, 31, 23, 59, 59, 0, time.UTC)},
++			"3":       {Ended: true},
++			"4":       {Ended: true},
++			"5":       {Ended: true},
++			"6":       {Ended: true},
++			"7":       {StandardSupportUntil: time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC)},
++			"8":       {StandardSupportUntil: time.Date(2021, 12, 31, 23, 59, 59, 0, time.UTC)},
++			"stream8": {StandardSupportUntil: time.Date(2024, 5, 31, 23, 59, 59, 0, time.UTC)},
+ 		}[major(release)]
+diff --git a/config/config_test.go b/config/config_test.go
+--- a/config/config_test.go
++++ b/config/config_test.go
+@@ -94,8 +94,15 @@
+ 		{
+ 			in: Distro{
+ 				Family:  CentOS,
+ 				Release: "7.10",
+ 			},
+ 			out: 7,
+ 		},
++		{
++			in: Distro{
++				Family:  CentOS,
++				Release: "stream8",
++			},
++			out: 8,
++		},
+ 	}
+diff --git a/config/os_test.go b/config/os_test.go
+--- a/config/os_test.go
++++ b/config/os_test.go
+@@ -114,9 +114,25 @@
+ 		{
+ 			name:     "CentOS 9 not found",
+ 			fields:   fields{family: CentOS, release: "9"},
+ 			now:      time.Date(2021, 1, 6, 23, 59, 59, 0, time.UTC),
+ 			stdEnded: false,
+ 			extEnded: false,
+ 			found:    false,
+ 		},
++		{
++			name:     "CentOS Stream 8 supported",
++			fields:   fields{family: CentOS, release: "stream8"},
++			now:      time.Date(2021, 1, 6, 23, 59, 59, 0, time.UTC),
++			stdEnded: false,
++			extEnded: false,
++			found:    true,
++		},
++		{
++			name:     "CentOS Stream 8 eol",
++			fields:   fields{family: CentOS, release: "stream8"},
++			now:      time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
++			stdEnded: true,
++			extEnded: true,
++			found:    true,
++		},
+ 		// Alma
+diff --git a/scanner/redhatbase.go b/scanner/redhatbase.go
+--- a/scanner/redhatbase.go
++++ b/scanner/redhatbase.go
+@@ -54,10 +54,14 @@
+ 
+ 			release := result[2]
+ 			switch strings.ToLower(result[1]) {
+-			case "centos", "centos linux", "centos stream":
++			case "centos", "centos linux":
+ 				cent := newCentOS(c)
+ 				cent.setDistro(constant.CentOS, release)
+ 				return true, cent
++			case "centos stream":
++				cent := newCentOS(c)
++				cent.setDistro(constant.CentOS, "stream"+release)
++				return true, cent
+ 			case "alma", "almalinux":
+ 				alma := newAlma(c)
+ 				alma.setDistro(constant.Alma, release)
+@@ -125,12 +129,16 @@
+ 
+ 			release := result[2]
+ 			switch strings.ToLower(result[1]) {
+-			case "centos", "centos linux", "centos stream":
++			case "centos", "centos linux":
+ 				cent := newCentOS(c)
+ 				cent.setDistro(constant.CentOS, release)
+ 				return true, cent
++			case "centos stream":
++				cent := newCentOS(c)
++				cent.setDistro(constant.CentOS, "stream"+release)
++				return true, cent
+ 			case "alma", "almalinux":
+ 				alma := newAlma(c)
+ 				alma.setDistro(constant.Alma, release)
+ 				return true, alma
+ 			case "rocky", "rocky linux":
+@@ -515,7 +523,7 @@
+ 		// TODO zypper ps
+ 		// https://github.com/future-architect/vuls/issues/696
+ 		return false
+-	case constant.RedHat, constant.CentOS, constant.Rocky, constant.Oracle:
++	case constant.RedHat, constant.CentOS, constant.Alma, constant.Rocky, constant.Oracle:
+ 		majorVersion, err := o.Distro.MajorVersion()
+ 		if err != nil || majorVersion < 6 {
+ 			o.log.Errorf("Not implemented yet: %s, err: %+v", o.Distro, err)
+diff --git a/oval/util.go b/oval/util.go
+--- a/oval/util.go
++++ b/oval/util.go
+@@ -99,5 +99,9 @@
+ // getDefsByPackNameViaHTTP fetches OVAL information via HTTP
+ func getDefsByPackNameViaHTTP(r *models.ScanResult, url string) (relatedDefs ovalResult, err error) {
++	release := r.Release
++	if r.Family == constant.CentOS {
++		release = util.CentOSStreamToCentOS(release)
++	}
+ 
+ 	nReq := len(r.Packages) + len(r.SrcPackages)
+ 	reqChan := make(chan request, nReq)
+@@ -137,7 +141,7 @@
+ 				url, err := util.URLPathJoin(
+ 					url,
+ 					"packs",
+ 					r.Family,
+-					r.Release,
++					release,
+ 					req.packName,
+ 				)
+@@ -260,8 +264,12 @@
+ 	ovalFamily, err := GetFamilyInOval(r.Family)
+ 	if err != nil {
+ 		return relatedDefs, err
+ 	}
++	release := r.Release
++	if r.Family == constant.CentOS {
++		release = util.CentOSStreamToCentOS(release)
++	}
+ 
+ 	for _, req := range requests {
+-		definitions, err := driver.GetByPackName(ovalFamily, r.Release, req.packName, req.arch)
++		definitions, err := driver.GetByPackName(ovalFamily, release, req.packName, req.arch)
+ 		if err != nil {
+@@ -438,11 +446,11 @@
+ 	case constant.RedHat,
+ 		constant.CentOS,
+ 		constant.Alma,
+ 		constant.Rocky:
+-		vera := rpmver.NewVersion(rhelDownStreamOSVersionToRHEL(newVer))
+-		verb := rpmver.NewVersion(rhelDownStreamOSVersionToRHEL(packInOVAL.Version))
++		vera := rpmver.NewVersion(rhelRebuildOSVersionToRHEL(newVer))
++		verb := rpmver.NewVersion(rhelRebuildOSVersionToRHEL(packInOVAL.Version))
+ 		return vera.LessThan(verb), nil
+ 
+ 	default:
+ 		return false, xerrors.Errorf("Not implemented yet: %s", family)
+ 	}
+@@ -451,7 +459,7 @@
+ var rhelDownStreamOSVerPattern = regexp.MustCompile(`\.[es]l(\d+)(?:_\d+)?(?:\.(centos|rocky|alma))?`)
+ 
+-func rhelDownStreamOSVersionToRHEL(ver string) string {
++func rhelRebuildOSVersionToRHEL(ver string) string {
+ 	return rhelDownStreamOSVerPattern.ReplaceAllString(ver, ".el$1")
+ }
+ 
+ // NewOVALClient returns a client for OVAL database
+diff --git a/oval/util_test.go b/oval/util_test.go
+--- a/oval/util_test.go
++++ b/oval/util_test.go
+@@ -1794,5 +1794,5 @@
+ }
+ 
+-func Test_rhelDownStreamOSVersionToRHEL(t *testing.T) {
++func Test_rhelRebuildOSVersionToRHEL(t *testing.T) {
+ 	type args struct {
+ 		ver string
+ 	}
+@@ -1834,6 +1834,6 @@
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+-			if got := rhelDownStreamOSVersionToRHEL(tt.args.ver); got != tt.want {
+-				t.Errorf("rhelDownStreamOSVersionToRHEL() = %v, want %v", got, tt.want)
++			if got := rhelRebuildOSVersionToRHEL(tt.args.ver); got != tt.want {
++				t.Errorf("rhelRebuildOSVersionToRHEL() = %v, want %v", got, tt.want)
+ 			}
+ 		})
+diff --git a/util/util.go b/util/util.go
+--- a/util/util.go
++++ b/util/util.go
+@@ -178,5 +178,12 @@
+ 	}
+ 	return ver[0:strings.Index(ver, ".")]
+ }
++
++// CentOSStreamToCentOS converts a CentOS Stream release string (e.g. "stream8")
++// to the RHEL-equivalent release identifier (e.g. "8") expected by upstream
++// OVAL/Gost sources, which do not track CentOS Stream as a separate release.
++func CentOSStreamToCentOS(release string) string {
++	return strings.TrimPrefix(release, "stream")
++}
+ 
+ // GetHTTPClient return http.Client
+diff --git a/util/util_test.go b/util/util_test.go
+--- a/util/util_test.go
++++ b/util/util_test.go
+@@ -180,3 +180,25 @@
+ 		}
+ 	}
+ }
++
++func TestCentOSStreamToCentOS(t *testing.T) {
++	var tests = []struct {
++		in       string
++		expected string
++	}{
++		{
++			in:       "stream8",
++			expected: "8",
++		},
++		{
++			in:       "8",
++			expected: "8",
++		},
++	}
++	for i, tt := range tests {
++		a := CentOSStreamToCentOS(tt.in)
++		if tt.expected != a {
++			t.Errorf("[%d]\nexpected: %s\n  actual: %s\n", i, tt.expected, a)
++		}
++	}
++}
+diff --git a/gost/redhat.go b/gost/redhat.go
+--- a/gost/redhat.go
++++ b/gost/redhat.go
+@@ -8,6 +8,7 @@
+ 	"strings"
+ 
+ 	"github.com/future-architect/vuls/config"
++	"github.com/future-architect/vuls/constant"
+ 	"github.com/future-architect/vuls/models"
+ 	"github.com/future-architect/vuls/util"
+ 	gostmodels "github.com/vulsio/gost/models"
+@@ -22,5 +23,9 @@
+ // DetectCVEs fills cve information that has in Gost
+ func (red RedHat) DetectCVEs(r *models.ScanResult, ignoreWillNotFix bool) (nCVEs int, err error) {
++	release := r.Release
++	if r.Family == constant.CentOS {
++		release = util.CentOSStreamToCentOS(release)
++	}
+ 	if red.DBDriver.Cnf.IsFetchViaHTTP() {
+-		prefix, _ := util.URLPathJoin(red.DBDriver.Cnf.GetURL(), "redhat", major(r.Release), "pkgs")
++		prefix, _ := util.URLPathJoin(red.DBDriver.Cnf.GetURL(), "redhat", major(release), "pkgs")
+ 		responses, err := getAllUnfixedCvesViaHTTP(r, prefix)
+@@ -42,8 +47,8 @@
+ 	} else {
+ 		if red.DBDriver.DB == nil {
+ 			return 0, nil
+ 		}
+ 		for _, pack := range r.Packages {
+ 			// CVE-ID: RedhatCVE
+-			cves, err := red.DBDriver.DB.GetUnfixedCvesRedhat(major(r.Release), pack.Name, ignoreWillNotFix)
++			cves, err := red.DBDriver.DB.GetUnfixedCvesRedhat(major(release), pack.Name, ignoreWillNotFix)
+ 			if err != nil {
+@@ -139,8 +144,12 @@
+ 			Confidences: models.Confidences{models.RedHatAPIMatch},
+ 		}
+ 		newly = true
+ 	}
++	release := r.Release
++	if r.Family == constant.CentOS {
++		release = util.CentOSStreamToCentOS(release)
++	}
+ 	v.Mitigations = append(v.Mitigations, mitigations...)
+ 	pkgStats := red.mergePackageStates(v,
+-		cve.PackageState, r.Packages, r.Release)
++		cve.PackageState, r.Packages, release)
+ 	if 0 < len(pkgStats) {
