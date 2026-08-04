@@ -559,3 +559,36 @@ rate. Escalation attempted and results:
   the trap costs sessions/wall-clock only) — if merged, the merge time
   is recorded here and session-count/wall-clock process metrics before
   vs after are reported separately.
+
+## 2026-08-04 ~12:40 UTC — INTERIM grades, first 16 SA-v2 results (labeled interim; final analysis only at 60/60)
+
+Incremental grading started once 16 results were in (official harness,
+serial per-patch, `out_sa_v2`; per-patch pull + rmi). Verdicts
+recomputed from required-test sets as always
+(`results/main_armA_sonnet5_v2_grades.json`, will be extended as more
+ranks land):
+
+- **SA-v2: 6/16 PASS** (r001, r003, r004, r008, r011, r013). All 10
+  fails are genuine near-misses with the patch applied and the suite
+  running (r007 983/985, r010 288/291, r014 38/42, r015 75/82; the
+  rest are small required sets 0/1..0/5). Zero `no output.json`.
+- Same 16 ranks, SB (bare continuous): 13/16 (fails r002, r005, r011).
+  Paired discordants on this prefix: SB-pass/SA-v2-fail = 8
+  (r006,7,9,10,12,14,15,16); SA-v2-pass/SB-fail = 1 (r011).
+  Direction: **scaffolding effect for sonnet is running strongly
+  NEGATIVE with the answer-key channel closed** — the original SA's
+  +16.7pp appears to have been cheat-driven. Not conclusive until
+  60/60 + audit.
+- Artifact checks run before believing the signal: (a) every fail is a
+  near-miss, not an apply failure; (b) the `git diff`
+  staged/untracked-capture hypothesis tested by diffing each failing
+  patch's file list vs gold — subjects DO emit new-file diffs where
+  they created files (r006, r016), the only missing gold-new files are
+  ansible changelogs/fragments (test-irrelevant), and r007 covers all
+  gold files yet fails 2/985 on substance. Depressed rate looks real,
+  not a capture artifact.
+- Grading order in this batch was instance-id-sorted, not rank order;
+  the 16 graded = all results present at batch start (r001–r016).
+  These interim grades will be re-verified against final branch state
+  (blob hashes) in the post-run audit, since one session (r010) has
+  already amended a pushed patch once.
