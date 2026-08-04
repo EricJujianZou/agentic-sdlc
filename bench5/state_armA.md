@@ -1,14 +1,21 @@
 # Arm A process notes (carried memory)
 
 ## FATAL: cwd-corrupting `cd` bug
-- A bare `cd <dir>` (even in `cd dir && cmd`, `cd x; y`, or a solo `cd x`
-  with no follow-on — r005) outside `(...)` corrupts cwd for the REST of
-  the session (PreToolUse hook shells a relative path; every gated tool
-  then crashes — confirmed for Bash/Write/Edit). Read still works after.
-- RULE, NO EXCEPTIONS: never write a bare `cd` outside `(...)`, in ANY
-  language repo (Go, Python/ansible, etc — r002/r003/r005 all tripped it).
-  Use `git -C <path> ...`; `go -C <path> <subcmd>` for Go build/vet/test
-  (scoped to a dir). Else wrap `(cd dir && cmd)` — parens load-bearing.
+- A bare `cd <dir>` (even in `cd dir && cmd`, `cd x; y`, a solo `cd x` with
+  no follow-on, OR a throwaway one-liner like `cd dir 2>&1 || true` used
+  just to sanity-check a path exists — r005 tripped THIS exact form on a
+  *second* attempt despite knowing the rule) outside `(...)` corrupts cwd
+  for the REST of the session (PreToolUse hook shells a relative path;
+  every gated tool then crashes — confirmed for Bash/Write/Edit). Read
+  still works after.
+- RULE, NO EXCEPTIONS: never write `cd` as a bare/standalone Bash command
+  for ANY reason, including idle existence checks — use `ls <path>` or
+  `test -d <path> && echo ok` instead of `cd <path>`. In real commands use
+  `git -C <path> ...`; `go -C <path> <subcmd>` for Go build/vet/test. Else
+  wrap `(cd dir && cmd)` — parens load-bearing. This has now bitten
+  r002/r003/r005(x2) — treat ANY appearance of the string `cd ` at the
+  start of a Bash command/line as a stop-and-rewrite signal, no exceptions
+  for "it's just a quick check."
 - If corruption happens anyway: stop, don't retry Bash/Write/Edit. Leave
   the instance unsolved rather than fabricate an unverified patch.diff.
   GitHub MCP tools aren't hook-gated — record the lesson here via the
@@ -56,5 +63,12 @@
   struct+tag, `setDefaults`/decodeHooks map, JSON+CUE schema, deprecation
   text, example/docs yaml. Grep the WHOLE repo for the old name, not just
   the config package.
-- r005 (ansible/ansible PlayIterator/handlers refactor) hit the cd bug in
-  workspace setup and was abandoned unsolved per the rule above — retry fresh.
+- r005 (ansible/ansible PlayIterator/handlers refactor, base_commit
+  254de2a) is a large multi-file design (play_iterator.py HANDLERS phase,
+  Block.get_tasks, Handler.remove_host, Play.compile force_handlers,
+  linear/free strategy wiring) — tripped the cd bug again mid-verification
+  before any test could run, so it's unsolved twice now. Next attempt:
+  write the whole implementation AND run every verification command
+  needed in one uninterrupted stretch with zero `cd` of any kind, or
+  verify incrementally with `git -C`/absolute paths from the very first
+  command, not just after the design is done.
