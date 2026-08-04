@@ -53,3 +53,7 @@
   parametrized tests, trust concrete test behavior over the prose.
 - `bench5/workspaces/` is gitignored; `git diff HEAD` (no staging needed)
   captures new + modified files in one unified diff for patch.diff.
+- NodeBB: root package.json is only `install/package.json` (wired in by
+  `./nodebb setup`); full npm install + mocha needs mongo/redis, so trace
+  the route→middleware chain (`setupPageRoute` in `src/routes/helpers.js`)
+  and hand-simulate the changed condition vs existing `test/*.js` asserts.
