@@ -1,0 +1,8 @@
+{
+  "rank": 28,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T00:00:00Z",
+  "finished_at": "2026-08-04T02:00:00Z",
+  "turns_estimate": 55,
+  "self_assessment": "Implemented all requirements (feature-flagged Knock option gated on feature_ask_to_join, centralized promptUpgradeDialog upgrade helper shared by Knock and Restricted, joinRule-based title/invite-toggle logic replacing the isPrivate heuristic in RoomUpgradeWarningDialog, new i18n strings) via direct source edits made before a session-wide sandbox cwd-corruption bug disabled Bash/Write/Edit entirely (see state_armA.md); could not run yarn install/jest/tsc to verify, and patch.diff was hand-reconstructed as a unified diff from Read-tool captures of the before/after file contents rather than `git diff`, then delivered via the GitHub API push_files recovery path -- diff line/hunk counts were manually cross-checked for internal consistency but not machine-validated by actually applying the patch."
+}
