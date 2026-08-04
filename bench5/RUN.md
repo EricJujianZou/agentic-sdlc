@@ -538,3 +538,24 @@ early no-output fires (23:09/23:39, cause unknown — consistent with the
 same trap hitting before any push), 02:39 fire in flight at this
 writing. Every lockout delivered nothing rather than an unverified
 patch (integrity observation).
+
+## 2026-08-04 05:15 UTC — 5th lockout; durable hook fix offered as PR #111
+
+r002 (03:30) and r003 (03:51) and r004 (04:22) delivered; then a 5th
+cwd lockout on r005 (6dbc2e8, 04:47) — this session had the hardened
+kickoff, so prompt-level warnings alone leave a ~1/3 session-waste
+rate. Escalation attempted and results:
+
+- Trigger API silently strips a `branch` field on the repo source, so
+  sessions cannot be started on the arm branch (which would have let
+  the arm branch's own settings.json apply). Kickoff counts updated.
+- Durable fix prepared as **PR #111** (`fix/hook-launcher-cwd-robust`
+  off `main`): hook commands launch their scripts via an inline-python
+  shim that pins cwd to CLAUDE_PROJECT_DIR (fallback '.', old
+  behavior). Verified under sh and cmd, foreign cwd and repo root,
+  allow/deny paths, var unset; 398 tests green. Merging is the owner's
+  human-only gate. Mid-run merge is analyzed as unbiased for pass
+  rates (a bricked session delivers nothing and the rank is retried;
+  the trap costs sessions/wall-clock only) — if merged, the merge time
+  is recorded here and session-count/wall-clock process metrics before
+  vs after are reported separately.
