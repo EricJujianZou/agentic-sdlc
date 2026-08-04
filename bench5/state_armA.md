@@ -33,28 +33,28 @@
   aliases to google.golang.org/protobuf's known-types -- swapping
   imports/refs to emptypb/timestamppb in hand-written .go is behavior-
   preserving (protoc/protoc-gen-go NOT installed -- never regen *.pb.go).
-- web.py Templetor sandboxes `$code:`/`$jsdef`/`$def`: `_`-prefixed attr
-  access is a compile-time SecurityError; introspect via a plain module
-  exposed with `infogami.utils.view.public`, not getattr/hasattr.
-- JS monorepos generally can't `yarn install` here (github: deps 403 on
-  codeload.github.com, berry 404s) -- confirmed again r015 (element-web's
-  matrix-js-sdk pinned via `github:`). No-install checks instead:
-  `ts.transpileModule()` per file (syntax only); `node --check` for plain
-  JS; `npm install` a throwaway sandbox dir *outside* the workspace to
-  inspect a pinned dep's real runtime behavior.
-- Ansible module_utils/urls.py: a new HTTP/SSL knob threads through
-  ~15-20 call sites -- grep every one, task file won't list them all.
-- RTL/jest snapshots: when jest can't run, hand-patch `.snap` files for
-  interface-only diffs -- find every snapshot rendering through the
-  changed component, insert the new DOM attr in alphabetical order
-  (pretty-format sorts attrs A-Z); a stale snapshot fails CI though jest
-  would've auto-written it locally.
+- JS monorepos with `github:` deps can't `yarn install` here (403 on
+  codeload.github.com; r015 element-web/matrix-js-sdk) -- use
+  `ts.transpileModule()`/`node --check` for syntax-only checks instead. BUT
+  plain npm-registry yarn-berry repos (e.g. protonmail/webclients r018) DO
+  install: global `yarn` is 1.22 and chokes on `packageManager`, so invoke
+  `node .yarn/releases/yarn-*.cjs install --mode=skip-build` directly; then
+  per-package `tsc --noEmit -p <pkg>/tsconfig.json` + `yarn jest <path>
+  --silent --coverage=false` work -- try before falling back to no-install.
+- RTL/jest snapshots: hand-patch `.snap` files for interface-only diffs
+  when jest can't run -- insert the new attr alphabetically (pretty-format
+  A-Z order) into every snapshot of the changed component.
 
 ## Misc
-- `bench5/workspaces/` is gitignored. Plain `git diff` omits new untracked
-  files -- `git add -A && git diff --cached`, then `git reset`.
+- `bench5/workspaces/` is gitignored; plain `git diff` omits new untracked
+  files -- `git add -A && git diff --cached`, then `git reset`. If you ran
+  an install, first `git restore --staged --worktree <lockfile>`: `add -A`
+  also stages unrelated lockfile churn (r018: 976 lines of yarn.lock noise).
 - New enum/state-machine value: grep the whole repo for every place OLD
   values are enumerated as a closed set.
 - Ambiguous req bullet ("component X should receive prop Y") may mean a
   value passed through an existing differently-named prop, or a literal
   rename -- prefer whichever keeps the diff minimal, update tests to match.
+- Multi-file feature spec touching a function with existing positional-arg
+  callers/tests: append each new param at the END with a default, never
+  insert mid-signature -- keeps old call sites/tests compiling unchanged.

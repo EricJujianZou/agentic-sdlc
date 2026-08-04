@@ -1,0 +1,8 @@
+{
+    "rank": 18,
+    "model": "sonnet5",
+    "started_at": "2026-08-04T12:50:00Z",
+    "finished_at": "2026-08-04T13:38:00Z",
+    "turns_estimate": 45,
+    "self_assessment": "Threaded userSettings/referral-link support through getProtonSignature, templateBuilder, insertSignature, changeSignature, generateBlockquote, createNewDraft, plainTextToHTML, textToHtml, and the composer component chain (Composer -> ComposerContent -> EditorWrapper/SelectSender), added eoDefaultUserSettings and useGetUserSettings, and added targeted referral-link tests; full existing mail-app jest suite (73 suites/572 tests) and tsc/eslint pass, but exact HTML/plain-text embedding details for the referral link are a best-effort interpretation of the prose spec since no hidden tests or upstream fix were consulted per the provenance rule."
+}
