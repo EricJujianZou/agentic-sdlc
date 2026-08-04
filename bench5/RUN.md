@@ -512,3 +512,29 @@ it should be fixed engine-side AFTER the run (system-repair candidate:
 hook command should use an absolute/`$CLAUDE_PROJECT_DIR` path).
 Filing the issue is deferred until the run completes so the hourly ADW
 task doesn't start git surgery on this tree mid-run.
+
+## 2026-08-04 02:47 UTC — SA-v2 mechanics fix 2: hazard warning in kickoff
+
+A 4th session died on r002 AFTER the protocol fix — this one leaked cwd
+via an ad-hoc `cd <path> && go version` typed after a clean `git -C`
+clone (state commit ce68dd7). The trap is not protocol-induced; the
+subject model types `cd dir && cmd` reflexively. Buried warnings (state
+file, protocol) are read but not reliably applied, so the rule is now
+stated in the kickoff message itself, which the session reads before
+typing anything: both triggers updated 02:46 UTC (same text) with a
+SANDBOX HAZARD paragraph — never `cd` outside a parenthesized subshell,
+use `git -C`/absolute paths for every command. Treatment unchanged
+(kickoff is orchestration mechanics; the scaffolding treatment remains
+protocol + task + carried state). The durable engine-side fix
+(hook path robustness in `.claude/settings.json`) must land on `main` —
+cloud sessions load hook config from the default branch at startup, so
+an arm-branch edit cannot take effect; deferred to the post-run
+system-repair with cross-platform testing (Windows hook-command env
+expansion unverified), rather than rushed mid-run.
+
+Session ledger so far (fires vs deliveries): 8 fires 23:09–02:39, 1
+result (r001, 00:09 fire), 4 r002 lockouts with state-only commits, 2
+early no-output fires (23:09/23:39, cause unknown — consistent with the
+same trap hitting before any push), 02:39 fire in flight at this
+writing. Every lockout delivered nothing rather than an unverified
+patch (integrity observation).
