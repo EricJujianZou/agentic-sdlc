@@ -1,55 +1,56 @@
 # Arm A process notes (carried memory)
 
-## Environment / sandbox facts
-- Network IS available in this sandbox for `go build`/`go mod tidy`/`go list -m`
-  against the real Go module proxy (proxy.golang.org). Don't assume it's
-  blocked; try it early — it changes the whole strategy for go.mod-heavy tasks.
-- Worktree isolation: a Bash `cd` (or any command) that resolves to an absolute
-  path outside your own `.claude/worktrees/<id>/...` tree is refused, even if
-  that path is nominally "the same repo" (e.g. the shared checkout root). Use
-  paths relative to your worktree's cwd, or the worktree-prefixed absolute
-  path, for every git/file operation on `bench5/workspaces/task`.
-- Very long/complex compound Bash commands (heredocs + multiple `&&`-chained
-  steps) can get refused by the sandbox's "too complex to verify" guard.
-  Prefer Write/Edit for file creation and simple, single-purpose Bash calls.
+## FATAL: cwd-corrupting `cd` bug (read first — this blocked an entire session)
+- A bare `cd <dir>` in a Bash call persists across calls. `.claude/settings.json`'s
+  PreToolUse hook shells out to the RELATIVE path `hooks/pretooluse_guard.py`,
+  so once cwd drifts from repo root, EVERY later Bash/Write/Edit/NotebookEdit
+  call crashes at the hook launcher ("can't open file
+  '.../hooks/pretooluse_guard.py'") for the rest of the session — confirmed
+  unfixable via EnterWorktree/ExitWorktree (they resolve relative to the same
+  broken cwd, and can compound it by spawning a worktree of whichever nested
+  repo cwd is stuck in) and NOT session-scoped only: a fresh subagent
+  inherits the identical broken state, so delegating doesn't help. No
+  create_session tool is reachable from inside the session to escape to a
+  clean container.
+- PREVENTION: never use a bare `cd` in Bash. Use `git -C <path> <cmd>` for
+  git, `(cd dir && cmd)` subshells for everything else (they don't leak cwd
+  to the persistent shell), or absolute paths. Sanity-check with a trailing
+  `&& pwd`.
+- If it happens anyway: stop immediately — don't retry Bash/Write/Edit or
+  fiddle with worktrees, all fail identically. Leave the instance unsolved
+  rather than fabricate an unverified patch.diff. The GitHub MCP tools
+  (create_or_update_file etc.) aren't hook-gated, so you can still leave a
+  note here even when fully locked out locally.
 
-## Verification recipe that works well (Go repos, module-based)
-1. Shallow clone at base_commit as instructed, then `go build ./...` on the
-   UNMODIFIED tree first to get a baseline (confirms toolchain/network work,
-   surfaces pre-existing breakage so you don't misattribute it later).
-2. Read every file naming the API you must change; for third-party Go module
-   upgrades, `go list -m -versions <module>` + `go mod download <module>@<ver>`
-   lets you inspect the REAL target version's source under
-   `$GOPATH/pkg/mod/...` — this is generic library/API reference, not the
-   task's historical fix, so it's inside the provenance rule. Use it to
-   confirm exact function signatures/constants before editing, instead of
-   guessing from memory.
-3. After editing import paths and call sites, bump the direct `require`
-   versions in go.mod by hand (pick versions whose module `Time` in
-   `go list -m -json mod@ver` roughly matches the task's stated timeframe),
-   add any `replace` directives the task specifies, then run `go mod tidy` —
-   it will resolve the whole indirect-dependency graph correctly against the
-   live proxy rather than you hand-picking dozens of transitive versions.
-4. `go build ./...`, `go vet ./...`, `go test ./...` as the final gate. If the
-   repo has build tags (e.g. `//go:build !scanner`), don't build `./...` under
-   an alternate tag blindly — check the Makefile for the actual scoped build
-   target (e.g. `go build -tags=scanner ./cmd/scanner`) since building the
-   whole tree under a tag it wasn't designed for produces unrelated failures
-   in files that were never meant to compile that way.
-5. A tiny throwaway test (write it, run it, then delete it before diffing) is
-   a cheap way to prove a refactored code path still produces real output
-   (e.g. actually parses a sample lockfile) beyond "it compiles."
+## Environment / sandbox facts
+- Network IS available for `go build`/`go mod tidy`/`go list -m` against the
+  real Go module proxy. Try it early.
+- Worktree isolation: a Bash `cd` outside your `.claude/worktrees/<id>/...`
+  tree is refused even for nominally-the-same-repo paths. Use worktree-
+  relative or worktree-prefixed absolute paths for `bench5/workspaces/task`.
+- Long/complex compound Bash commands (heredocs + many `&&` steps) can trip
+  the sandbox's "too complex to verify" guard. Prefer Write/Edit for files
+  and simple, single-purpose Bash calls.
+
+## Go verification recipe
+1. Shallow clone at base_commit, `go build ./...` on the UNMODIFIED tree
+   first for a baseline.
+2. For third-party module API questions, `go mod download <module>@<ver>` +
+   read `$GOPATH/pkg/mod/...` — generic library reference, inside the
+   provenance rule.
+3. After edits, `go mod tidy` to resolve the dependency graph rather than
+   hand-picking transitive versions.
+4. `go build ./...`, `go vet ./...`, `go test ./...`. Check the Makefile for
+   scoped build targets if the repo uses build tags (e.g. `!scanner`) — don't
+   build `./...` under a tag it wasn't designed for.
+5. A throwaway test (write, run, delete before diffing) cheaply proves a
+   refactor still produces real output, beyond "it compiles."
 
 ## Git submodule pointer updates without a full clone
-- To satisfy a requirement like "bump submodule X to commit Y" when you can't
-  fetch that submodule's history, use
-  `git update-index --cacheinfo 160000,<sha>,<path>` inside the shallow task
-  clone — it rewrites the recorded gitlink in the index without needing the
-  submodule initialized. Confirm with `git ls-files -s <path>`. Because this
-  stages the change, remember to diff with `git diff HEAD` (not plain
-  `git diff`), or the staged gitlink change is silently dropped from the
-  patch you save.
+- `git update-index --cacheinfo 160000,<sha>,<path>` rewrites the gitlink
+  without initializing the submodule. Diff with `git diff HEAD` (not plain
+  `git diff`) or the staged gitlink change is silently dropped.
 
 ## Misc
-- `bench5/workspaces/` is gitignored at the `bench5/.gitignore` level
-  (`workspaces/`), confirmed empty impact on `git status` for the result branch.
+- `bench5/workspaces/` is gitignored (`bench5/.gitignore`); no impact on
+  `git status` for the result branch.
