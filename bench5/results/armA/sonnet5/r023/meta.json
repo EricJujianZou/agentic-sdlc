@@ -1,0 +1,8 @@
+{
+  "rank": 23,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T00:00:00Z",
+  "finished_at": "2026-08-04T00:00:00Z",
+  "turns_estimate": 35,
+  "self_assessment": "Added OperationProgressTracker (main-side per-operation progress multiplexer) and wired it through WorkerImpl/WorkerClient/MainLocator/WorkerLocator into CalendarFacade, changing _saveCalendarEvents to take an onProgress callback and saveImportedCalendarEvents to take an operationId, then updated CalendarImporterDialog to register an operation and drive showProgressDialog off its stream; a cd+heredoc Bash call corrupted the sandbox cwd after edits were already applied and verified, so the diff was hand-reconstructed from Read output (cross-checked against post-edit Read line numbers) and delivered via GitHub MCP push_files since Bash/Write/Edit were all dead; could not run the test suite (npm install unavailable in this state) to confirm CalendarFacadeTest.ts passes."
+}
