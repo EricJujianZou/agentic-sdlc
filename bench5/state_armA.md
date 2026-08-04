@@ -1,6 +1,7 @@
 # Arm A process notes (carried memory)
 
-## FATAL: cwd-corrupting `cd` bug (read first — this blocked an entire session)
+## FATAL: cwd-corrupting `cd` bug (read first — a SECOND session hit this
+## despite the note below; the parens are load-bearing, not optional style)
 - A bare `cd <dir>` in a Bash call persists across calls. `.claude/settings.json`'s
   PreToolUse hook shells out to the RELATIVE path `hooks/pretooluse_guard.py`,
   so once cwd drifts from repo root, EVERY later Bash/Write/Edit/NotebookEdit
@@ -12,10 +13,16 @@
   inherits the identical broken state, so delegating doesn't help. No
   create_session tool is reachable from inside the session to escape to a
   clean container.
-- PREVENTION: never use a bare `cd` in Bash. Use `git -C <path> <cmd>` for
-  git, `(cd dir && cmd)` subshells for everything else (they don't leak cwd
-  to the persistent shell), or absolute paths. Sanity-check with a trailing
-  `&& pwd`.
+- TRAP: `cd dir && some-command` — WITHOUT wrapping parens — leaks cwd
+  exactly like a lone `cd`. Confirmed by a second, independent session
+  repeating this despite reading the PREVENTION bullet below; it's easy to
+  parse "never use a bare cd" as "a standalone cd command" and miss that an
+  un-parenthesized `&&` chain is just as bare. The parens in `(cd dir && cmd)`
+  are the fix, not stylistic — omit them and it still leaks.
+- PREVENTION: never write `cd` outside `(...)`. Use `git -C <path> <cmd>` for
+  git, `(cd dir && cmd)` subshells (parens MANDATORY) for everything else, or
+  absolute paths throughout. Sanity-check any cd-adjacent command with a
+  trailing `&& pwd` inside the same subshell.
 - If it happens anyway: stop immediately — don't retry Bash/Write/Edit or
   fiddle with worktrees, all fail identically. Leave the instance unsolved
   rather than fabricate an unverified patch.diff. The GitHub MCP tools
