@@ -1,0 +1,8 @@
+{
+  "rank": 30,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T00:00:00Z",
+  "finished_at": "2026-08-04T01:00:00Z",
+  "turns_estimate": 35,
+  "self_assessment": "Solved from base_commit only (protonmail/webclients moveSystemFolders): when SENT is dropped on Inbox, ALL_SENT (if present) is now moved to immediately follow Inbox with SENT right after it, preserving hidden visibility and relative order of the remaining folders; existing non-linked test cases unaffected. Mid-task a `cd task_workspace && timeout ... corepack yarn install` (no parens) corrupted the sandbox cwd and killed Bash/Edit/Write for the rest of the session (see state file FATAL section), so patch.diff was hand-derived from the pre-corruption Read/Edit transcript and shipped via GitHub MCP push_files per the documented recovery procedure. Verified the new logic (plus all pre-existing test cases, unmodified) against a standalone Node re-implementation of moveSystemFolders using assert.deepStrictEqual, since the repo's real Jest suite could not be run after the corruption (and a full yarn install of this large monorepo was not attempted before it)."
+}

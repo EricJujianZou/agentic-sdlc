@@ -1,0 +1,122 @@
+diff --git a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
+index 0000000..0000000 100644
+--- a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
++++ b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.ts
+@@ -85,27 +85,47 @@
+         return nextItems;
+     }
+ 
+-    if (droppedOver === 'INBOX') {
+-        const inboxItemIndex = systemFolders.findIndex((item) => item.labelID === MAILBOX_LABEL_IDS.INBOX);
+-        if (draggedItemIndex === -1 || inboxItemIndex === -1) {
+-            return systemFolders;
+-        }
+-        const inboxItem = systemFolders[inboxItemIndex];
+-        const movedItems = move(systemFolders, draggedItemIndex, inboxItemIndex + 1);
+-        const reorderedItems = reorderItems(movedItems);
+-        const nextItems = reorderedItems.map((item) => {
+-            const clonedItem = cloneItem(item);
+-            const isDraggedItem = clonedItem.labelID === draggedID;
+-            if (isDraggedItem) {
+-                const changedSection = clonedItem.display !== inboxItem.display;
+-                if (changedSection) {
+-                    clonedItem.display = inboxItem.display;
+-                }
+-            }
+-            return clonedItem;
+-        });
+-        return nextItems;
+-    }
++    if (droppedOver === 'INBOX') {
++        const inboxItemIndex = systemFolders.findIndex((item) => item.labelID === MAILBOX_LABEL_IDS.INBOX);
++        if (draggedItemIndex === -1 || inboxItemIndex === -1) {
++            return systemFolders;
++        }
++        const inboxItem = systemFolders[inboxItemIndex];
++
++        // SENT and ALL_SENT are a linked pair: moving SENT next to Inbox must bring
++        // ALL_SENT along, positioned right before SENT (directly after Inbox).
++        const linkedItemIndex =
++            draggedID === MAILBOX_LABEL_IDS.SENT
++                ? systemFolders.findIndex((item) => item.labelID === MAILBOX_LABEL_IDS.ALL_SENT)
++                : -1;
++
++        let movedItems: SystemFolder[];
++        if (linkedItemIndex !== -1) {
++            // Bring the linked item right after Inbox first...
++            movedItems = move(systemFolders, linkedItemIndex, inboxItemIndex + 1);
++            // ...then place the dragged item right after the linked item.
++            const linkedItemNewIndex = movedItems.findIndex((item) => item.labelID === MAILBOX_LABEL_IDS.ALL_SENT);
++            const draggedItemNewIndex = movedItems.findIndex((item) => item.labelID === draggedID);
++            movedItems = move(movedItems, draggedItemNewIndex, linkedItemNewIndex + 1);
++        } else {
++            movedItems = move(systemFolders, draggedItemIndex, inboxItemIndex + 1);
++        }
++
++        const reorderedItems = reorderItems(movedItems);
++        const nextItems = reorderedItems.map((item) => {
++            const clonedItem = cloneItem(item);
++            const isDraggedItem = clonedItem.labelID === draggedID;
++            const isLinkedItem = linkedItemIndex !== -1 && clonedItem.labelID === MAILBOX_LABEL_IDS.ALL_SENT;
++            if (isDraggedItem || isLinkedItem) {
++                const changedSection = clonedItem.display !== inboxItem.display;
++                if (changedSection) {
++                    clonedItem.display = inboxItem.display;
++                }
++            }
++            return clonedItem;
++        });
++        return nextItems;
++    }
+ 
+     if (droppedOver === 'MORE_FOLDER') {
+         if (draggedItemIndex === -1) {
+diff --git a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.test.ts b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.test.ts
+index 0000000..0000000 100644
+--- a/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.test.ts
++++ b/applications/mail/src/app/hooks/useMoveSystemFolders.helpers.test.ts
+@@ -58,6 +58,20 @@
+     text: 'text',
+     visible: true,
+ };
++
++const ALL_SENT_HIDDEN: SystemFolder = {
++    labelID: MAILBOX_LABEL_IDS.ALL_SENT,
++    display: SYSTEM_FOLDER_SECTION.MAIN,
++    order: 4,
++    payloadExtras: {
++        Color: 'white',
++        Name: 'undefined',
++    },
++    icon: 'alias',
++    ID: 'payloadID',
++    text: 'text',
++    visible: false,
++};
+ 
+ const ARCHIVE_MORE: SystemFolder = {
+     labelID: MAILBOX_LABEL_IDS.ARCHIVE,
+@@ -117,6 +131,23 @@
+                 SCHEDULED,
+             ]);
+         });
++        it('Should bring All Sent along, right before Sent, when Sent is dropped on Inbox', () => {
++            const navItems: SystemFolder[] = [
++                INBOX,
++                { ...DRAFTS, order: 2 },
++                { ...SENT, order: 3 },
++                ALL_SENT_HIDDEN,
++                { ...SCHEDULED, order: 5 },
++            ];
++
++            expect(moveSystemFolders(MAILBOX_LABEL_IDS.SENT, MAILBOX_LABEL_IDS.INBOX, navItems)).toEqual([
++                INBOX,
++                { ...ALL_SENT_HIDDEN, order: 2 },
++                { ...SENT, order: 3 },
++                { ...DRAFTS, order: 4 },
++                { ...SCHEDULED, order: 5 },
++            ]);
++        });
+         it('Should allow drop', () => {
+             const navItems: SystemFolder[] = [INBOX, DRAFTS, SCHEDULED, ARCHIVE_MORE, ALL_MAIL_MORE];
+             const movedFolders = moveSystemFolders(MAILBOX_LABEL_IDS.ARCHIVE, MAILBOX_LABEL_IDS.INBOX, navItems);
