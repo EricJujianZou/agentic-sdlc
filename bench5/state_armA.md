@@ -5,13 +5,13 @@
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit for the rest of the session (Read/Grep/Glob still work).
   NOT session-local: a subagent hits it on its first Bash call too.
-  CONFIRMED r006/r009-r012/r014/r016/r017/r019/r021/r022/r023/r024.
+  CONFIRMED r006/r009-r012/r014/r016/r017/r019/r021/r022/r023/r024/r025.
 - EnterWorktree/ExitWorktree do NOT fix it. Don't spend calls on either.
 - RULE: never write `cd` as a bare/standalone token, ever, for ANY reason
-  -- including inside a heredoc, or a one-off `cd x && head y` check. Use
-  `git -C <path>`, absolute paths, or `(cd dir && cmd)` with load-bearing
-  parens, for EVERY command.
-- RECOVERY (r023/r024 confirm this works for multi-file Go/TS diffs):
+  -- including inside a heredoc, a one-off check, or a disabled/placeholder
+  line (`cd d 2>&1; echo note` still trips it, r025). Use `git -C <path>`,
+  absolute paths, or `(cd dir && cmd)` with load-bearing parens, always.
+- RECOVERY (r023/r024/r025 confirm this works for multi-file Go/TS diffs):
   stop retrying Bash/Write/Edit immediately -- Write is ALSO dead, not
   just Bash. GitHub MCP push_files/get_file_contents isn't hook-gated --
   land patch.diff+meta.json+state.md as one commit through push_files.
@@ -38,23 +38,23 @@
   aliases to google.golang.org/protobuf's known-types -- swapping to
   emptypb/timestamppb in hand-written .go is behavior-preserving (never
   regen *.pb.go, protoc isn't installed).
-- JS monorepos with `github:`/`git+https:` deps (tutao/tutanota's keytar,
-  better-sqlite3-sqlcipher forks) can't install here (codeload.github.com
-  403; r015/r018/r020/r021/r023) -- skip npm/yarn install, go straight to
-  manual review + Read-based verification.
+- JS monorepos with `github:`/`git+https:` deps can't install here
+  (codeload.github.com 403; r015/r018/r020/r021/r023) -- skip npm/yarn
+  install, go straight to manual review + Read-based verification.
 - No package.json in base_commit (r020) blocks npm install/test -- fix
   with `npm install --no-save` leaf deps + stub sibling `require`s.
 
 ## Misc
 - `bench5/workspaces/` is gitignored; plain `git diff` omits new untracked
   files -- `git add -A && git diff --cached`, then `git reset`.
-- New enum/state-machine value: grep the whole repo for every place OLD
-  values are enumerated as a closed set.
-- Cross-cutting IPC/tracker addition (main<->worker split): grep for an
-  existing sibling (ProgressTracker -> OperationProgressTracker, r023)
-  and mirror its wiring points exactly.
-- Go: adding a method to a package-internal interface (nativeTID in
-  touchid, r024) means updating EVERY implementor same-commit: real impl,
-  platform noop stub, AND any fake/mock in _test.go. If an exported
-  constructor's return type changes (Register() -> *Registration, r024),
-  grep the WHOLE repo (not just the package) for callers to update.
+- New enum/state-machine value: grep the whole repo for every enumeration site.
+- Cross-cutting IPC/tracker addition (main<->worker split): mirror an
+  existing sibling's wiring points exactly (ProgressTracker r023).
+- Go: adding a method/changing a constructor's return type on a package-
+  internal interface (touchid r024) or public JSON response type (U2F
+  multi-device r025): grep the WHOLE repo for every implementor/caller/
+  fake in _test.go, same commit.
+- JSON single->multi payload (r025): embed old type as `*OldType` (promoted
+  fields = wire compat) + add new `[]OldType` field; encoding/json
+  auto-allocates the embedded pointer on Unmarshal. Gate an unfinished
+  CLI feature by `.Hidden()` on its top-level kingpin CmdClause.
