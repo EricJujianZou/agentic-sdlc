@@ -27,16 +27,20 @@
   count diffs in that file), THEN VERIFY by Read-ing that exact new line
   back before trusting it. Zero errors across 19 hunks in one file this
   way -- reliable if every boundary is verified before pushing.
+- Stop hooks inherit the same corrupted cwd: `stop_checklist.py` errors,
+  and the git-check hook flags "uncommitted changes" in
+  bench5/workspaces/task (a separate, deliberately-uncommitted inner
+  clone), not the outer repo -- ignore both once you've verified your
+  push via a GitHub MCP fetch-back.
 
 ## Environment / sandbox facts
 - Network works for `go build`/`pip install`/`npm install`; reading a
   PINNED dep's source (module cache, or shallow-fetching its pinned commit
   even pre-install) is fair game, not a provenance violation.
 - Go: golang/protobuf v1.4+'s `ptypes/{empty,timestamp}` are pure type
-  aliases (`type Empty = emptypb.Empty`) to google.golang.org/protobuf's
-  known-types -- swapping imports/refs to emptypb/timestamppb in
-  hand-written .go is behavior-preserving (protoc/protoc-gen-go NOT
-  installed -- never regen *.pb.go by hand).
+  aliases to google.golang.org/protobuf's known-types -- swapping
+  imports/refs to emptypb/timestamppb in hand-written .go is behavior-
+  preserving (protoc/protoc-gen-go NOT installed -- never regen *.pb.go).
 - NodeBB: real `package.json` is at `install/package.json`, copy to root
   before `npm install` (tests need it too); mocha needs root `config.json`.
 - web.py Templetor sandboxes `$code:`/`$jsdef`/`$def`: `_`-prefixed attr
