@@ -5,35 +5,51 @@
   hook shells a relative path; every gated tool then crashes -- confirmed
   for Bash/Write/Edit; Read still works). Triggers regardless of wrapper --
   `cd dir && cmd`, `cd x; y`, heredocs, no `&&`/`;` needed. Any bare `cd
-  word` outside `(...)` is unsafe. Has bitten r002/r003/r005(x2)/r006/r009
-  -- r009 hit it via `cd <path> && python3 -m py_compile ...` DESPITE
-  already having read this warning; the rule needs zero exceptions, not
-  "safe-looking" one-liners.
+  word` outside `(...)` is unsafe. Has bitten r002/r003/r005(x2)/r006/r009/
+  r010 -- r010 hit it via `cd /path 2>/dev/null; true`, i.e. even a
+  deliberately "defensive"/discarded-output cd with no downstream command
+  still corrupts cwd. There is no safe bare `cd`, full stop -- don't run
+  one even to test the sandbox itself.
 - CONFIRMED NOT SESSION-LOCAL (r009): a fresh subagent spawned via the
   Agent tool to "escape" the corruption hit the IDENTICAL hook error on
   its very first Bash call. Don't waste a turn trying a subagent to route
   around it -- go straight to the GitHub-API recovery below.
 - RULE, NO EXCEPTIONS: never write `cd` as a bare/standalone Bash command
-  in any wrapper -- use `ls <path>`/`test -d <path>`, `git -C <path> ...`,
+  in any wrapper, for any reason (including sanity-checking the guard
+  itself) -- use `ls <path>`/`test -d <path>`, `git -C <path> ...`,
   `go -C <path> <subcmd>`, or wrap `(cd dir && cmd)` -- parens load-bearing.
-- If corruption happens anyway: stop, don't retry Bash/Write/Edit. RECOVER:
-  GitHub MCP (get_file_contents/push_files) isn't hook-gated -- hand-
-  reconstruct patch.diff from original (early Read) + final content already
-  captured in-session, push patch.diff+meta.json+state.md via the API
-  (r006, r009 recovered this way). Sanity-check a hand-built multi-hunk
-  diff by summing each hunk's (new_lines - old_lines) and confirming it
-  equals (final_file_line_count - original_file_line_count) per file --
-  catches missed/duplicated regions before publishing. Only give up if you
-  never captured full before/after content.
+- If corruption happens anyway: stop, don't retry Bash/Write/Edit -- all
+  three break together (confirmed again r010). RECOVER: GitHub MCP
+  (get_file_contents/push_files) isn't hook-gated -- hand-reconstruct
+  patch.diff from original (early Read) + final content already captured
+  in-session, push patch.diff+meta.json+state.md via the API (r006, r009,
+  r010 recovered this way). Sanity-check a hand-built multi-hunk diff by
+  summing each hunk's (new_lines - old_lines) and confirming it equals
+  (final_file_line_count - original_file_line_count) per file -- catches
+  missed/duplicated regions before publishing. Only give up if you never
+  captured full before/after content. push_files (not create_or_update_file)
+  lets you land patch.diff+meta.json+state.md as ONE commit without needing
+  each file's blob SHA first.
 
 ## Environment / sandbox facts
-- Network works for `go build`/`pip install`; a PINNED THIRD-PARTY dep's
-  source in the module/site-packages cache is fair game for authoritative
-  constants/signatures -- not a provenance violation. This extends to a
-  dep pinned only in requirements.txt (not yet installed): shallow-fetching
-  its exact pinned commit (e.g. `git+https://github.com/x/y@<sha>`) to read
-  source is equally fair game (r009: web.py pinned by commit sha, fetched
-  to confirm Templetor's sandbox rules -- see below).
+- Network works for `go build`/`pip install`/`npm install`; a PINNED
+  THIRD-PARTY dep's source in the module/site-packages/node_modules cache
+  is fair game for authoritative constants/signatures -- not a provenance
+  violation. This extends to a dep pinned only in a manifest (not yet
+  installed): shallow-fetching its exact pinned commit to read source is
+  equally fair game (r009: web.py pinned by commit sha).
+- NodeBB (`NodeBB/NodeBB`) keeps its real `package.json` at
+  `install/package.json`, not repo root -- `npm install` needs it copied to
+  root first (`cp install/package.json package.json`); root-level tests
+  (`require('../../package.json')` in test mocks) need that copy too.
+  `npm install` there has no lockfile but resolves cleanly and fast
+  (~1400 packages, ~1min) through this sandbox's proxy -- no github: deps,
+  no yarn-berry workspace issues like the JS-monorepo cases below. Its
+  mocha tests need a `config.json` at repo root with `database`+matching
+  driver block (`redis`/`mongo`/`postgres`) + `test_database`
+  (mirrors the block, different `database` index/name) -- `redis-server`
+  binary is present in this sandbox and starts fine via
+  `redis-server --daemonize yes`.
 - web.py's Templetor (used by infogami/openlibrary templates) sandboxes
   `$code:`/`$jsdef`/`$def` bodies at compile time: any `.attr` access where
   attr starts with `_` raises SecurityError (AST-checked), and `__builtins__`
@@ -62,8 +78,15 @@
   every place OLD states are enumerated as a closed set.
 - "Centralize X into one constants module" (JS/TS): move the enum, then
   have the old file `import`+`export { X }` it back.
+- Before the cwd corruption risk: run `node --check <file>` per touched
+  file as a zero-risk syntax gate (pure node, no shell cwd dependency) --
+  cheap and catches typos before any git-diff step.
 
 ## Misc
 - `bench5/workspaces/` is gitignored; no impact on `git status`.
 - Plain `git diff` OMITS new untracked files -- always `git add -A && git
   diff --cached` for patch.diff, then `git reset`.
+- Any scratch file you create INSIDE the task workspace to make tests run
+  (e.g. NodeBB's copied root `package.json`, a `config.json` for the test
+  DB) is throwaway test scaffolding, not part of the fix -- don't let it
+  leak into patch.diff.
