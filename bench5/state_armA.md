@@ -1,40 +1,34 @@
 # Arm A process notes (carried memory)
 
 ## FATAL: cwd-corrupting `cd` bug
-- A bare `cd <dir>` -- even inside `cd x && cmd`, `cd x; y`, heredocs, or a
+- A bare `cd <dir>` -- even in `cd x && cmd`, `cd x; y`, heredocs, or a
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit for the rest of the session (Read/Grep/Glob still work).
   NOT session-local: a subagent hits it on its first Bash call too.
-  CONFIRMED r006/r009-r012/r014/r016/r017/r019 -- r019's trigger was
-  `cd dir && python3 - <<'EOF' ... EOF` (the heredoc body ran fine, but the
-  leading `cd &&` still corrupted every later call). There is no safe
-  one-off `cd`, ever, in any wrapper.
-- EnterWorktree/ExitWorktree do NOT fix it (confirmed r014, r016): they
-  read/restore the same corrupted cwd. Don't spend calls on either.
-- RULE: never write `cd` as a bare/standalone token. Use `ls <path>`,
-  `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir && cmd)` with
-  load-bearing parens -- including inside python/bash heredocs.
+  CONFIRMED r006/r009-r012/r014/r016/r017/r019 (r019: `cd dir &&
+  python3 - <<'EOF'...EOF` -- heredoc body ran, but the leading `cd &&`
+  still corrupted every later call). No one-off `cd` is ever safe.
+- EnterWorktree/ExitWorktree do NOT fix it (r014, r016): both read/restore
+  the same corrupted cwd. Don't spend calls on either.
+- RULE: never write `cd` as a bare/standalone token, even in a heredoc.
+  Use `ls <path>`, `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir
+  && cmd)` with load-bearing parens.
 - RECOVERY: stop retrying Bash/Write/Edit/EnterWorktree immediately.
   GitHub MCP push_files/get_file_contents isn't hook-gated -- land
-  patch.diff+meta.json+state.md as one commit (or two, if state.md needs a
-  second push) through it. Rebuild patch.diff by hand:
-  - For edits already applied via successful Edit tool calls BEFORE the
-    corruption: trust your own old_string/new_string verbatim as ground
-    truth (Edit already proved old_string matched) -- don't re-derive from
-    memory of an earlier Read, which can garble line numbers.
-  - A bulk sed/regex edit run via Bash right before the corrupting call
-    likely already succeeded (Bash fails on the *next* call, not the one
-    with the bad `cd`) -- confirm with Grep on the result, don't assume
-    it's undone.
-  - Repeated single-line removals in one file (e.g. dropping a kwarg from
-    N call sites): compute new_line = old_line - (count of prior removals),
-    then verify 2-3 against Grep/current-Read output before trusting the
-    rest -- that catches an off-by-one before it propagates.
+  patch.diff+meta.json+state.md as one commit through it (two if
+  state.md needs a follow-up push). Rebuild patch.diff by hand:
+  - Edits already applied via successful Edit calls BEFORE the corruption:
+    trust your own old_string/new_string verbatim, not memory of a Read.
+  - A bulk sed/regex edit run right before the bad `cd` likely already
+    succeeded (Bash fails on the *next* call) -- confirm with Grep, don't
+    assume it's undone.
+  - N repeated single-line removals in one file: new_line = old_line -
+    (removals before it); verify 2-3 against Grep/Read before trusting
+    the rest, to catch an off-by-one early.
   - add_repo CANNOT add a repo from a different owner mid-session; work
     from your own pre-edit Read output instead.
-- Stop hooks inherit the corrupted cwd and re-fire every turn (expected,
-  not fixable in-session). Once your push is verified via a GitHub MCP
-  fetch-back, stop -- don't loop fixes.
+- Stop hooks inherit the corrupted cwd and re-fire every turn (expected).
+  Once your push is verified via a GitHub MCP fetch-back, stop.
 
 ## Environment / sandbox facts
 - Network works for `go build`/`pip install`/`npm install`; reading a
