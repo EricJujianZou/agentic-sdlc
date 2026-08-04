@@ -15,11 +15,10 @@
 - RECOVERY (confirmed r006/r009-r012/r014/r016): stop retrying Bash/Write/
   Edit/EnterWorktree. GitHub MCP push_files/get_file_contents isn't
   hook-gated -- land patch.diff+meta.json+state.md as one commit through
-  it (no blob SHA needed, unlike create_or_update_file). add_repo CANNOT
-  add a repo from a different owner mid-session; if task repo owner !=
-  bench repo owner, use your own pre-edit Read output (verbatim in
-  transcript) as the original text. Reconstruct patch.diff as small
-  per-location hunks: new-side line = old_line (from the pre-edit
+  it. add_repo CANNOT add a repo from a different owner mid-session; if
+  task repo owner != bench repo owner, use your own pre-edit Read output
+  (verbatim in transcript) as the original text. Reconstruct patch.diff as
+  small per-location hunks: new-side line = old_line (from the pre-edit
   Read) + running delta (prior hunks' line-count diffs in that file) --
   VERIFY by Read-ing that exact new line back before trusting it.
 - Stop hooks inherit the corrupted cwd and WILL KEEP RE-FIRING every turn
@@ -40,10 +39,9 @@
 - JS monorepos generally can't `yarn install` here (github: deps 403 on
   codeload.github.com, berry 404s) -- confirmed again r015 (element-web's
   matrix-js-sdk pinned via `github:`). No-install checks instead:
-  `ts.transpileModule()` per file (syntax only; skip the jsx option for
-  plain .ts files, else generics false-positive as broken JSX); `node
-  --check` for plain JS; `npm install` a throwaway sandbox dir *outside*
-  the workspace to inspect a pinned dep's real runtime behavior.
+  `ts.transpileModule()` per file (syntax only); `node --check` for plain
+  JS; `npm install` a throwaway sandbox dir *outside* the workspace to
+  inspect a pinned dep's real runtime behavior.
 - Ansible module_utils/urls.py: a new HTTP/SSL knob threads through
   ~15-20 call sites -- grep every one, task file won't list them all.
 - RTL/jest snapshots: when jest can't run, hand-patch `.snap` files for
