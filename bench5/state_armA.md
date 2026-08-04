@@ -19,25 +19,20 @@
   PINNED THIRD-PARTY dep's source there (not the target repo/its fix) for
   authoritative constant/type strings or signatures is legitimate, not a
   provenance violation (r002 confirmed a trivy/fanal type-string set this way).
-- `protoc`/`protoc-gen-gogo` are NOT installed — can't regenerate `*.pb.go`
-  from `.proto` in a gogoproto repo (e.g. teleport). Hand-patch instead: add
-  the struct field (`protobuf:"...,N,..."` tag) + `Get<Field>()`, then update
-  `MarshalToSizedBuffer` (HIGHEST field-number first — new field N goes
-  before N-1), `Size()`, `Unmarshal()`'s `case N:` — copy the exact byte
-  pattern from a neighboring repeated field in the SAME file (tag byte =
-  `(N<<3)|2` for length-delimited) rather than hand-deriving wire bytes.
-  Update `.proto` too for consistency. Verify by building just that proto
-  package first (r003: `go -C api build ./client/proto/...`).
-- `lib/auth` tests spinning up a full server (`NewTestAuthServer` /
-  `newTestTLSServer`) PANIC on this sandbox's Go 1.24 toolchain (vendored
-  `json-iterator`/`reflect2` crash marshaling `ClusterAuditConfig`) —
-  confirmed pre-existing via `git stash` + rerun on unmodified base commit,
-  not caused by any patch; don't chase it. Verify server-side crypto/cert
-  logic by isolating just the relevant call (e.g. `tlsca.FromKeys` +
-  `fixtures.TLSCACertPEM/TLSCAKeyPEM` + `GenerateCertificate`) in a
-  throwaway `_test.go`; delete before diffing.
+- `protoc`/`protoc-gen-gogo` NOT installed — can't regen `*.pb.go` in a
+  gogoproto repo (e.g. teleport). Hand-patch: add field+tag+`Get<Field>()`,
+  update `MarshalToSizedBuffer` (highest field-number first), `Size()`,
+  `Unmarshal()`'s `case N:`, copying byte pattern from a neighboring field
+  in the SAME file. Verify by building just that proto package.
+- teleport `lib/auth` full-server tests PANIC on Go 1.24 (vendored
+  json-iterator/reflect2 bug, pre-existing per `git stash`+rerun on base
+  commit) — isolate the specific call in a throwaway `_test.go` instead.
 - Worktree isolation: a Bash `cd` outside your `.claude/worktrees/<id>/...`
   tree is refused even for nominally-the-same-repo paths.
+- Adding an official exporter/client submodule (e.g. otel's
+  `.../otlptracegrpc`) via `go get pkg@<version matching sibling deps>`
+  then `go mod tidy` is legitimate (published registry, not the target
+  repo's fix) and keeps go.sum diff minimal.
 
 ## Go verification recipe
 1. Shallow clone at base_commit (via `git -C`), `go -C <dir> build ./...`
@@ -56,5 +51,10 @@
 
 ## Misc
 - `bench5/workspaces/` is gitignored; no impact on `git status`.
-- `git update-index --cacheinfo 160000,<sha>,<path>` rewrites a submodule
-  gitlink; diff with `git diff HEAD`, not plain `git diff`.
+- Plain `git diff` OMITS new untracked files (new testdata fixtures, a
+  submodule gitlink via `git update-index --cacheinfo`) — always
+  `git add -A && git diff --cached` for patch.diff, then `git reset`.
+- Config-enum renames (Go, viper/mapstructure): field lives in >1 place —
+  struct+tag, `setDefaults`/decodeHooks map, JSON+CUE schema, deprecation
+  text, example/docs yaml. Grep the WHOLE repo for the old name, not just
+  the config package.
