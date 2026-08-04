@@ -36,8 +36,7 @@
   `cryptography` import panics with a pyo3 backend error) then
   `PYTHONPATH=<repo>/lib python3 -m pytest <repo>/test/units/...`. The
   in-tree `bin/ansible-playbook` binary works against `-i inventory.ini`
-  with `ansible_connection=local` — build a throwaway smoke playbook and
-  actually run it.
+  with `ansible_connection=local`; build and run a throwaway smoke playbook.
 - `protoc`/`protoc-gen-gogo` NOT installed — can't regen `*.pb.go`. Hand-patch
   instead: field+tag+`Get<Field>()`, `MarshalToSizedBuffer` (highest field
   number first), `Size()`, `Unmarshal() case N:`, copy the byte pattern from
