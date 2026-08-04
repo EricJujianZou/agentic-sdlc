@@ -3,22 +3,20 @@
 ## FATAL: cwd-corrupting `cd` bug
 - A bare `cd <dir>` corrupts cwd for the REST of the session (PreToolUse
   hook shells a relative path; every gated tool then crashes — confirmed
-  for Bash/Write/Edit). Read still works after. Triggers regardless of what
-  else is in the command: `cd dir && cmd`, `cd x; y`, `cd dir 2>&1 || true`,
-  and — newly confirmed on r006 — `cd dir 2>&1 <<'EOF' ... EOF` (a heredoc
-  after the cd, no `&&`/`;` at all) still corrupts it. Any bare `cd word`
-  token outside `(...)` is unsafe no matter the surrounding syntax. Has
-  bitten r002/r003/r005(x2)/r006.
+  for Bash/Write/Edit). Read still works after. Triggers no matter what
+  else is in the command — `cd dir && cmd`, `cd x; y`, `cd dir 2>&1 || true`,
+  even `cd dir 2>&1 <<'EOF' ... EOF` (newly confirmed on r006, no `&&`/`;`
+  needed). Any bare `cd word` outside `(...)` is unsafe. Has bitten
+  r002/r003/r005(x2)/r006.
 - RULE, NO EXCEPTIONS: never write `cd` as a bare/standalone Bash command,
-  including idle existence checks — use `ls <path>`/`test -d <path>` instead.
-  Use `git -C <path> ...`; `go -C <path> <subcmd>` for Go. Else wrap
-  `(cd dir && cmd)` — parens load-bearing. Also avoid `cd` inside heredoc
-  wrapper commands, even ones that never reach the cd's payload.
+  in any wrapper (heredoc, idle existence check) — use `ls <path>`/
+  `test -d <path>` instead. Use `git -C <path> ...`; `go -C <path> <subcmd>`
+  for Go. Else wrap `(cd dir && cmd)` — parens load-bearing.
 - If corruption happens anyway: stop, don't retry Bash/Write/Edit (one probe
-  to confirm is fine, matching the documented signature — don't loop past
-  that). Leave the instance unsolved rather than fabricate an unverified
-  patch.diff. GitHub MCP tools aren't hook-gated — record the lesson via
-  the API, push nothing else, stop.
+  to confirm the signature is fine — don't loop past that). Leave the
+  instance unsolved rather than fabricate an unverified patch.diff. GitHub
+  MCP tools aren't hook-gated — record the lesson via the API, push nothing
+  else, stop.
 
 ## Environment / sandbox facts
 - Network works for `go build`/`go mod tidy`/`pip install`; a PINNED
@@ -26,9 +24,9 @@
   read for authoritative constants/signatures — not a provenance violation.
 - JS repos (matrix-react-sdk/element-web family): `yarn install` FAILS —
   `github:`-protocol deps (matrix-js-sdk, matrix-analytics-events, etc.) hit
-  codeload.github.com, which the proxy 403s; only registry.npmjs.org is
-  reachable. No working node_modules is achievable — verify by careful
-  manual diff review against existing patterns instead of tsc/jest/lint.
+  codeload.github.com, which the proxy 403s; only registry.npmjs.org works.
+  No working node_modules is achievable — verify via careful manual diff
+  review against existing patterns instead of tsc/jest/lint.
 - Python repos (e.g. ansible): `pip install pytest cffi` (cffi needed or
   `cryptography` import panics with a pyo3 backend error) then
   `PYTHONPATH=<repo>/lib python3 -m pytest <repo>/test/units/...`. The
