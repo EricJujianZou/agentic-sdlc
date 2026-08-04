@@ -1,0 +1,8 @@
+{
+  "rank": 9,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T00:00:00Z",
+  "finished_at": "2026-08-04T00:00:00Z",
+  "turns_estimate": 45,
+  "self_assessment": "Implemented AnnotatedSeedDict/AnnotatedSeed/AnnotatedSeedThing, Seed.from_json/to_db/to_json, and threaded notes through List.add_seed/remove_seed/_index_of_seed/get_seeds, normalize_input_seed, the edit/view templates, and the Solr/export read paths; a self-inflicted cd&&cmd cwd-corruption (mid-verification, before any tests could run) killed Bash/Write/Edit for the rest of the session -- confirmed non-recoverable even from a fresh subagent -- so patch.diff was hand-reconstructed from captured original/final file contents (cross-checked via per-file line-delta sums) and pushed via the GitHub API per the documented recovery path; the code was never actually run or test-verified."
+}
