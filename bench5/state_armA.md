@@ -4,15 +4,14 @@
 - A bare `cd <dir>` -- even inside `cd x && cmd`, `cd x; y`, heredocs, or a
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit the rest of the session (Read still works): the
-  PreToolUse hook shells a relative path against stored cwd. No exceptions,
-  not even to sanity-check the guard. Confirmed again r014.
+  PreToolUse hook shells a relative path against stored cwd. Confirmed
+  again r014.
 - NOT session-local: a subagent hits the same error on its first Bash call.
-- CONFIRMED r014 (actually tested, not just reasoned): EnterWorktree also
-  reads the corrupted cwd to pick its target repo, so it silently creates
-  a worktree of whatever repo the bad cwd landed in (e.g. the task's own
-  clone, not this repo) with the same broken pyproject.toml; ExitWorktree
-  then restores you to that same corrupted path, not the real original
-  cwd. Do not spend calls on this -- it cannot fix the bug.
+- CONFIRMED r014 (tested, not just reasoned): EnterWorktree ALSO reads the
+  corrupted cwd, so it silently creates a worktree of whatever repo the
+  bad cwd landed in (not this repo) with the same broken pyproject.toml;
+  ExitWorktree then restores you to that same corrupted path. Neither
+  fixes the bug -- don't spend calls on either.
 - RULE: never write `cd` as a bare/standalone token, in any wrapper. Use
   `ls <path>`, `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir &&
   cmd)` with load-bearing parens.
@@ -21,31 +20,26 @@
   hook-gated -- land patch.diff+meta.json+state.md as one commit through
   it. add_repo CANNOT add a repo from a different owner mid-session
   ("cross-tier adds not supported") -- if the task repo's owner != the
-  bench repo's owner, you can't fetch original blobs via GitHub MCP; use
-  your own pre-edit Read tool output (already verbatim in transcript) as
-  the original text instead. Reconstruct patch.diff as small per-location
-  hunks, not whole-file: for each Edit, you know the original line number
-  (from the Read before editing) and exact old/new text -- compute each
-  hunk's new-side line as old_line + running delta (sum of prior hunks'
-  line-count diffs in that file), THEN VERIFY by Read-ing that exact new
-  line back before trusting it. Zero errors across 19 hunks in one file
-  this way -- reliable if every boundary is verified before pushing.
-- Stop hooks inherit the same corrupted cwd and WILL KEEP RE-FIRING with
-  the same error every turn -- this is expected and not fixable from
-  inside the session (confirmed r014, incl. via EnterWorktree, see above).
-  Once your push is verified via a GitHub MCP fetch-back, stop responding
-  to it beyond one explanation; do not loop retrying fixes.
+  bench repo's owner, use your own pre-edit Read tool output (already
+  verbatim in transcript) as the original text instead of fetching it.
+  Reconstruct patch.diff as small per-location hunks, not whole-file: for
+  each Edit, you know the original line number (from the Read before
+  editing) and exact old/new text -- compute each hunk's new-side line as
+  old_line + running delta (sum of prior hunks' line-count diffs in that
+  file), THEN VERIFY by Read-ing that exact new line back before trusting
+  it. Zero errors across 19 hunks in one file this way.
+- Stop hooks inherit the same corrupted cwd and WILL KEEP RE-FIRING the
+  same error every turn -- expected, not fixable from inside the session.
+  Once your push is verified via a GitHub MCP fetch-back, give one
+  explanation and stop; do not loop retrying fixes.
 
 ## Environment / sandbox facts
 - Network works for `go build`/`pip install`/`npm install`; reading a
-  PINNED dep's source (module cache, or shallow-fetching its pinned commit
-  even pre-install) is fair game, not a provenance violation.
+  PINNED dep's source is fair game, not a provenance violation.
 - Go: golang/protobuf v1.4+'s `ptypes/{empty,timestamp}` are pure type
   aliases to google.golang.org/protobuf's known-types -- swapping
   imports/refs to emptypb/timestamppb in hand-written .go is behavior-
   preserving (protoc/protoc-gen-go NOT installed -- never regen *.pb.go).
-- NodeBB: real `package.json` is at `install/package.json`, copy to root
-  before `npm install` (tests need it too); mocha needs root `config.json`.
 - web.py Templetor sandboxes `$code:`/`$jsdef`/`$def`: `_`-prefixed attr
   access is a compile-time SecurityError; introspect via a plain module
   exposed with `infogami.utils.view.public`, not getattr/hasattr.
