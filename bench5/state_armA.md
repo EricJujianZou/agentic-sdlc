@@ -31,25 +31,25 @@
   aliases (`type Empty = emptypb.Empty`) to google.golang.org/protobuf's
   known-types -- swapping imports/refs to emptypb/timestamppb in
   hand-written .go is behavior-preserving, compatible with *_grpc.pb.go
-  generated against the old path. protoc/protoc-gen-go NOT installed --
-  never regen *.pb.go by hand.
+  generated against the old path (protoc/protoc-gen-go NOT installed --
+  never regen *.pb.go by hand).
 - NodeBB: real `package.json` is at `install/package.json`, copy to root
-  before `npm install` (test mocks need it too); mocha needs root
-  `config.json` (`database`+driver block+`test_database`); `redis-server
-  --daemonize yes` works here.
+  before `npm install` (tests need it too); mocha needs root `config.json`
+  (database/driver/test_database); `redis-server --daemonize yes` works.
 - web.py Templetor sandboxes `$code:`/`$jsdef`/`$def`: `_`-prefixed attr
-  access is a compile-time SecurityError; `getattr`/`hasattr`/`setattr`/
-  imports are NameError -- do introspection in a plain module, expose via
-  `infogami.utils.view.public`. `$jsdef` also compiles through a naive
-  py->JS transpiler (only and/or/not rewritten) -- prefer `expr['key'] or
-  default` over `.get()`/comprehensions there.
+  access is a compile-time SecurityError; introspect via a plain module
+  exposed with `infogami.utils.view.public`, not getattr/hasattr (NameError).
 - JS monorepos (matrix-react-sdk, element-web, protonmail/webclients)
-  generally can't `yarn install` here (github: deps 403, berry 404s). For a
-  no-install TS check use `/opt/node22/bin/tsc -p <tmp-tsconfig>` with a
-  real tsconfig.json (`"files"` = touched files; CLI flags alone hit
-  TS6064).
-- `node --check <file>` is a zero-risk, cwd-independent syntax gate to run
-  before any cwd-risking step; Go has none -- flag it in self_assessment.
+  generally can't `yarn install` here (github: deps 403, berry 404s;
+  reconfirmed r013 on element-hq/element-web). No-install syntax check:
+  `ts.transpileModule()` (TS compiler API) per touched file, no module
+  resolution needed -- simpler than `tsc -p <tmp-tsconfig>`. To verify a
+  PINNED dep's real runtime behavior when install is blocked: `npm install`
+  just that exact-version package + react/react-dom/jsdom into a throwaway
+  sandbox dir *outside* the workspace, render via `react-dom/client` under
+  jsdom globals, inspect `container.innerHTML`.
+- `node --check <file>` is a zero-risk, cwd-independent JS syntax gate; Go
+  has none -- flag it in self_assessment.
 
 ## Misc
 - `bench5/workspaces/` is gitignored. Plain `git diff` omits new untracked
