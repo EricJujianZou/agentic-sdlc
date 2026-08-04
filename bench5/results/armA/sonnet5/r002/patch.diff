@@ -1,0 +1,197 @@
+diff --git a/contrib/trivy/parser/parser.go b/contrib/trivy/parser/parser.go
+index a690f0a..bd86eee 100644
+--- a/contrib/trivy/parser/parser.go
++++ b/contrib/trivy/parser/parser.go
+@@ -6,8 +6,10 @@ import (
+ 	"time"
+ 
+ 	"github.com/aquasecurity/fanal/analyzer/os"
++	fanalTypes "github.com/aquasecurity/fanal/types"
+ 	"github.com/aquasecurity/trivy/pkg/report"
+ 	"github.com/aquasecurity/trivy/pkg/types"
++	"github.com/future-architect/vuls/constant"
+ 	"github.com/future-architect/vuls/models"
+ )
+ 
+@@ -18,12 +20,27 @@ func Parse(vulnJSON []byte, scanResult *models.ScanResult) (result *models.ScanR
+ 		return nil, err
+ 	}
+ 
++	hasOS := false
++	for _, trivyResult := range trivyResults {
++		if IsTrivySupportedOS(trivyResult.Type) {
++			hasOS = true
++			break
++		}
++	}
++
+ 	pkgs := models.Packages{}
+ 	vulnInfos := models.VulnInfos{}
+ 	uniqueLibraryScannerPaths := map[string]models.LibraryScanner{}
+ 	for _, trivyResult := range trivyResults {
+-		if IsTrivySupportedOS(trivyResult.Type) {
++		switch {
++		case IsTrivySupportedOS(trivyResult.Type):
+ 			overrideServerData(scanResult, &trivyResult)
++		case IsTrivySupportedLib(trivyResult.Type):
++			if !hasOS {
++				overridePseudoServerData(scanResult, &trivyResult)
++			}
++		default:
++			continue
+ 		}
+ 		for _, vuln := range trivyResult.Vulnerabilities {
+ 			if _, ok := vulnInfos[vuln.VulnerabilityID]; !ok {
+@@ -101,6 +118,7 @@ func Parse(vulnJSON []byte, scanResult *models.ScanResult) (result *models.ScanR
+ 					FixedIn: vuln.FixedVersion,
+ 				})
+ 				libScanner := uniqueLibraryScannerPaths[trivyResult.Target]
++				libScanner.Type = trivyResult.Type
+ 				libScanner.Libs = append(libScanner.Libs, types.Library{
+ 					Name:    vuln.PkgName,
+ 					Version: vuln.InstalledVersion,
+@@ -128,6 +146,7 @@ func Parse(vulnJSON []byte, scanResult *models.ScanResult) (result *models.ScanR
+ 		})
+ 
+ 		libscanner := models.LibraryScanner{
++			Type: v.Type,
+ 			Path: path,
+ 			Libs: libraries,
+ 		}
+@@ -168,6 +187,29 @@ func IsTrivySupportedOS(family string) bool {
+ 	return false
+ }
+ 
++// IsTrivySupportedLib :
++func IsTrivySupportedLib(libType string) bool {
++	supportedLibs := []string{
++		fanalTypes.Bundler,
++		fanalTypes.Cargo,
++		fanalTypes.Composer,
++		fanalTypes.Npm,
++		fanalTypes.NuGet,
++		fanalTypes.Pipenv,
++		fanalTypes.Poetry,
++		fanalTypes.Yarn,
++		fanalTypes.Jar,
++		fanalTypes.GoBinary,
++		fanalTypes.GoMod,
++	}
++	for _, supportedLib := range supportedLibs {
++		if libType == supportedLib {
++			return true
++		}
++	}
++	return false
++}
++
+ func overrideServerData(scanResult *models.ScanResult, trivyResult *report.Result) {
+ 	scanResult.Family = trivyResult.Type
+ 	scanResult.ServerName = trivyResult.Target
+@@ -178,3 +220,16 @@ func overrideServerData(scanResult *models.ScanResult, trivyResult *report.Resul
+ 	scanResult.ScannedBy = "trivy"
+ 	scanResult.ScannedVia = "trivy"
+ }
++
++// overridePseudoServerData fills in the ScanResult's server data for a Trivy
++// report that only contains library findings (no OS information).
++func overridePseudoServerData(scanResult *models.ScanResult, trivyResult *report.Result) {
++	scanResult.Family = constant.ServerTypePseudo
++	if scanResult.ServerName == "" {
++		scanResult.ServerName = "library scan by trivy"
++	}
++	if scanResult.Optional == nil {
++		scanResult.Optional = map[string]interface{}{}
++	}
++	scanResult.Optional["trivy-target"] = trivyResult.Target
++}
+diff --git a/contrib/trivy/parser/parser_test.go b/contrib/trivy/parser/parser_test.go
+index c1bd5c0..98a221b 100644
+--- a/contrib/trivy/parser/parser_test.go
++++ b/contrib/trivy/parser/parser_test.go
+@@ -3158,6 +3158,7 @@ func TestParse(t *testing.T) {
+ 				},
+ 				LibraryScanners: models.LibraryScanners{
+ 					{
++						Type: "npm",
+ 						Path: "node-app/package-lock.json",
+ 						Libs: []types.Library{
+ 							{Name: "jquery", Version: "3.3.9"},
+@@ -3165,12 +3166,14 @@ func TestParse(t *testing.T) {
+ 						},
+ 					},
+ 					{
++						Type: "composer",
+ 						Path: "php-app/composer.lock",
+ 						Libs: []types.Library{
+ 							{Name: "guzzlehttp/guzzle", Version: "6.2.0"},
+ 						},
+ 					},
+ 					{
++						Type: "pipenv",
+ 						Path: "python-app/Pipfile.lock",
+ 						Libs: []types.Library{
+ 							{Name: "django-cors-headers", Version: "2.5.2"},
+@@ -3179,6 +3182,7 @@ func TestParse(t *testing.T) {
+ 						},
+ 					},
+ 					{
++						Type: "bundler",
+ 						Path: "ruby-app/Gemfile.lock",
+ 						Libs: []types.Library{
+ 							{Name: "actionpack", Version: "5.2.3"},
+@@ -3194,6 +3198,7 @@ func TestParse(t *testing.T) {
+ 						},
+ 					},
+ 					{
++						Type: "cargo",
+ 						Path: "rust-app/Cargo.lock",
+ 						Libs: []types.Library{
+ 							{Name: "ammonia", Version: "1.9.0"},
+diff --git a/go.mod b/go.mod
+index c9b2805..5ceef4c 100644
+--- a/go.mod
++++ b/go.mod
+@@ -95,7 +95,9 @@ require (
+ 	github.com/gorilla/websocket v1.4.2 // indirect
+ 	github.com/grokify/html-strip-tags-go v0.0.1 // indirect
+ 	github.com/hashicorp/errwrap v1.1.0 // indirect
++	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
+ 	github.com/hashicorp/go-multierror v1.1.1 // indirect
++	github.com/hashicorp/go-retryablehttp v0.6.8 // indirect
+ 	github.com/hashicorp/hcl v1.0.0 // indirect
+ 	github.com/htcat/htcat v1.0.2 // indirect
+ 	github.com/huandu/xstrings v1.3.2 // indirect
+diff --git a/models/cvecontents.go b/models/cvecontents.go
+index 5d830c0..a95b841 100644
+--- a/models/cvecontents.go
++++ b/models/cvecontents.go
+@@ -235,10 +235,10 @@ func (v CveContents) Sort() {
+ 		sort.Slice(contents, func(i, j int) bool {
+ 			if contents[i].Cvss3Score > contents[j].Cvss3Score {
+ 				return true
+-			} else if contents[i].Cvss3Score == contents[i].Cvss3Score {
++			} else if contents[i].Cvss3Score == contents[j].Cvss3Score {
+ 				if contents[i].Cvss2Score > contents[j].Cvss2Score {
+ 					return true
+-				} else if contents[i].Cvss2Score == contents[i].Cvss2Score {
++				} else if contents[i].Cvss2Score == contents[j].Cvss2Score {
+ 					if contents[i].SourceLink < contents[j].SourceLink {
+ 						return true
+ 					}
+diff --git a/scanner/base.go b/scanner/base.go
+index fa16d51..d4c60d8 100644
+--- a/scanner/base.go
++++ b/scanner/base.go
+@@ -29,8 +29,11 @@ import (
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/bundler"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/cargo"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/composer"
++	_ "github.com/aquasecurity/fanal/analyzer/library/gobinary"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/gomod"
++	_ "github.com/aquasecurity/fanal/analyzer/library/jar"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/npm"
++	_ "github.com/aquasecurity/fanal/analyzer/library/nuget"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/pipenv"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/poetry"
+ 	_ "github.com/aquasecurity/fanal/analyzer/library/yarn"
