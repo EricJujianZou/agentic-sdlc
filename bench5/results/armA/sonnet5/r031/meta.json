@@ -1,0 +1,8 @@
+{
+  "rank": 31,
+  "model": "sonnet5",
+  "started_at": "2026-08-04T00:00:00Z",
+  "finished_at": "2026-08-04T01:00:00Z",
+  "turns_estimate": 20,
+  "self_assessment": "Confident in the fix (per-server WpIgnoreInactive lookup + pointer-free searchCache, verified by hand-tracing the existing table-driven tests against the new code and by re-deriving the diff from in-transcript before/after Reads), but could not run go build/go test because a bare `cd ...; echo` Bash call corrupted cwd mid-session and killed Bash/Edit/Write for the rest of the run, so verification is manual review only, not an executed test run."
+}
