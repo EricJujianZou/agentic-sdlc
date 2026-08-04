@@ -1,274 +1,393 @@
 {
  "armA_sonnet5_r001": {
-  "pass": true,
+  "instance_id": "instance_future-architect__vuls-139f3a81b66c47e6d8f70ce6c4afe7a9196a6ea8",
+  "meta": {
+   "finished_at": "2026-08-04T00:46:30Z",
+   "model": "sonnet5",
+   "rank": 1,
+   "self_assessment": "High confidence on the named requirements (import rewrites, disabled-analyzer list, GNUmakefile LIBS, db.NewClient/DetectVulnerabilities signatures, pnpm/dotnet-deps registration) which I verified against the real trivy v0.30.4 module source and confirmed with `go build`, `go vet`, `go test ./...` (all green) plus a hand-written smoke test proving an npm lockfile is parsed end-to-end with only the app-dependency analyzer active; go.mod/go.sum were regenerated via `go mod tidy` against the live module proxy so versions are real and mutually consistent (pinned trivy v0.30.4, trivy-db, go-dep-parser, aws/azure SDKs, docker replace directive) rather than guessed, though the exact upstream historical pins may differ slightly from the real PR. The integration submodule pointer was updated via `git update-index --cacheinfo` to the requested commit without being able to actually fetch/verify that commit's content (network access to that specific submodule repo/commit was not attempted, per the provenance rule, and its existence/content is unverified).",
+   "started_at": "2026-08-04T00:15:00Z",
+   "turns_estimate": 45
+  },
   "n_needed": 79,
   "n_passed_needed": 79,
-  "status": "collected",
-  "instance_id": "instance_future-architect__vuls-139f3a81b66c47e6d8f70ce6c4afe7a9196a6ea8",
+  "pass": true,
+  "patch_bytes": 122806,
   "prefix": "armA_sonnet5_r001",
-  "meta": {
-   "rank": 1,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T00:15:00Z",
-   "finished_at": "2026-08-04T00:46:30Z",
-   "turns_estimate": 45,
-   "self_assessment": "High confidence on the named requirements (import rewrites, disabled-analyzer list, GNUmakefile LIBS, db.NewClient/DetectVulnerabilities signatures, pnpm/dotnet-deps registration) which I verified against the real trivy v0.30.4 module source and confirmed with `go build`, `go vet`, `go test ./...` (all green) plus a hand-written smoke test proving an npm lockfile is parsed end-to-end with only the app-dependency analyzer active; go.mod/go.sum were regenerated via `go mod tidy` against the live module proxy so versions are real and mutually consistent (pinned trivy v0.30.4, trivy-db, go-dep-parser, aws/azure SDKs, docker replace directive) rather than guessed, though the exact upstream historical pins may differ slightly from the real PR. The integration submodule pointer was updated via `git update-index --cacheinfo` to the requested commit without being able to actually fetch/verify that commit's content (network access to that specific submodule repo/commit was not attempted, per the provenance rule, and its existence/content is unverified)."
-  },
-  "patch_bytes": 122806
+  "status": "collected"
  },
  "armA_sonnet5_r002": {
-  "pass": false,
+  "instance_id": "instance_future-architect__vuls-4a72295de7b91faa59d90a5bee91535bbe76755d",
+  "meta": {
+   "finished_at": "2026-08-04T03:28:41Z",
+   "model": "sonnet5",
+   "rank": 2,
+   "self_assessment": "High confidence: root-caused the crash to trivy-to-vuls never setting Family/Optional[\"trivy-target\"] for library-only reports (so detector.DetectPkgCves's Release==\"\" branch falls through to the error since neither reuseScannedCves nor Family==ServerTypePseudo hold), reproduced the exact reported error message with a throwaway detector-level test before the fix and confirmed it's gone after; also found and fixed two real pre-existing bugs while implementing the stated requirements - a tautological self-comparison in models.CveContents.Sort() (contents[i].X == contents[i].X) that made the sort non-deterministic, and a dropped Type field in the parser's library-scanner flatten step that would have broken library.NewDriver(s.Type) for every trivy-to-vuls library import, OS or not; updated one existing test fixture (parser_test.go) whose expectations encoded the old missing-Type behavior. Lower confidence on two inferred, not explicitly stated, specifics: the exact 11-item IsTrivySupportedLib allow-list (derived from trivy v0.19.2's own library.NewDriver switch, which is the authoritative source but the requirement text doesn't enumerate it) and that \"analyzers registered via blank imports\" meant adding the 3 missing ones (jar/nuget/gobinary) to scanner/base.go rather than some other location I didn't find evidence of; go.mod gained two indirect-dependency lines that go build ./... demanded independent of my code changes (verified by reverting them and reproducing the same 'go mod tidy' demand) so I kept them.",
+   "started_at": "2026-08-04T02:45:00Z",
+   "turns_estimate": 55
+  },
   "n_needed": 1,
   "n_passed_needed": 0,
-  "status": "collected",
-  "instance_id": "instance_future-architect__vuls-4a72295de7b91faa59d90a5bee91535bbe76755d",
+  "pass": false,
+  "patch_bytes": 6788,
   "prefix": "armA_sonnet5_r002",
-  "meta": {
-   "rank": 2,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T02:45:00Z",
-   "finished_at": "2026-08-04T03:28:41Z",
-   "turns_estimate": 55,
-   "self_assessment": "High confidence: root-caused the crash to trivy-to-vuls never setting Family/Optional[\"trivy-target\"] for library-only reports (so detector.DetectPkgCves's Release==\"\" branch falls through to the error since neither reuseScannedCves nor Family==ServerTypePseudo hold), reproduced the exact reported error message with a throwaway detector-level test before the fix and confirmed it's gone after; also found and fixed two real pre-existing bugs while implementing the stated requirements - a tautological self-comparison in models.CveContents.Sort() (contents[i].X == contents[i].X) that made the sort non-deterministic, and a dropped Type field in the parser's library-scanner flatten step that would have broken library.NewDriver(s.Type) for every trivy-to-vuls library import, OS or not; updated one existing test fixture (parser_test.go) whose expectations encoded the old missing-Type behavior. Lower confidence on two inferred, not explicitly stated, specifics: the exact 11-item IsTrivySupportedLib allow-list (derived from trivy v0.19.2's own library.NewDriver switch, which is the authoritative source but the requirement text doesn't enumerate it) and that \"analyzers registered via blank imports\" meant adding the 3 missing ones (jar/nuget/gobinary) to scanner/base.go rather than some other location I didn't find evidence of; go.mod gained two indirect-dependency lines that go build ./... demanded independent of my code changes (verified by reverting them and reproducing the same 'go mod tidy' demand) so I kept them."
-  },
-  "patch_bytes": 6788
+  "status": "collected"
  },
  "armA_sonnet5_r003": {
-  "pass": true,
+  "instance_id": "instance_gravitational__teleport-288c5519ce0dec9622361a5e5d6cd36aa2d9e348",
+  "meta": {
+   "finished_at": "2026-08-04T03:49:46Z",
+   "model": "sonnet5",
+   "rank": 3,
+   "self_assessment": "Hand-patched gogo-proto generated code to add repeated ServerNames (field 4) plus ServerName back-compat, updated GenerateDatabaseCert to encode all SANs and set CommonName from the first entry, updated tctl auth sign --host to split/dedupe/validate; verified via focused tests (api/client/proto builds, tctl auth_command tests incl. new multi-SAN and missing-host cases, and a throwaway tlsca-level cert-content check that was deleted before delivery) since the full lib/auth test server panics pre-existing on this Go toolchain due to a vendored reflect2/json-iterator incompatibility unrelated to this change.",
+   "started_at": "2026-08-04T03:30:00Z",
+   "turns_estimate": 30
+  },
   "n_needed": 24,
   "n_passed_needed": 24,
-  "status": "collected",
-  "instance_id": "instance_gravitational__teleport-288c5519ce0dec9622361a5e5d6cd36aa2d9e348",
+  "pass": true,
+  "patch_bytes": 10724,
   "prefix": "armA_sonnet5_r003",
-  "meta": {
-   "rank": 3,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T03:30:00Z",
-   "finished_at": "2026-08-04T03:49:46Z",
-   "turns_estimate": 30,
-   "self_assessment": "Hand-patched gogo-proto generated code to add repeated ServerNames (field 4) plus ServerName back-compat, updated GenerateDatabaseCert to encode all SANs and set CommonName from the first entry, updated tctl auth sign --host to split/dedupe/validate; verified via focused tests (api/client/proto builds, tctl auth_command tests incl. new multi-SAN and missing-host cases, and a throwaway tlsca-level cert-content check that was deleted before delivery) since the full lib/auth test server panics pre-existing on this Go toolchain due to a vendored reflect2/json-iterator incompatibility unrelated to this change."
-  },
-  "patch_bytes": 10724
+  "status": "collected"
  },
  "armA_sonnet5_r004": {
-  "pass": true,
+  "instance_id": "instance_flipt-io__flipt-b433bd05ce405837804693bebd5f4b88d87133c8",
+  "meta": {
+   "finished_at": "2026-08-04T04:20:19Z",
+   "model": "sonnet5",
+   "rank": 4,
+   "self_assessment": "Renamed TracingBackend->TracingExporter (added otlp), added OTLPTracingConfig with localhost:4317 default, wired otlptracegrpc exporter in grpc.go, updated JSON/CUE schemas and deprecation message; all internal/config tests pass and build/vet clean.",
+   "started_at": "2026-08-04T03:55:00Z",
+   "turns_estimate": 35
+  },
   "n_needed": 4,
   "n_passed_needed": 4,
-  "status": "collected",
-  "instance_id": "instance_flipt-io__flipt-b433bd05ce405837804693bebd5f4b88d87133c8",
+  "pass": true,
+  "patch_bytes": 20416,
   "prefix": "armA_sonnet5_r004",
-  "meta": {
-   "rank": 4,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T03:55:00Z",
-   "finished_at": "2026-08-04T04:20:19Z",
-   "turns_estimate": 35,
-   "self_assessment": "Renamed TracingBackend->TracingExporter (added otlp), added OTLPTracingConfig with localhost:4317 default, wired otlptracegrpc exporter in grpc.go, updated JSON/CUE schemas and deprecation message; all internal/config tests pass and build/vet clean."
-  },
-  "patch_bytes": 20416
+  "status": "collected"
  },
  "armA_sonnet5_r005": {
-  "pass": false,
+  "instance_id": "instance_ansible__ansible-811093f0225caa4dd33890933150a81c6a6d5226-v1055803c3a812189a1133297f7f5468579283f86",
+  "meta": {
+   "finished_at": "2026-08-04T06:41:12Z",
+   "model": "sonnet5",
+   "rank": 5,
+   "self_assessment": "Implemented and end-to-end verified (unit tests + hand-built ansible-playbook smoke runs: basic notify/flush, serial multi-host, mid-play and mid-rescue flush, listen-based notify, force_handlers on/off after failure, meta-as-handler allow/deny, double-flush no-op) a working dedicated HANDLERS phase in PlayIterator plus all four named Interface methods and the Requirements' structural fields; found and fixed a real any_errors_fatal/dont_fail_states bug of my own making during rescue-triggered flush. Did not attempt to replicate the exact upstream diff shape (never viewed it, per rule 4) and left the pre-existing run_handlers()/_do_handler_run() path in place as a redundant safety net rather than deleting it, so some code duplication between the old and new handler-dispatch paths remains as a known follow-up.",
+   "started_at": "2026-08-04T06:16:03Z",
+   "turns_estimate": 55
+  },
   "n_needed": 2,
   "n_passed_needed": 1,
-  "status": "collected",
-  "instance_id": "instance_ansible__ansible-811093f0225caa4dd33890933150a81c6a6d5226-v1055803c3a812189a1133297f7f5468579283f86",
+  "pass": false,
+  "patch_bytes": 26432,
   "prefix": "armA_sonnet5_r005",
-  "meta": {
-   "rank": 5,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T06:16:03Z",
-   "finished_at": "2026-08-04T06:41:12Z",
-   "turns_estimate": 55,
-   "self_assessment": "Implemented and end-to-end verified (unit tests + hand-built ansible-playbook smoke runs: basic notify/flush, serial multi-host, mid-play and mid-rescue flush, listen-based notify, force_handlers on/off after failure, meta-as-handler allow/deny, double-flush no-op) a working dedicated HANDLERS phase in PlayIterator plus all four named Interface methods and the Requirements' structural fields; found and fixed a real any_errors_fatal/dont_fail_states bug of my own making during rescue-triggered flush. Did not attempt to replicate the exact upstream diff shape (never viewed it, per rule 4) and left the pre-existing run_handlers()/_do_handler_run() path in place as a redundant safety net rather than deleting it, so some code duplication between the old and new handler-dispatch paths remains as a known follow-up."
-  },
-  "patch_bytes": 26432
+  "status": "collected"
  },
  "armA_sonnet5_r006": {
-  "pass": false,
+  "instance_id": "instance_element-hq__element-web-f14374a51c153f64f313243f2df6ea4971db4e15",
+  "meta": {
+   "finished_at": "2026-08-04T07:30:33Z",
+   "model": "sonnet5",
+   "rank": 6,
+   "self_assessment": "Implemented a reusable CancelButton (buttons/Cancel.tsx per the given interface), converted the tombstoned-room notice in MessageComposer to semantic <p> markup, and extended ReplyPreview to identify the user being replied to via a new elementType prop on DisambiguatedProfile (span-renderable for inline use) plus the new CancelButton; mid-task a heredoc-wrapped bare `cd` in a verification command corrupted the sandbox's tracked cwd and permanently broke the session's Bash/Write/Edit tools (Read kept working), so this patch.diff was hand-reconstructed via the GitHub API from the exact original/final file contents captured verbatim earlier in the same session (not re-derived from `git diff`) and could not be verified with tsc/jest/lint, which were also unreachable beforehand because this repo's github:-protocol deps (matrix-js-sdk, matrix-analytics-events) are blocked by the sandbox's network proxy.",
+   "started_at": "2026-08-04T07:05:00Z",
+   "turns_estimate": 40
+  },
   "n_needed": 3,
   "n_passed_needed": 2,
-  "status": "collected",
-  "instance_id": "instance_element-hq__element-web-f14374a51c153f64f313243f2df6ea4971db4e15",
+  "pass": false,
+  "patch_bytes": 9879,
   "prefix": "armA_sonnet5_r006",
-  "meta": {
-   "rank": 6,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T07:05:00Z",
-   "finished_at": "2026-08-04T07:30:33Z",
-   "turns_estimate": 40,
-   "self_assessment": "Implemented a reusable CancelButton (buttons/Cancel.tsx per the given interface), converted the tombstoned-room notice in MessageComposer to semantic <p> markup, and extended ReplyPreview to identify the user being replied to via a new elementType prop on DisambiguatedProfile (span-renderable for inline use) plus the new CancelButton; mid-task a heredoc-wrapped bare `cd` in a verification command corrupted the sandbox's tracked cwd and permanently broke the session's Bash/Write/Edit tools (Read kept working), so this patch.diff was hand-reconstructed via the GitHub API from the exact original/final file contents captured verbatim earlier in the same session (not re-derived from `git diff`) and could not be verified with tsc/jest/lint, which were also unreachable beforehand because this repo's github:-protocol deps (matrix-js-sdk, matrix-analytics-events) are blocked by the sandbox's network proxy."
-  },
-  "patch_bytes": 9879
+  "status": "collected"
  },
  "armA_sonnet5_r007": {
-  "pass": false,
+  "instance_id": "instance_qutebrowser__qutebrowser-6b320dc18662580e1313d2548fdd6231d2a97e6d-v363c8a7e5ccdf6968fc7ab84a2053ac78036691d",
+  "meta": {
+   "finished_at": "2026-08-04T07:46:05Z",
+   "model": "sonnet5",
+   "rank": 7,
+   "self_assessment": "Fixed hue scaling (mult 359 not 255, rounded) in QtColor._parse_value while preserving int-truncation for sat/value/alpha; verified via direct-import reproduction (real PyQt5 QColor) since full pytest 4.2.0 conftest chain is incompatible with this sandbox's Python 3.11.",
+   "started_at": "2026-08-04T07:20:00Z",
+   "turns_estimate": 25
+  },
   "n_needed": 985,
   "n_passed_needed": 983,
-  "status": "collected",
-  "instance_id": "instance_qutebrowser__qutebrowser-6b320dc18662580e1313d2548fdd6231d2a97e6d-v363c8a7e5ccdf6968fc7ab84a2053ac78036691d",
+  "pass": false,
+  "patch_bytes": 2384,
   "prefix": "armA_sonnet5_r007",
-  "meta": {
-   "rank": 7,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T07:20:00Z",
-   "finished_at": "2026-08-04T07:46:05Z",
-   "turns_estimate": 25,
-   "self_assessment": "Fixed hue scaling (mult 359 not 255, rounded) in QtColor._parse_value while preserving int-truncation for sat/value/alpha; verified via direct-import reproduction (real PyQt5 QColor) since full pytest 4.2.0 conftest chain is incompatible with this sandbox's Python 3.11."
-  },
-  "patch_bytes": 2384
+  "status": "collected"
  },
  "armA_sonnet5_r008": {
-  "pass": true,
+  "instance_id": "instance_protonmail__webclients-8142704f447df6e108d53cab25451c8a94976b92",
+  "meta": {
+   "finished_at": "2026-08-04T08:21:22Z",
+   "model": "sonnet5",
+   "rank": 8,
+   "self_assessment": "Centralized CALENDAR_TYPE/CALENDAR_TYPE_EXTENDED/EXTENDED_CALENDAR_TYPE/CALENDAR_DISPLAY/SETTINGS_VIEW into packages/shared/lib/calendar/constants.ts, updated all required interface/consumer/library imports (fixing a pre-existing Calendar.ts<->CalendarMember.ts cycle along the way), preserved exact enum values, and verified structurally with a scoped tsc check since yarn install fails in this sandbox.",
+   "started_at": "2026-08-04T07:40:00Z",
+   "turns_estimate": 45
+  },
   "n_needed": 13,
   "n_passed_needed": 13,
-  "status": "collected",
-  "instance_id": "instance_protonmail__webclients-8142704f447df6e108d53cab25451c8a94976b92",
+  "pass": true,
+  "patch_bytes": 12806,
   "prefix": "armA_sonnet5_r008",
-  "meta": {
-   "rank": 8,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T07:40:00Z",
-   "finished_at": "2026-08-04T08:21:22Z",
-   "turns_estimate": 45,
-   "self_assessment": "Centralized CALENDAR_TYPE/CALENDAR_TYPE_EXTENDED/EXTENDED_CALENDAR_TYPE/CALENDAR_DISPLAY/SETTINGS_VIEW into packages/shared/lib/calendar/constants.ts, updated all required interface/consumer/library imports (fixing a pre-existing Calendar.ts<->CalendarMember.ts cycle along the way), preserved exact enum values, and verified structurally with a scoped tsc check since yarn install fails in this sandbox."
-  },
-  "patch_bytes": 12806
+  "status": "collected"
  },
  "armA_sonnet5_r009": {
-  "pass": false,
+  "instance_id": "instance_internetarchive__openlibrary-d109cc7e6e161170391f98f9a6fa1d02534c18e4-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+  "meta": {
+   "finished_at": "2026-08-04T00:00:00Z",
+   "model": "sonnet5",
+   "rank": 9,
+   "self_assessment": "Implemented AnnotatedSeedDict/AnnotatedSeed/AnnotatedSeedThing, Seed.from_json/to_db/to_json, and threaded notes through List.add_seed/remove_seed/_index_of_seed/get_seeds, normalize_input_seed, the edit/view templates, and the Solr/export read paths; a self-inflicted cd&&cmd cwd-corruption (mid-verification, before any tests could run) killed Bash/Write/Edit for the rest of the session -- confirmed non-recoverable even from a fresh subagent -- so patch.diff was hand-reconstructed from captured original/final file contents (cross-checked via per-file line-delta sums) and pushed via the GitHub API per the documented recovery path; the code was never actually run or test-verified.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 45
+  },
   "n_needed": 2,
   "n_passed_needed": 0,
-  "status": "collected",
-  "instance_id": "instance_internetarchive__openlibrary-d109cc7e6e161170391f98f9a6fa1d02534c18e4-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+  "pass": false,
+  "patch_bytes": 19581,
   "prefix": "armA_sonnet5_r009",
-  "meta": {
-   "rank": 9,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T00:00:00Z",
-   "finished_at": "2026-08-04T00:00:00Z",
-   "turns_estimate": 45,
-   "self_assessment": "Implemented AnnotatedSeedDict/AnnotatedSeed/AnnotatedSeedThing, Seed.from_json/to_db/to_json, and threaded notes through List.add_seed/remove_seed/_index_of_seed/get_seeds, normalize_input_seed, the edit/view templates, and the Solr/export read paths; a self-inflicted cd&&cmd cwd-corruption (mid-verification, before any tests could run) killed Bash/Write/Edit for the rest of the session -- confirmed non-recoverable even from a fresh subagent -- so patch.diff was hand-reconstructed from captured original/final file contents (cross-checked via per-file line-delta sums) and pushed via the GitHub API per the documented recovery path; the code was never actually run or test-verified."
-  },
-  "patch_bytes": 19581
+  "status": "collected"
  },
  "armA_sonnet5_r010": {
-  "pass": false,
+  "instance_id": "instance_NodeBB__NodeBB-04998908ba6721d64eba79ae3b65a351dcfbc5b5-vnan",
+  "meta": {
+   "finished_at": "2026-08-04T09:45:00Z",
+   "model": "sonnet5",
+   "rank": 10,
+   "self_assessment": "Implemented db.mget across redis/mongo/postgres, replaced TTL-based confirm expiry with a stored expires-ms field, added getEmailForValidation/updated isValidationPending+canSendValidation, wired ACP email:pending/email:expired via getConfirmObjs, updated validateEmail/sendValidationEmail handlers and account-deletion cleanup; solved from base_commit only; a cwd-corrupting cd (hit despite guarding it in a subshell-less form) broke Bash/Write/Edit AFTER all edits were already applied to disk, so patch.diff was hand-reconstructed from Read-tool captures of original+final file contents and pushed via GitHub API per the documented recovery path -- could not run the project's own test suite after recovery (redis-backed mocha run was set up and passing syntax/node --check pre-corruption, but full mocha run was not completed before Bash broke); note test/user/emails.js's 'long enough to re-send' case manually pexpires confirm:byUid to simulate elapsed TTL, which is now a no-op against the new expires-field logic (expected fallout of intentionally moving off db-level TTL per the requirements, not a regression).",
+   "started_at": "2026-08-04T09:10:00Z",
+   "turns_estimate": 28
+  },
   "n_needed": 291,
   "n_passed_needed": 288,
-  "status": "collected",
-  "instance_id": "instance_NodeBB__NodeBB-04998908ba6721d64eba79ae3b65a351dcfbc5b5-vnan",
+  "pass": false,
+  "patch_bytes": 9652,
   "prefix": "armA_sonnet5_r010",
-  "meta": {
-   "rank": 10,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T09:10:00Z",
-   "finished_at": "2026-08-04T09:45:00Z",
-   "turns_estimate": 28,
-   "self_assessment": "Implemented db.mget across redis/mongo/postgres, replaced TTL-based confirm expiry with a stored expires-ms field, added getEmailForValidation/updated isValidationPending+canSendValidation, wired ACP email:pending/email:expired via getConfirmObjs, updated validateEmail/sendValidationEmail handlers and account-deletion cleanup; solved from base_commit only; a cwd-corrupting cd (hit despite guarding it in a subshell-less form) broke Bash/Write/Edit AFTER all edits were already applied to disk, so patch.diff was hand-reconstructed from Read-tool captures of original+final file contents and pushed via GitHub API per the documented recovery path -- could not run the project's own test suite after recovery (redis-backed mocha run was set up and passing syntax/node --check pre-corruption, but full mocha run was not completed before Bash broke); note test/user/emails.js's 'long enough to re-send' case manually pexpires confirm:byUid to simulate elapsed TTL, which is now a no-op against the new expires-field logic (expected fallout of intentionally moving off db-level TTL per the requirements, not a regression)."
-  },
-  "patch_bytes": 9652
+  "status": "collected"
  },
  "armA_sonnet5_r011": {
-  "pass": true,
+  "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+  "meta": {
+   "finished_at": "2026-08-04T10:35:00Z",
+   "model": "sonnet5",
+   "rank": 11,
+   "self_assessment": "Added KEVType (+CISAKEVType/VulnCheckKEVType), KEV/CISAKEV/VulnCheckKEV/VulnCheckXDB/VulnCheckReportedExploitation structs, a KEVs field on VulnInfo, and ScanResult.FormatKEVCveSummary() per the graded Interface section; solved from base_commit only (existing detector/kevuln.go FillWithKEVuln and the AlertDict-based CISA plumbing were read for context but left untouched -- no interface requirement covered rewiring them, and it was out of reach to verify safely, see below). A bare `cd bench5/workspaces/task && go mod download ...` (no parens) run to inspect the pinned go-kev dep corrupted cwd BEFORE any file edit existed, breaking Bash/Write/Edit for the rest of the session (Read stayed fine) -- worse than prior sessions' corruption-after-edits case, since there was no in-session before/after content to diff. Recovered by reading the untouched original files via Read only, authoring the new Go code by hand, hand-computing a unified diff (context copied verbatim from Read output, hunk offsets summed and cross-checked per file), and pushing patch.diff+meta.json+state.md via the GitHub API -- could not run go build/go vet/gofmt/tests at all this session, so treat this diff as syntax-reviewed but NOT compiler-verified.",
+   "started_at": "2026-08-04T10:00:00Z",
+   "turns_estimate": 22
+  },
   "n_needed": 1,
   "n_passed_needed": 1,
-  "status": "collected",
-  "instance_id": "instance_future-architect__vuls-e049df50fa1eecdccc5348e27845b5c783ed7c76-v73dc95f6b90883d8a87e01e5e9bb6d3cc32add6d",
+  "pass": true,
+  "patch_bytes": 3540,
   "prefix": "armA_sonnet5_r011",
-  "meta": {
-   "rank": 11,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T10:00:00Z",
-   "finished_at": "2026-08-04T10:35:00Z",
-   "turns_estimate": 22,
-   "self_assessment": "Added KEVType (+CISAKEVType/VulnCheckKEVType), KEV/CISAKEV/VulnCheckKEV/VulnCheckXDB/VulnCheckReportedExploitation structs, a KEVs field on VulnInfo, and ScanResult.FormatKEVCveSummary() per the graded Interface section; solved from base_commit only (existing detector/kevuln.go FillWithKEVuln and the AlertDict-based CISA plumbing were read for context but left untouched -- no interface requirement covered rewiring them, and it was out of reach to verify safely, see below). A bare `cd bench5/workspaces/task && go mod download ...` (no parens) run to inspect the pinned go-kev dep corrupted cwd BEFORE any file edit existed, breaking Bash/Write/Edit for the rest of the session (Read stayed fine) -- worse than prior sessions' corruption-after-edits case, since there was no in-session before/after content to diff. Recovered by reading the untouched original files via Read only, authoring the new Go code by hand, hand-computing a unified diff (context copied verbatim from Read output, hunk offsets summed and cross-checked per file), and pushing patch.diff+meta.json+state.md via the GitHub API -- could not run go build/go vet/gofmt/tests at all this session, so treat this diff as syntax-reviewed but NOT compiler-verified."
-  },
-  "patch_bytes": 3540
+  "status": "collected"
  },
  "armA_sonnet5_r012": {
-  "pass": false,
+  "instance_id": "instance_flipt-io__flipt-e42da21a07a5ae35835ec54f74004ebd58713874",
+  "meta": {
+   "finished_at": "2026-08-04T14:55:00Z",
+   "model": "sonnet5",
+   "rank": 12,
+   "self_assessment": "Added ErrDisabled/ErrDisabledf to errors/errors.go and made batchEvaluate detect it via errors.As and keep processing remaining flags instead of aborting the whole batch (evaluate() already populated timestamp/entity/flag fields before erroring, so the per-flag response entry is preserved); also migrated server/{evaluator,flag,rule,segment}.go from github.com/golang/protobuf to google.golang.org/protobuf (emptypb/timestamppb). Did NOT migrate storage/db/common/*.go (timestamp.go, flag.go, rule.go, segment.go still use github.com/golang/protobuf/ptypes) because a cwd-corrupting `cd` bug (see state_armA.md) broke Bash/Write/Edit partway through, before those edits landed and before `go build`/`go test` could be run at all -- this patch is UNVERIFIED by any build or test run; correctness was checked only by manual review against the pre-existing evaluator_test.go expectations (message text 'flag %q is disabled' is preserved) and by confirming golang/protobuf v1.4.3's ptypes/{empty,timestamp} packages are pure Go type aliases to the google.golang.org/protobuf types being substituted in, so the emptypb/timestamppb swap is type-safe against the still-golang/protobuf-typed generated code in rpc/flipt_grpc.pb.go.",
+   "started_at": "2026-08-04T14:00:00Z",
+   "turns_estimate": 45
+  },
   "n_needed": 2,
   "n_passed_needed": 0,
-  "status": "collected",
-  "instance_id": "instance_flipt-io__flipt-e42da21a07a5ae35835ec54f74004ebd58713874",
+  "pass": false,
+  "patch_bytes": 7652,
   "prefix": "armA_sonnet5_r012",
-  "meta": {
-   "rank": 12,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T14:00:00Z",
-   "finished_at": "2026-08-04T14:55:00Z",
-   "turns_estimate": 45,
-   "self_assessment": "Added ErrDisabled/ErrDisabledf to errors/errors.go and made batchEvaluate detect it via errors.As and keep processing remaining flags instead of aborting the whole batch (evaluate() already populated timestamp/entity/flag fields before erroring, so the per-flag response entry is preserved); also migrated server/{evaluator,flag,rule,segment}.go from github.com/golang/protobuf to google.golang.org/protobuf (emptypb/timestamppb). Did NOT migrate storage/db/common/*.go (timestamp.go, flag.go, rule.go, segment.go still use github.com/golang/protobuf/ptypes) because a cwd-corrupting `cd` bug (see state_armA.md) broke Bash/Write/Edit partway through, before those edits landed and before `go build`/`go test` could be run at all -- this patch is UNVERIFIED by any build or test run; correctness was checked only by manual review against the pre-existing evaluator_test.go expectations (message text 'flag %q is disabled' is preserved) and by confirming golang/protobuf v1.4.3's ptypes/{empty,timestamp} packages are pure Go type aliases to the google.golang.org/protobuf types being substituted in, so the emptypb/timestamppb swap is type-safe against the still-golang/protobuf-typed generated code in rpc/flipt_grpc.pb.go."
-  },
-  "patch_bytes": 7652
+  "status": "collected"
  },
  "armA_sonnet5_r013": {
-  "pass": true,
+  "instance_id": "instance_element-hq__element-web-8f3c8b35153d2227af45f32e46bd1e15bd60b71f-vnan",
+  "meta": {
+   "finished_at": "2026-08-04T10:48:32Z",
+   "model": "sonnet5",
+   "rank": 13,
+   "self_assessment": "Consolidated RovingAccessibleTooltipButton into RovingAccessibleButton across all 7 usage sites and removed the component/export; verified the disableTooltip/title prop combination against the real pinned @vector-im/compound-web@4.3.1 Tooltip (npm-fetched, a pinned dep per state-file rule 4 exception) via a jsdom render sandbox before updating ExtraTile's snapshot, since full `yarn install` on this repo hits the known github: 403 wall and blocks running the real jest suite.",
+   "started_at": "2026-08-04T10:13:00Z",
+   "turns_estimate": 25
+  },
   "n_needed": 218,
   "n_passed_needed": 218,
-  "status": "collected",
-  "instance_id": "instance_element-hq__element-web-8f3c8b35153d2227af45f32e46bd1e15bd60b71f-vnan",
+  "pass": true,
+  "patch_bytes": 18455,
   "prefix": "armA_sonnet5_r013",
-  "meta": {
-   "rank": 13,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T10:13:00Z",
-   "finished_at": "2026-08-04T10:48:32Z",
-   "turns_estimate": 25,
-   "self_assessment": "Consolidated RovingAccessibleTooltipButton into RovingAccessibleButton across all 7 usage sites and removed the component/export; verified the disableTooltip/title prop combination against the real pinned @vector-im/compound-web@4.3.1 Tooltip (npm-fetched, a pinned dep per state-file rule 4 exception) via a jsdom render sandbox before updating ExtraTile's snapshot, since full `yarn install` on this repo hits the known github: 403 wall and blocks running the real jest suite."
-  },
-  "patch_bytes": 18455
+  "status": "collected"
  },
  "armA_sonnet5_r014": {
-  "pass": false,
+  "instance_id": "instance_ansible__ansible-b8025ac160146319d2b875be3366b60c852dd35d-v0f01c69f1e2528b935359cfe578530722bca2c59",
+  "meta": {
+   "finished_at": "2026-08-04T02:00:00Z",
+   "model": "sonnet5",
+   "rank": 14,
+   "self_assessment": "Implemented ciphers plumbing (module-level get_ca_certs/make_context per interface, threaded through SSLValidationHandler/RedirectHandlerFactory/Request/open_url/fetch_url and get_url/uri/url-lookup) from the task file and base_commit only; hit the documented cd-corruption bug mid-verification (a `cd dir && python3 ...` Bash call, no bare `cd` token but still inside an unparenthesized `&&` chain) which broke Bash/Write/Edit for the rest of the session, so patch.diff was hand-reconstructed as per-location unified-diff hunks using original line numbers captured during pre-edit Reads, each verified against a fresh post-edit Read before inclusion; could not run the repo's actual test/lint suite (ansible-test) after that point, only python3 ast.parse syntax checks on all 4 touched files before the corruption.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 45
+  },
   "n_needed": 42,
   "n_passed_needed": 38,
-  "status": "collected",
-  "instance_id": "instance_ansible__ansible-b8025ac160146319d2b875be3366b60c852dd35d-v0f01c69f1e2528b935359cfe578530722bca2c59",
+  "pass": false,
+  "patch_bytes": 29461,
   "prefix": "armA_sonnet5_r014",
-  "meta": {
-   "rank": 14,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T00:00:00Z",
-   "finished_at": "2026-08-04T02:00:00Z",
-   "turns_estimate": 45,
-   "self_assessment": "Implemented ciphers plumbing (module-level get_ca_certs/make_context per interface, threaded through SSLValidationHandler/RedirectHandlerFactory/Request/open_url/fetch_url and get_url/uri/url-lookup) from the task file and base_commit only; hit the documented cd-corruption bug mid-verification (a `cd dir && python3 ...` Bash call, no bare `cd` token but still inside an unparenthesized `&&` chain) which broke Bash/Write/Edit for the rest of the session, so patch.diff was hand-reconstructed as per-location unified-diff hunks using original line numbers captured during pre-edit Reads, each verified against a fresh post-edit Read before inclusion; could not run the repo's actual test/lint suite (ansible-test) after that point, only python3 ast.parse syntax checks on all 4 touched files before the corruption."
-  },
-  "patch_bytes": 29461
+  "status": "collected"
  },
  "armA_sonnet5_r015": {
-  "pass": false,
+  "instance_id": "instance_element-hq__element-web-772df3021201d9c73835a626df8dcb6334ad9a3e-vnan",
+  "meta": {
+   "finished_at": "2026-08-04T11:49:18Z",
+   "model": "sonnet5",
+   "rank": 15,
+   "self_assessment": "Implemented all 21 requirement bullets (content_inline button kind, DeviceTile isSelected plumbing, SelectableDeviceTile toggleSelected rename, FilteredDeviceList selection state/handlers/header CTAs, SessionManagerTab selection state + onSignoutResolvedCallback + filter-clear effect); updated the two pre-existing tests/snapshots whose interface changed (SelectableDeviceTile onClick->toggleSelected, FilteredDeviceList defaultProps) but could not run the jest suite or tsc since yarn install 403s on the pinned matrix-js-sdk github tarball (confirmed via direct curl to codeload.github.com) - verified via ts.transpileModule per-file syntax check instead and careful manual snapshot reconciliation.",
+   "started_at": "2026-08-04T11:20:00Z",
+   "turns_estimate": 30
+  },
   "n_needed": 82,
   "n_passed_needed": 75,
-  "status": "collected",
-  "instance_id": "instance_element-hq__element-web-772df3021201d9c73835a626df8dcb6334ad9a3e-vnan",
+  "pass": false,
+  "patch_bytes": 16528,
   "prefix": "armA_sonnet5_r015",
-  "meta": {
-   "rank": 15,
-   "model": "sonnet5",
-   "started_at": "2026-08-04T11:20:00Z",
-   "finished_at": "2026-08-04T11:49:18Z",
-   "turns_estimate": 30,
-   "self_assessment": "Implemented all 21 requirement bullets (content_inline button kind, DeviceTile isSelected plumbing, SelectableDeviceTile toggleSelected rename, FilteredDeviceList selection state/handlers/header CTAs, SessionManagerTab selection state + onSignoutResolvedCallback + filter-clear effect); updated the two pre-existing tests/snapshots whose interface changed (SelectableDeviceTile onClick->toggleSelected, FilteredDeviceList defaultProps) but could not run the jest suite or tsc since yarn install 403s on the pinned matrix-js-sdk github tarball (confirmed via direct curl to codeload.github.com) - verified via ts.transpileModule per-file syntax check instead and careful manual snapshot reconciliation."
-  },
-  "patch_bytes": 16528
+  "status": "collected"
  },
  "armA_sonnet5_r016": {
-  "pass": false,
+  "instance_id": "instance_protonmail__webclients-7e54526774e577c0ebb58ced7ba8bef349a69fec",
+  "meta": {
+   "finished_at": "2026-08-04T00:00:00Z",
+   "model": "sonnet5",
+   "rank": 16,
+   "self_assessment": "Centralized sizeUnits/BASE_SIZE in a new packages/shared/lib/helpers/size.ts and updated all 11 files named in the requirements; hit the documented cwd-corruption bug (bare cd in a Bash call) partway through verification, which killed Bash/Write/Edit for the rest of the session, so patch.diff was hand-reconstructed from Read-tool output (old content from pre-edit Reads, new content from post-edit Reads) and landed via GitHub MCP push_files instead of git -- diff line numbers were cross-checked but not machine-verified with git apply --check.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 45
+  },
   "n_needed": 5,
   "n_passed_needed": 0,
-  "status": "collected",
-  "instance_id": "instance_protonmail__webclients-7e54526774e577c0ebb58ced7ba8bef349a69fec",
+  "pass": false,
+  "patch_bytes": 13519,
   "prefix": "armA_sonnet5_r016",
+  "status": "collected"
+ },
+ "armA_sonnet5_r017": {
+  "instance_id": "instance_ansible__ansible-984216f52e76b904e5b0fa0fb956ab4f1e0a7751-v1055803c3a812189a1133297f7f5468579283f86",
   "meta": {
-   "rank": 16,
+   "finished_at": "2026-08-04T01:00:00Z",
    "model": "sonnet5",
+   "rank": 17,
+   "self_assessment": "Implemented the requested AnsiblePluginError hierarchy, get_with_context/get_with_context_result, tombstone-raises-AnsiblePluginRemovedError, task_executor/_configure_module/template call-site updates, and Display.get_deprecation_message; however a stray `cd` mid-session corrupted the sandbox cwd and hook-blocked Bash/Edit/Write for the rest of the run, so this patch was hand-reconstructed from Read output and pushed via the GitHub API without ever running the test suite or a syntax check -- treat it as unverified.",
    "started_at": "2026-08-04T00:00:00Z",
-   "finished_at": "2026-08-04T00:00:00Z",
-   "turns_estimate": 45,
-   "self_assessment": "Centralized sizeUnits/BASE_SIZE in a new packages/shared/lib/helpers/size.ts and updated all 11 files named in the requirements; hit the documented cwd-corruption bug (bare cd in a Bash call) partway through verification, which killed Bash/Write/Edit for the rest of the session, so patch.diff was hand-reconstructed from Read-tool output (old content from pre-edit Reads, new content from post-edit Reads) and landed via GitHub MCP push_files instead of git -- diff line numbers were cross-checked but not machine-verified with git apply --check."
+   "turns_estimate": 45
   },
-  "patch_bytes": 13519
+  "n_needed": 16,
+  "n_passed_needed": 15,
+  "pass": false,
+  "patch_bytes": 18484,
+  "prefix": "armA_sonnet5_r017",
+  "status": "collected"
+ },
+ "armA_sonnet5_r019": {
+  "instance_id": "instance_ansible__ansible-8127abbc298cabf04aaa89a478fc5e5e3432a6fc-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
+  "meta": {
+   "finished_at": "2026-08-04T00:00:00Z",
+   "model": "sonnet5",
+   "rank": 19,
+   "self_assessment": "Implemented worker-process stdio detachment (WorkerProcess._detach, keyword-only typed __init__, non-fork CLIARGS/plugin-loader re-init), dropped new_stdin end-to-end (WorkerProcess/TaskExecutor/connection_loader call), added ConnectionKwargs TypedDict, and marked TQM's 0/1/2 fds non-inheritable; hit the session's cwd-corruption bug midway (one stray bare `cd &&` in a Bash call) which permanently broke Bash/Edit/Write, so the back half of the diff (one test-file fix plus this delivery) was hand-built as a unified diff from verified Read/Grep output and landed via GitHub MCP push_files instead of git; unable to run the test suite to confirm, so treat as unverified pending CI.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 40
+  },
+  "n_needed": 70,
+  "n_passed_needed": 60,
+  "pass": false,
+  "patch_bytes": 14952,
+  "prefix": "armA_sonnet5_r019",
+  "status": "collected"
+ },
+ "armA_sonnet5_r020": {
+  "instance_id": "instance_NodeBB__NodeBB-cfc237c2b79d8c731bbfc6cadf977ed530bfd57a-v0495b863a912fbff5749c67e860612b91825407c",
+  "meta": {
+   "finished_at": "2026-08-04T14:44:31Z",
+   "model": "sonnet5",
+   "rank": 20,
+   "self_assessment": "Added User.getIconBackgrounds returning the existing iconBackgrounds palette; verified via a stubbed-dependency harness (no package.json at base_commit, so full test suite is not runnable) that it fails pre-fix and passes post-fix without disturbing other exports.",
+   "started_at": "2026-08-04T14:41:00Z",
+   "turns_estimate": 12
+  },
+  "n_needed": 195,
+  "n_passed_needed": 195,
+  "pass": true,
+  "patch_bytes": 426,
+  "prefix": "armA_sonnet5_r020",
+  "status": "collected"
+ },
+ "armA_sonnet5_r021": {
+  "instance_id": "instance_element-hq__element-web-880428ab94c6ea98d3d18dcaeb17e8767adcb461-vnan",
+  "meta": {
+   "finished_at": "2026-08-04T01:30:00Z",
+   "model": "sonnet5",
+   "rank": 21,
+   "self_assessment": "Implemented DeviceMetaData/isDeviceVerified per spec by editing the shallow clone directly; a leaked bare `cd` (via `cd dir 2>&1; cmd`, a semicolon-joined one-liner, not the usual && form) corrupted the session cwd right after edits landed, so patch.diff was hand-built from verified Edit old_string/new_string pairs and confirmed final-file Reads rather than `git diff` -- hunk line numbers are best-effort (cross-validated via net line-count deltas) though hunk content is tool-verified exact, so re-verify by applying with patch --fuzz if git apply is strict.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 35
+  },
+  "n_needed": 68,
+  "n_passed_needed": 64,
+  "pass": false,
+  "patch_bytes": 22153,
+  "prefix": "armA_sonnet5_r021",
+  "status": "collected"
+ },
+ "armA_sonnet5_r022": {
+  "instance_id": "instance_flipt-io__flipt-3ef34d1fff012140ba86ab3cafec8f9934b492be",
+  "meta": {
+   "finished_at": "2026-08-04T01:30:00Z",
+   "model": "sonnet5",
+   "rank": 22,
+   "self_assessment": "Implemented flag caching (protobuf) plus generic setJSON/getJSON/setProtobuf/getProtobuf helpers and flag-cache invalidation in storage/cache.Store, and deleted CacheUnaryInterceptor plus all its grpc.go/middleware.go wiring and tests; a stray non-parenthesized `cd dir && sed` Bash call corrupted the sandbox cwd partway through, so the middleware.go/middleware_test.go/support_test.go edits and the final patch.diff were hand-reconstructed from verified Read output and delivered via GitHub MCP push_files instead of `git diff` -- unable to run `go build`/`go test` to confirm the hand-built diff compiles cleanly.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 45
+  },
+  "n_needed": 5,
+  "n_passed_needed": 0,
+  "pass": false,
+  "patch_bytes": 36451,
+  "prefix": "armA_sonnet5_r022",
+  "status": "collected"
+ },
+ "armA_sonnet5_r023": {
+  "instance_id": "instance_tutao__tutanota-09c2776c0fce3db5c6e18da92b5a45dce9f013aa-vbc0d9ba8f0071fbe982809910959a6ff8884dbbf",
+  "meta": {
+   "finished_at": "2026-08-04T00:00:00Z",
+   "model": "sonnet5",
+   "rank": 23,
+   "self_assessment": "Added OperationProgressTracker (main-side per-operation progress multiplexer) and wired it through WorkerImpl/WorkerClient/MainLocator/WorkerLocator into CalendarFacade, changing _saveCalendarEvents to take an onProgress callback and saveImportedCalendarEvents to take an operationId, then updated CalendarImporterDialog to register an operation and drive showProgressDialog off its stream; a cd+heredoc Bash call corrupted the sandbox cwd after edits were already applied and verified, so the diff was hand-reconstructed from Read output (cross-checked against post-edit Read line numbers) and delivered via GitHub MCP push_files since Bash/Write/Edit were all dead; could not run the test suite (npm install unavailable in this state) to confirm CalendarFacadeTest.ts passes.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 35
+  },
+  "n_needed": 1,
+  "n_passed_needed": 0,
+  "pass": false,
+  "patch_bytes": 10952,
+  "prefix": "armA_sonnet5_r023",
+  "status": "collected"
+ },
+ "armA_sonnet5_r024": {
+  "instance_id": "instance_gravitational__teleport-65438e6e44b6ce51458d09b7bb028a2797cfb0ea-vce94f93ad1030e3136852817f2423c1b3ac37bc4",
+  "meta": {
+   "finished_at": "2026-08-04T00:00:00Z",
+   "model": "sonnet5",
+   "rank": 24,
+   "self_assessment": "Added touchid.Registration (CCR, credentialID, done fields) with idempotent Confirm/Rollback methods to lib/auth/touchid/api.go, added DeleteNonInteractive to the nativeTID interface plus its darwin (new C DeleteNonInteractiveCredential wired to the existing internal deleteCredential helper, no LAContext prompt), non-darwin noop, and test-fake implementations, and changed Register() to return *Registration instead of the raw CCR so callers can explicitly confirm/rollback instead of leaving orphaned Secure Enclave keys on server-side failure; updated tool/tsh/mfa.go's promptRegisterChallenge/promptTouchIDRegisterChallenge and addDeviceRPC to thread the Registration through and Rollback() on any send/recv/ack failure or Confirm() on ack success, since Register()'s signature change would otherwise break that build; a cd+head Bash call corrupted the sandbox cwd right after edits were applied and verified, so the diff was hand-reconstructed from Edit-tool-verified old_string/new_string plus fresh post-corruption Reads (Read still works) and delivered via GitHub MCP push_files since Bash/Write/Edit were all dead; could not actually compile/run go test (no Objective-C toolchain for the touchid build tag here, and go build was not reachable after the corruption) to confirm the package builds.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 28
+  },
+  "n_needed": 2,
+  "n_passed_needed": 0,
+  "pass": false,
+  "patch_bytes": 12762,
+  "prefix": "armA_sonnet5_r024",
+  "status": "collected"
  }
 }
