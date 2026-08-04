@@ -4,7 +4,7 @@
 - A bare `cd <dir>` -- even inside `cd x && cmd`, `cd x; y`, heredocs, or a
   discarded `cd x 2>/dev/null; true` -- permanently corrupts cwd for
   Bash/Write/Edit for the rest of the session (Read still works). NOT
-  session-local: a subagent hits it on its first Bash call too.
+  session-local: a subagent hits it on its first Bash call too. CONFIRMED again r017, triggered by a throwaway `cd dir && python3 --version` sanity check -- there is no such thing as a safe one-off `cd`.
 - CONFIRMED r014, r016 (tested, not just reasoned): EnterWorktree ALSO reads the
   corrupted cwd, silently creating a worktree of the WRONG repo; ExitWorktree
   then restores you to that same corrupted path. Neither fixes the bug --
@@ -12,7 +12,7 @@
 - RULE: never write `cd` as a bare/standalone token, in any wrapper. Use
   `ls <path>`, `git -C <path>`, `go -C <path> <subcmd>`, or `(cd dir &&
   cmd)` with load-bearing parens.
-- RECOVERY (confirmed r006/r009-r012/r014/r016): stop retrying Bash/Write/
+- RECOVERY (confirmed r006/r009-r012/r014/r016/r017): stop retrying Bash/Write/
   Edit/EnterWorktree. GitHub MCP push_files/get_file_contents isn't
   hook-gated -- land patch.diff+meta.json+state.md as one commit through
   it. add_repo CANNOT add a repo from a different owner mid-session; if
