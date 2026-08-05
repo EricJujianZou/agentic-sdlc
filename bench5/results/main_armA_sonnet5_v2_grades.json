@@ -508,5 +508,209 @@
   "patch_bytes": 5341,
   "prefix": "armA_sonnet5_r030",
   "status": "collected"
+ },
+ "armA_sonnet5_r031": {
+  "instance_id": "instance_future-architect__vuls-aaea15e516ece43978cf98e09e52080478b1d39f",
+  "meta": {
+   "finished_at": "2026-08-04T01:00:00Z",
+   "model": "sonnet5",
+   "rank": 31,
+   "self_assessment": "Confident in the fix (per-server WpIgnoreInactive lookup + pointer-free searchCache, verified by hand-tracing the existing table-driven tests against the new code and by re-deriving the diff from in-transcript before/after Reads), but could not run go build/go test because a bare `cd ...; echo` Bash call corrupted cwd mid-session and killed Bash/Edit/Write for the rest of the run, so verification is manual review only, not an executed test run.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 20
+  },
+  "n_needed": 2,
+  "n_passed_needed": 2,
+  "pass": true,
+  "patch_bytes": 2198,
+  "prefix": "armA_sonnet5_r031",
+  "status": "collected"
+ },
+ "armA_sonnet5_r032": {
+  "instance_id": "instance_protonmail__webclients-5e815cfa518b223a088fa9bb232a5fc90ab15691",
+  "meta": {
+   "finished_at": "2026-08-04T21:33:48Z",
+   "model": "sonnet5",
+   "rank": 32,
+   "self_assessment": "Refactored RenewToggle.tsx to add a confirm-before-disable modal and extracted useRenewToggle/DisableRenewModal, decoupled RenewToggle from SubscriptionsSection, and added packages/testing hocs/providers/event-manager scaffolding; verified via yarn install + tsc check-types (clean) and jest (SubscriptionsSection 7/7, full payments suite 62/62, plus a throwaway renderHook smoke test against the new testing utils, deleted before delivery).",
+   "started_at": "2026-08-04T21:13:27Z",
+   "turns_estimate": 45
+  },
+  "n_needed": 8,
+  "n_passed_needed": 8,
+  "pass": true,
+  "patch_bytes": 11385,
+  "prefix": "armA_sonnet5_r032",
+  "status": "collected"
+ },
+ "armA_sonnet5_r033": {
+  "instance_id": "instance_future-architect__vuls-2923cbc645fbc7a37d50398eb2ab8febda8c3264",
+  "meta": {
+   "finished_at": "2026-08-04T00:00:00Z",
+   "model": "sonnet5",
+   "rank": 33,
+   "self_assessment": "Addresses every requirement (Distro.MajorVersion stream handling, CentOS Stream 8 EOL date, distro-detection split into its own case with streamN release, OVAL/Gost release normalization via new util.CentOSStreamToCentOS, rhelDownStreamOSVersionToRHEL->rhelRebuildOSVersionToRHEL rename incl. tests, Alma added to needs-restarting) and tests were added, but a session-tool-corruption bug (see state_armA.md) killed Bash/Write for this session both before and after the edits landed, so go build/vet/test/gofmt could NOT be run to verify; the diff was hand-reconstructed via Read-tool before/after captures and is believed correct but is UNVERIFIED by the compiler/test suite \u2014 treat with more scrutiny than a normally-verified submission.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 95
+  },
+  "n_needed": 5,
+  "n_passed_needed": 0,
+  "pass": false,
+  "patch_bytes": 9477,
+  "prefix": "armA_sonnet5_r033",
+  "status": "collected"
+ },
+ "armA_sonnet5_r034": {
+  "instance_id": "instance_internetarchive__openlibrary-25858f9f0c165df25742acf8309ce909773f0cdd-v13642507b4fc1f8d234172bf8129942da2c2ca26",
+  "meta": {
+   "finished_at": "2026-08-04T01:30:00Z",
+   "model": "sonnet5",
+   "rank": 34,
+   "self_assessment": "Moved Solr utility state/config (solr_base_url/solr_next getters+setters, load_config), SolrUpdateState, solr_update, and solr_insert_documents out of update_work.py into a new openlibrary/solr/utils.py per the interface spec, re-exported them from update_work.py so existing `update_work.X` call sites (scripts/solr_updater.py, scripts/solr_builder/solr_builder.py) keep working, and replaced update_edition.py's function-local cyclic-import workaround (`from openlibrary.solr.update_work import get_solr_next` inside build_edition_data) with a top-level import from the new leaf module, which is the actual cyclic-import fix the ticket asked for. Updated scripts/solr_builder/solr_builder/index_subjects.py's import accordingly. Syntax-checked all four touched files with py_compile successfully, but in that same verification command a bare `cd` (my own mistake, despite the documented sandbox hazard) corrupted the session's cwd and killed Bash/Write/Edit for the rest of the session (hooks/pretooluse_guard.py resolves as a relative path). I could not run the pytest suite (openlibrary/tests/solr/test_update_work.py, which already imports SolrUpdateState/solr_update/build_data from update_work and should still pass unmodified against the re-exports) or reproduce/confirm behavior interactively after that point. patch.diff was hand-reconstructed from my own recorded Edit tool calls (each old_string/new_string is an exact hunk) and cross-checked against fresh Read calls on the final files at the computed hunk boundaries, then delivered via push_files per the arm's documented recovery path. Test-suite verification is genuinely unconfirmed for this instance.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 25
+  },
+  "n_needed": 39,
+  "n_passed_needed": 33,
+  "pass": false,
+  "patch_bytes": 15948,
+  "prefix": "armA_sonnet5_r034",
+  "status": "collected"
+ },
+ "armA_sonnet5_r035": {
+  "instance_id": "instance_flipt-io__flipt-b4bb5e13006a729bc0eed8fe6ea18cff54acdacb",
+  "meta": {
+   "finished_at": "2026-08-04T00:40:00Z",
+   "model": "sonnet5",
+   "rank": 35,
+   "self_assessment": "Sandbox cwd-corruption hit again (bare 'cd repo && go env' outside parens) before any edit; recovered per state file via Read-only exploration + hand-authored unified diff (no compile/test verification possible) covering internal/oci/file.go (WithManifestVersion option, Build uses it, default 1.1), internal/config/storage.go (OCI.ManifestVersion field, default, validation error), cmd/flipt/bundle.go (wires config to WithManifestVersion), and a minimal one-line fix to the existing OCI config_test.go case so it doesn't break; skipped adding new test cases and JSON/CUE schema edits to keep the hand-built diff low-risk since nothing could be locally verified.",
+   "started_at": "2026-08-04T00:00:00Z",
+   "turns_estimate": 20
+  },
+  "n_needed": 1,
+  "n_passed_needed": 0,
+  "pass": false,
+  "patch_bytes": 6342,
+  "prefix": "armA_sonnet5_r035",
+  "status": "collected"
+ },
+ "armA_sonnet5_r036": {
+  "instance_id": "instance_internetarchive__openlibrary-308a35d6999427c02b1dbf5211c033ad3b352556-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+  "meta": {
+   "finished_at": "2026-08-05T01:00:00Z",
+   "model": "sonnet5",
+   "rank": 36,
+   "self_assessment": "Consolidated ListMixin+List into one List(client.Thing) class plus ListChangeset in core/lists/model.py, with a new register_models() there; core/models.py and plugins/upstream/models.py re-export List/ListChangeset and delegate registration to avoid reintroducing the circular import (verified no module-level lists.model->core.models dependency remains, only lazy in-method imports for Image). Full env set up (venv + infogami submodule at its pinned base_commit sha) and ran the real pytest suite: test_models.py/test_lists_model.py/upstream test_models.py all green (16/16), plus a broader core+plugins sweep with identical pass/fail counts before and after my diff (3 unrelated pre-existing failures in test_home.py and a pre-existing circular-import collection error in test_db.py, both reproduced on the unmodified base commit via git stash to confirm).",
+   "started_at": "2026-08-05T00:00:00Z",
+   "turns_estimate": 30
+  },
+  "n_needed": 14,
+  "n_passed_needed": 14,
+  "pass": true,
+  "patch_bytes": 11950,
+  "prefix": "armA_sonnet5_r036",
+  "status": "collected"
+ },
+ "armA_sonnet5_r037": {
+  "instance_id": "instance_internetarchive__openlibrary-6a117fab6c963b74dc1ba907d838e74f76d34a4b-v13642507b4fc1f8d234172bf8129942da2c2ca26",
+  "meta": {
+   "finished_at": "2026-08-05T01:00:00Z",
+   "model": "sonnet5",
+   "rank": 37,
+   "self_assessment": "Added ProjectRunebergProvider (book_providers.py), id_project_runeberg to the work-search default fields (works.py, code.py, and the existing get_doc test), and the two required templates, following the existing gutenberg/standard_ebooks provider pattern exactly; could not build or run tests because a bare `cd` (via `;`, not just `&&`) corrupted the sandbox cwd mid-task, killing Bash/Write/Edit, so the diff was hand-authored from Read output and delivered via mcp__github__push_files.",
+   "started_at": "2026-08-05T00:00:00Z",
+   "turns_estimate": 25
+  },
+  "n_needed": 2,
+  "n_passed_needed": 2,
+  "pass": true,
+  "patch_bytes": 5501,
+  "prefix": "armA_sonnet5_r037",
+  "status": "collected"
+ },
+ "armA_sonnet5_r038": {
+  "instance_id": "instance_internetarchive__openlibrary-798a582540019363d14b2090755cc7b89a350788-v430f20c722405e462d9ef44dee7d34c41e76fe7a",
+  "meta": {
+   "finished_at": "2026-08-05T02:00:00Z",
+   "model": "sonnet5",
+   "rank": 38,
+   "self_assessment": "Consolidated ListMixin into List and moved ListChangeset into core/lists/model.py per spec, breaking the resulting core.models<->core.lists.model<->upstream.models import cycle by having List/ListChangeset inherit the raw infogami client.Thing/client.Changeset (not the app subclasses) with lazy in-method imports for the app-specific url()/get_cover() helpers, per the state file's documented pattern; verification (pytest) could not be run because a bare `cd` (my own mistake, outside any subshell) permanently killed Bash/Write/Edit for the rest of the session, so this patch.diff was hand-built from Read output against the base commit and pushed via the GitHub API instead.",
+   "started_at": "2026-08-05T00:00:00Z",
+   "turns_estimate": 45
+  },
+  "n_needed": 14,
+  "n_passed_needed": 12,
+  "pass": false,
+  "patch_bytes": 11504,
+  "prefix": "armA_sonnet5_r038",
+  "status": "collected"
+ },
+ "armA_sonnet5_r039": {
+  "instance_id": "instance_protonmail__webclients-df60460f163fd5c34e844ab9015e3176f1ab1ac0",
+  "meta": {
+   "finished_at": "2026-08-05T09:35:00Z",
+   "model": "sonnet5",
+   "rank": 39,
+   "self_assessment": "cwd corrupted early (a 'cd task_dir 2>/dev/null; true' prefix before a read-only grep, despite having just read the exact warning) killing Bash/Edit/Write for the rest of the session; recovered via Read/Glob/Grep only, hand-built the unified diff from Read output and shipped it via mcp__github__push_files per documented recovery procedure -- nothing was compiled, type-checked, or run, so the diff is unverified by any tool. Implements VerifyPayment/getDefaultVerifyPayment/getCreatePaymentToken and rewires createPaymentToken to take verify instead of createModal in paymentTokenHelper.tsx, then updates all 5 required call sites (PaymentStep, PayInvoiceModal, CreditsModal, EditCardModal, SubscriptionModal) plus one unlisted call site (single-signup/Step1.tsx) found by grepping the whole repo for importers of paymentTokenHelper -- left the process/pull polling internals untouched since the repo's own paymentTokenHelper.test.ts already pins down their current reject/resolve behavior and the task's explicit 'Interface' section only names getCreatePaymentToken/getDefaultVerifyPayment as new public surface.",
+   "started_at": "2026-08-05T08:40:00Z",
+   "turns_estimate": 30
+  },
+  "n_needed": 11,
+  "n_passed_needed": 11,
+  "pass": true,
+  "patch_bytes": 17338,
+  "prefix": "armA_sonnet5_r039",
+  "status": "collected"
+ },
+ "armA_sonnet5_r040": {
+  "instance_id": "instance_NodeBB__NodeBB-6ea3b51f128dd270281db576a1b59270d5e45db0-vnan",
+  "meta": {
+   "finished_at": "2026-08-05T02:16:11Z",
+   "model": "sonnet5",
+   "rank": 40,
+   "self_assessment": "Added sortedSetIncrByBulk to mongo/postgres/redis sorted.js exactly per interface spec, verified accumulation/new-entry/multi-key logic with in-memory mocks (base commit's tree has no package.json, so no real DB/test run was possible); low risk, small surgical diff mirroring each backend's existing bulk/increment idioms.",
+   "started_at": "2026-08-05T02:11:59Z",
+   "turns_estimate": 18
+  },
+  "n_needed": 267,
+  "n_passed_needed": 267,
+  "pass": true,
+  "patch_bytes": 3055,
+  "prefix": "armA_sonnet5_r040",
+  "status": "collected"
+ },
+ "armA_sonnet5_r041": {
+  "instance_id": "instance_future-architect__vuls-f0b3a8b1db98eb1bd32685f1c36c41a99c3452ed",
+  "meta": {
+   "finished_at": "2026-08-05T01:10:00Z",
+   "model": "sonnet5",
+   "rank": 41,
+   "self_assessment": "Implementation appears complete per spec (rename CpeNameMatch->CpeVersionMatch, add CpeVendorProductMatch score 10, JVN-aware DetectCpeURIsCves via detail.NvdJSON==nil && detail.Jvn!=nil, score-primary/SortOrder-tiebreak sort, TUI score/method display via Confidence.String()) but is UNVERIFIED: a non-parenthesized `cd dir && go mod download ...` corrupted the session cwd mid-task, permanently breaking Bash/Edit/Write for the rest of the session, so the diff was hand-built line-by-line from Read-tool output and pushed via MCP without any build, vet, or test run.",
+   "started_at": "2026-08-05T00:05:00Z",
+   "turns_estimate": 35
+  },
+  "n_needed": 2,
+  "n_passed_needed": 2,
+  "pass": true,
+  "patch_bytes": 4503,
+  "prefix": "armA_sonnet5_r041",
+  "status": "collected"
+ },
+ "armA_sonnet5_r042": {
+  "instance_id": "instance_future-architect__vuls-8659668177f1feb65963db7a967347a79c5f9c40",
+  "meta": {
+   "finished_at": "2026-08-05T03:14:39Z",
+   "model": "sonnet5",
+   "rank": 42,
+   "self_assessment": "Changed the 6 listed filter methods in models/vulninfos.go to return (VulnInfos, int) filtered counts, wired Detect in detector/detector.go to log detected-CVE total and per-filter breakdown (name, criteria, count) via FormatServerName, updated the 5 existing filter unit tests for the new tuple signature, and verified with go build ./... and go test ./models/... ./detector/... (all pass, no other callers of these methods existed in the repo).",
+   "started_at": "2026-08-05T03:05:00Z",
+   "turns_estimate": 18
+  },
+  "n_needed": 15,
+  "n_passed_needed": 15,
+  "pass": true,
+  "patch_bytes": 9097,
+  "prefix": "armA_sonnet5_r042",
+  "status": "collected"
  }
 }
