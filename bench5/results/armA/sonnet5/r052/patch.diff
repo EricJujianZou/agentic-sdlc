@@ -1,0 +1,80 @@
+diff --git a/src/meta/index.js b/src/meta/index.js
+--- a/src/meta/index.js
++++ b/src/meta/index.js
+@@ -26,19 +26,30 @@
+ 
+ 
+ /* Assorted */
+-Meta.userOrGroupExists = async function (slug) {
+-	if (!slug) {
+-		throw new Error('[[error:invalid-data]]');
+-	}
+-	const user = require('../user');
+-	const groups = require('../groups');
+-	slug = slugify(slug);
+-	const [userExists, groupExists] = await Promise.all([
+-		user.existsBySlug(slug),
+-		groups.existsBySlug(slug),
+-	]);
+-	return userExists || groupExists;
+-};
++Meta.userOrGroupExists = async function (slug) {
++	const user = require('../user');
++	const groups = require('../groups');
++	if (Array.isArray(slug)) {
++		if (!slug.length || slug.some(s => !s)) {
++			throw new Error('[[error:invalid-data]]');
++		}
++		const slugs = slug.map(s => slugify(s));
++		const [userExists, groupExists] = await Promise.all([
++			user.existsBySlug(slugs),
++			groups.existsBySlug(slugs),
++		]);
++		return slugs.map((s, i) => userExists[i] || groupExists[i]);
++	}
++	if (!slug) {
++		throw new Error('[[error:invalid-data]]');
++	}
++	slug = slugify(slug);
++	const [userExists, groupExists] = await Promise.all([
++		user.existsBySlug(slug),
++		groups.existsBySlug(slug),
++	]);
++	return userExists || groupExists;
++};
+ 
+ if (nconf.get('isPrimary')) {
+ 	pubsub.on('meta:restart', (data) => {
+diff --git a/src/user/index.js b/src/user/index.js
+--- a/src/user/index.js
++++ b/src/user/index.js
+@@ -49,10 +49,14 @@
+ 	);
+ };
+ 
+-User.existsBySlug = async function (userslug) {
+-	const exists = await User.getUidByUserslug(userslug);
+-	return !!exists;
+-};
++User.existsBySlug = async function (userslug) {
++	if (Array.isArray(userslug)) {
++		const uids = await User.getUidsByUserslugs(userslug);
++		return uids.map(uid => !!uid);
++	}
++	const exists = await User.getUidByUserslug(userslug);
++	return !!exists;
++};
+ 
+ User.getUidsFromSet = async function (set, start, stop) {
+ 	if (set === 'users:online') {
+@@ -112,6 +116,10 @@
+ 	return await db.sortedSetScore('userslug:uid', userslug);
+ };
+ 
++User.getUidsByUserslugs = async function (userslugs) {
++	return await db.sortedSetScores('userslug:uid', userslugs);
++};
++
+ User.getUsernamesByUids = async function (uids) {
+ 	const users = await User.getUsersFields(uids, ['username']);
+ 	return users.map(user => user.username);

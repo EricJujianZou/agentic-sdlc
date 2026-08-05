@@ -1,13 +1,14 @@
 # Arm A process notes (carried memory)
 
 ## FATAL: cwd-corrupting bug — kills Bash+Write+Edit session-wide
-- ANY bare `cd` outside `(...)` perma-corrupts cwd (10+ sessions killed: r034-r041, r044, r045, r047, r049). Only `(cd dir && cmd)` WITH PARENS, `git -C
+- ANY bare `cd` outside `(...)` perma-corrupts cwd (10+ sessions killed: r034-r041, r044, r045, r047, r049, r052). Only `(cd dir && cmd)` WITH PARENS, `git -C
   <path>`, absolute paths, or `go -C <dir> <subcmd>` are safe — an env-var/flag prefix before `cd &&` does NOT make it safe (r045); r047 hit it
   via `cd dir && go build` chained in one Bash call, despite reading this very warning first — treat "never bare `cd`" as absolute, full stop.
   r049: triggered by a bare `cd tmp && npm pack ...` as the FIRST line of an otherwise-safe multi-line install script — corrupts immediately,
-  before any of the later relative-path-only lines run; the leading cd alone is enough regardless of what follows it.
+  before any of the later relative-path-only lines run; the leading cd alone is enough regardless of what follows it. r052: same result from
+  a `;`-chained (not `&&`), stderr-redirected bare `cd` even though a correctly parenthesized subshell followed later in the SAME call.
 - Symptom: Bash/Write/Edit ALL fail w/ `PreToolUse:<tool> hook error: ... can't open .../hooks/pretooluse_guard.py`. Never self-heals.
-- Recovery (r034/035/037/038/039/041/044/045/047/049, all shipped): Read/Glob/Grep + MCP tools only. Hand-build the diff from Read output: exact
+- Recovery (r034/035/037/038/039/041/044/045/047/049/052, all shipped): Read/Glob/Grep + MCP tools only. Hand-build the diff from Read output: exact
   line-numbered old/new blocks, recounted `@@ -a,b +c,d @@` totals — reuse already-succeeded Edit calls' own old_string/new_string as ground
   truth (proven byte-exact) instead of re-deriving tabs by eye, and Read the live post-edit file for unchanged context/closing-brace lines.
   Ship patch.diff+meta.json+state.md in ONE `mcp__github__push_files` call; state plainly what wasn't compiled/tested. `rm -rf <abs-path>`
@@ -56,3 +57,5 @@
 ## Node.js (NodeBB-style)
 - Root `package.json` is `/package.json`-gitignored; CI does `cp install/package.json package.json` first, then `npm install` (~1200
   pkgs). `redis-server` preinstalled (`--daemonize yes --port 6379`); `node app --setup=... --ci=...` builds assets — run in `(...)` only.
+  r052: `npm install` itself worked fine (~1min, node22 satisfies `engines.node >=18`) — the corruption came from a leading bare `cd` chained
+  ahead of it in the same call, not from npm install; keep the whole call to nothing but the already-safe `(cd ... && npm install)`.
