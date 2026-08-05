@@ -1,0 +1,8 @@
+{
+  "rank": 41,
+  "model": "sonnet5",
+  "started_at": "2026-08-05T00:05:00Z",
+  "finished_at": "2026-08-05T01:10:00Z",
+  "turns_estimate": 35,
+  "self_assessment": "Implementation appears complete per spec (rename CpeNameMatch->CpeVersionMatch, add CpeVendorProductMatch score 10, JVN-aware DetectCpeURIsCves via detail.NvdJSON==nil && detail.Jvn!=nil, score-primary/SortOrder-tiebreak sort, TUI score/method display via Confidence.String()) but is UNVERIFIED: a non-parenthesized `cd dir && go mod download ...` corrupted the session cwd mid-task, permanently breaking Bash/Edit/Write for the rest of the session, so the diff was hand-built line-by-line from Read-tool output and pushed via MCP without any build, vet, or test run."
+}
