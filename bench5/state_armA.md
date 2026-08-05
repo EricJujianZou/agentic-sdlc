@@ -36,6 +36,10 @@
   often already exists at base_commit; mirror the repo's existing join/sanitize idiom, don't invent one (r046). EOL/KB literal-sync data
   tasks (r047): a worked example given in the task text (one exact revision<->KB pair) anchors the rest of that build's KB sequence —
   trust it over free recall; note in meta.json when `go build` couldn't be run to verify (e.g. after a cwd-corrupting mistake).
+- EOL-date requirements with NO worked example/anchor in the task text (r048, vuls): don't fabricate exact calendar days with false
+  confidence — derive from the vendor's stated *policy* (e.g. "N years standard + M years extended, new major every K years") applied
+  to the release's own GA year, keep it internally consistent across the requested versions, and say plainly in self_assessment that
+  day-level precision is a good-faith estimate, not sourced (sourcing it would violate rule 4 anyway).
 
 ## Node.js (NodeBB-style)
 - Root `package.json` is `/package.json`-gitignored; CI does `cp install/package.json package.json` first, then `npm install` (~1200

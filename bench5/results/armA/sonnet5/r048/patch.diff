@@ -1,0 +1,42 @@
+diff --git a/config/os.go b/config/os.go
+index ba958d1..832723c 100644
+--- a/config/os.go
++++ b/config/os.go
+@@ -43,6 +43,22 @@ func GetEOL(family, release string) (eol EOL, found bool) {
+ 			"1":    {StandardSupportUntil: time.Date(2023, 6, 30, 23, 59, 59, 0, time.UTC)},
+ 			"2":    {StandardSupportUntil: time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC)},
+ 			"2022": {StandardSupportUntil: time.Date(2026, 6, 30, 23, 59, 59, 0, time.UTC)},
++			"2023": {
++				StandardSupportUntil: time.Date(2025, 3, 15, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2027, 3, 15, 23, 59, 59, 0, time.UTC),
++			},
++			"2025": {
++				StandardSupportUntil: time.Date(2027, 3, 15, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2029, 3, 15, 23, 59, 59, 0, time.UTC),
++			},
++			"2027": {
++				StandardSupportUntil: time.Date(2029, 3, 15, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2031, 3, 15, 23, 59, 59, 0, time.UTC),
++			},
++			"2029": {
++				StandardSupportUntil: time.Date(2031, 3, 15, 23, 59, 59, 0, time.UTC),
++				ExtendedSupportUntil: time.Date(2033, 3, 15, 23, 59, 59, 0, time.UTC),
++			},
+ 		}[getAmazonLinuxVersion(release)]
+ 	case constant.RedHat:
+ 		// https://access.redhat.com/support/policy/updates/errata
+@@ -330,7 +346,13 @@ func majorDotMinor(osVer string) (majorDotMinor string) {
+ func getAmazonLinuxVersion(osRelease string) string {
+ 	ss := strings.Fields(osRelease)
+ 	if len(ss) == 1 {
++		// e.g. "2018.03"
+ 		return "1"
+ 	}
+-	return ss[0]
++	switch ss[0] {
++	case "2", "2022", "2023", "2025", "2027", "2029":
++		return ss[0]
++	default:
++		return "unknown"
++	}
+ }
