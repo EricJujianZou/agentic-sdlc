@@ -1,0 +1,8 @@
+{
+  "rank": 58,
+  "model": "sonnet5",
+  "started_at": "2026-08-05T00:00:00Z",
+  "finished_at": "2026-08-05T02:00:00Z",
+  "turns_estimate": 1,
+  "self_assessment": "Fixed by making _build_collection_tar write SYMTYPE tar entries (correct relative linkname via os.path.relpath) for symlinks whose realpath resolves inside the collection root (checked via new _is_child_path helper), leaving external-target symlinks as copied regular files; made _walk record but not recurse into symlinked directories; made _tarfile_extract/_get_tar_file_member yield (TarInfo, stream) tuples; added _extract_tar_dir and made _extract_tar_file recreate symlinks (guarded by _is_child_path against a malicious linkname escaping the destination) instead of always copying content, used from install_artifact. Verified with the repo's own test/units/galaxy/test_collection.py (updated 2 pre-existing tests that asserted the old buggy expand-symlink behavior, plus the _get_tar_file_member tuple-return test) - all 59 tests passed in a local venv (pytest, PYTHONPATH=lib:test) BEFORE a bare `cd ... &&` in a later Bash call (checking test output, unrelated to the fix) corrupted this session's cwd per the known hazard, after which patch.diff was hand-reconstructed from Read output of the already-edited, already-tested file plus my saved pre-edit Read snapshots (git/Bash/Write/Edit all unavailable for the rest of the session) - line numbers were cross-checked hunk-by-hunk against fresh Read calls on the live edited file, but the diff itself could not be git-apply-tested end-to-end."
+}
