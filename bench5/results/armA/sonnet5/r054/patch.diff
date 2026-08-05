@@ -1,0 +1,100 @@
+diff --git a/openlibrary/core/db.py b/openlibrary/core/db.py
+index 0000000..0000000 100644
+--- a/openlibrary/core/db.py
++++ b/openlibrary/core/db.py
+@@ -30,54 +30,59 @@ class CommonExtras:
+         """
+         oldb = get_db()
+         t = oldb.transaction()
+         rows_changed = 0
+         rows_deleted = 0
++        failed_deletes = 0
+ 
+         try:
+             rows_changed = oldb.update(
+                 cls.TABLENAME,
+                 where="work_id=$work_id",
+                 work_id=new_work_id,
+                 vars={"work_id": current_work_id})
+         except (UniqueViolation, IntegrityError):
+-            rows_changed, rows_deleted = cls.update_work_ids_individually(
++            rows_changed, rows_deleted, failed_deletes = cls.update_work_ids_individually(
+                 current_work_id,
+                 new_work_id,
+                 _test=_test
+             )
+         t.rollback() if _test else t.commit()
+-        return rows_changed, rows_deleted
++        return {
++            "rows_changed": rows_changed,
++            "rows_deleted": rows_deleted,
++            "failed_deletes": failed_deletes,
++        }
+ 
+     @classmethod
+     def update_work_ids_individually(cls, current_work_id, new_work_id, _test=False):
+         oldb = get_db()
+         rows_changed = 0
+         rows_deleted = 0
++        failed_deletes = 0
+         # get records with old work_id
+         # `list` used to solve sqlite cursor test
+         rows = list(oldb.select(
+             cls.TABLENAME,
+             where="work_id=$work_id",
+             vars={"work_id": current_work_id}))
+         for row in rows:
+             where = " AND ".join([
+                 f"{k}='{v}'"
+                 for k, v in row.items()
+                 if k in cls.PRIMARY_KEY
+             ])
+             try:
+                 # try to update the row to new_work_id
+                 t_update = oldb.transaction()
+                 oldb.query(f"UPDATE {cls.TABLENAME} set work_id={new_work_id} where {where}")
+                 rows_changed += 1
+                 t_update.rollback() if _test else t_update.commit()
+             except (UniqueViolation, IntegrityError):
+-                t_delete = oldb.transaction()
+-                # otherwise, delete row with current_work_id if failed
+-                oldb.query(f"DELETE FROM {cls.TABLENAME} WHERE {where}")
+-                rows_deleted += 1
+-                t_delete.rollback() if _test else t_delete.commit()
+-        return rows_changed, rows_deleted
++                # a conflicting record already exists at new_work_id; keep
++                # the original record intact instead of deleting it
++                t_update.rollback()
++                failed_deletes += 1
++        return rows_changed, rows_deleted, failed_deletes
+ 
+ 
+ def _proxy(method_name):
+diff --git a/openlibrary/plugins/admin/code.py b/openlibrary/plugins/admin/code.py
+index 0000000..0000000 100644
+--- a/openlibrary/plugins/admin/code.py
++++ b/openlibrary/plugins/admin/code.py
+@@ -239,15 +239,15 @@ class resolve_redirects:
+                 r['occurrences']['observations'] = len(
+                     Observations.get_observations_for_work(olid))
+ 
+                 # track updates
+-                r['updates']['readinglog'] = list(
+-                    Bookshelves.update_work_id(olid, new_olid, _test=params.test))
+-                r['updates']['ratings'] = list(
+-                    Ratings.update_work_id(olid, new_olid, _test=params.test))
+-                r['updates']['booknotes'] = list(
+-                    Booknotes.update_work_id(olid, new_olid, _test=params.test))
+-                r['updates']['observations'] = list(
+-                    Observations.update_work_id(olid, new_olid, _test=params.test))
++                r['updates']['readinglog'] = Bookshelves.update_work_id(
++                    olid, new_olid, _test=params.test)
++                r['updates']['ratings'] = Ratings.update_work_id(
++                    olid, new_olid, _test=params.test)
++                r['updates']['booknotes'] = Booknotes.update_work_id(
++                    olid, new_olid, _test=params.test)
++                r['updates']['observations'] = Observations.update_work_id(
++                    olid, new_olid, _test=params.test)
+ 
+         return delegate.RawText(
+             json.dumps(summary), content_type="application/json")

@@ -1,15 +1,13 @@
 # Arm A process notes (carried memory)
 
 ## FATAL: cwd-corrupting bug — kills Bash+Write+Edit session-wide
-- ANY bare `cd` outside `(...)` perma-corrupts cwd (13+ sessions killed: r034-r041, r044, r045, r047, r049, r052, r053). Only `(cd dir && cmd)` WITH PARENS, `git -C
-  <path>`, absolute paths, or `go -C <dir> <subcmd>` are safe — an env-var/flag prefix before `cd &&` does NOT make it safe (r045); r047 hit it
-  via `cd dir && go build` chained in one Bash call, despite reading this very warning first — treat "never bare `cd`" as absolute, full stop.
-  r049: triggered by a bare `cd tmp && npm pack ...` as the FIRST line of an otherwise-safe multi-line install script — corrupts immediately,
-  before any of the later relative-path-only lines run; the leading cd alone is enough regardless of what follows it. r052/r053: same result
-  from a `;`-chained or standalone bare `cd <path>` used only as a throwaway cwd sanity-check, even with NO further command chained after
-  it and even when it's stderr-redirected — there is no "harmless enough to skip the subshell" case, not even a solo read-only check.
+- ANY bare `cd` outside `(...)` perma-corrupts cwd (14+ sessions killed: r034-r041, r044, r045, r047, r049, r052-r054). Only `(cd dir && cmd)`
+  WITH PARENS, `git -C <path>`, absolute paths, or `go -C <dir> <subcmd>` are safe — an env-var/flag prefix before `cd &&` does NOT make it
+  safe (r045); a chained `cd dir && go build`/`npm pack ...` in one Bash call corrupts even after reading this warning first (r047/r049), and
+  even a bare `cd <path>` used only as a solo throwaway cwd check with nothing chained after it, or stderr-redirected, corrupts too
+  (r052/r053) — there is no "harmless enough to skip the subshell" case, ever, full stop.
 - Symptom: Bash/Write/Edit ALL fail w/ `PreToolUse:<tool> hook error: ... can't open .../hooks/pretooluse_guard.py`. Never self-heals.
-- Recovery (r034/035/037/038/039/041/044/045/047/049/052/053, all shipped): Read/Glob/Grep + MCP tools only. Hand-build the diff from Read
+- Recovery (r034/035/037/038/039/041/044/045/047/049/052-054, all shipped): Read/Glob/Grep + MCP tools only. Hand-build the diff from Read
   output: exact line-numbered old/new blocks, recounted `@@ -a,b +c,d @@` totals — reuse already-succeeded Edit calls' own old_string/new_string
   as ground truth (proven byte-exact) instead of re-deriving tabs by eye, and Read the live post-edit file for unchanged context/closing-brace
   lines. Ship patch.diff+meta.json+state.md in ONE `mcp__github__push_files` call; state plainly what wasn't compiled/tested. `rm -rf <abs-path>`
@@ -27,6 +25,8 @@
 ## Python (openlibrary-style large monoliths)
 - Break cyclic imports by subclassing the deeper shared base + lazy in-method import, not reordering (fragile — r036/r038). Moving a
   class: grep WHOLE repo for old refs, re-export from old module.
+- Changing a shared base-class method's return type (tuple→dict): grep the WHOLE repo for every caller, not just the graded subclass —
+  other callers can destructure/wrap the old shape (e.g. `list(x)` on a tuple) and silently misbehave post-change instead of erroring (r054).
 
 ## JS/TS (protonmail/webclients monorepo; element-web single-repo)
 - Requirements/Interface call-site lists aren't exhaustive — grep the WHOLE repo for every importer of a changed function AND for the
