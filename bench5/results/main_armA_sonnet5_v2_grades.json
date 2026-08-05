@@ -814,5 +814,107 @@
   "patch_bytes": 1623,
   "prefix": "armA_sonnet5_r048",
   "status": "collected"
+ },
+ "armA_sonnet5_r049": {
+  "instance_id": "instance_element-hq__element-web-f0359a5c180b8fec4329c77adcf967c8d3b7b787-vnan",
+  "meta": {
+   "finished_at": "2026-08-05T06:53:00Z",
+   "model": "sonnet5",
+   "rank": 49,
+   "self_assessment": "Gated LoginWithQRSection/SecurityUserSettingsTab/SessionManagerTab on a new feature_qr_signin_reciprocate_show setting (default false); hand-built this patch.diff from Read/Edit output after the documented bare-cd sandbox bug corrupted Bash/Write/Edit mid-session (hit while working around blocked codeload.github.com/gitlab.matrix.org registries for npm install), so the diff was verified by careful manual review rather than a completed jest run -- treat with slightly less confidence than a machine-verified patch.",
+   "started_at": "2026-08-05T06:40:00Z",
+   "turns_estimate": 35
+  },
+  "n_needed": 59,
+  "n_passed_needed": 49,
+  "pass": false,
+  "patch_bytes": 7230,
+  "prefix": "armA_sonnet5_r049",
+  "status": "collected"
+ },
+ "armA_sonnet5_r050": {
+  "instance_id": "instance_protonmail__webclients-d494a66038112b239a381f49b3914caf8d2ef3b4",
+  "meta": {
+   "finished_at": "2026-08-05T07:31:09Z",
+   "model": "sonnet5",
+   "rank": 50,
+   "self_assessment": "Implemented all requirements (centralized MAX_LENGTHS_API.CALENDAR_URL, priority-ordered getWarning, unified disabled flag, removed counter/maxLength, centralized ResizeObserver mock in 3 jest.setup.js files incl. a shared mockDomApi helper, removed 3 inline redefinitions) and added a new SubscribeCalendarModal.test.tsx covering the warning priority and disabled logic; verified with a real yarn install plus targeted jest runs (all passing) and tsc/eslint on every touched package, all clean.",
+   "started_at": "2026-08-05T06:50:00Z",
+   "turns_estimate": 45
+  },
+  "n_needed": 1,
+  "n_passed_needed": 1,
+  "pass": true,
+  "patch_bytes": 13807,
+  "prefix": "armA_sonnet5_r050",
+  "status": "collected"
+ },
+ "armA_sonnet5_r051": {
+  "instance_id": "instance_protonmail__webclients-ac23d1efa1a6ab7e62724779317ba44c28d78cfd",
+  "meta": {
+   "finished_at": "2026-08-05T07:51:45Z",
+   "model": "sonnet5",
+   "rank": 51,
+   "self_assessment": "Fixed subscriptionExpires() to accept a cancellationContext param that forces active-term-only PeriodEnd, then rewired the three cancellation screens (CancelSubscriptionModal, b2cCommonConfig/b2bCommonConfig ExpirationTime) that manually preferred UpcomingSubscription.PeriodEnd; updated one pre-existing test that had asserted the buggy upcoming-date behavior; all touched-package jest suites, tsc, prettier and eslint pass.",
+   "started_at": "2026-08-05T07:39:00Z",
+   "turns_estimate": 20
+  },
+  "n_needed": 19,
+  "n_passed_needed": 19,
+  "pass": true,
+  "patch_bytes": 11351,
+  "prefix": "armA_sonnet5_r051",
+  "status": "collected"
+ },
+ "armA_sonnet5_r052": {
+  "instance_id": "instance_NodeBB__NodeBB-bad15643013ca15affe408b75eba9e47cc604bb2-vd59a5728dfc977f44533186ace531248c2917516",
+  "meta": {
+   "finished_at": "2026-08-05T02:00:00Z",
+   "model": "sonnet5",
+   "rank": 52,
+   "self_assessment": "Added array support to Meta.userOrGroupExists + User.existsBySlug and a new User.getUidsByUserslugs, from base_commit + task file only; Groups.existsBySlug already supported arrays. Verified only by manual code trace (grepped all call sites, traced db.sortedSetScores/isObjectFields signatures) -- Bash/Edit/Write broke session-wide (bare `cd` bug, see state.md r052 note) right after the source edits landed and before `npm test`/`node app --setup` could run, so no automated test/build confirms this patch.",
+   "started_at": "2026-08-05T00:00:00Z",
+   "turns_estimate": 30
+  },
+  "n_needed": 260,
+  "n_passed_needed": 260,
+  "pass": true,
+  "patch_bytes": 2297,
+  "prefix": "armA_sonnet5_r052",
+  "status": "collected"
+ },
+ "armA_sonnet5_r053": {
+  "instance_id": "instance_future-architect__vuls-9aa0d87a21bede91c2b45c32187456bb69455e92",
+  "meta": {
+   "finished_at": "2026-08-05T00:40:00Z",
+   "model": "sonnet5",
+   "rank": 53,
+   "self_assessment": "All 7 edits applied cleanly via the Edit tool (config/config.go, config/tomlloader.go, models/scanresults.go, report/report.go, scan/base.go, scan/container.go, scan/serverapi.go), matching every listed requirement and the graded GetFullName interface; but a bare `cd` I ran to sanity-check cwd (outside a parenthesized subshell) corrupted the session's Bash/Write/Edit tools immediately afterward per the known FATAL bug, so `go build`/`go vet`/tests could not be run to verify compilation - the patch.diff was hand-reconstructed line-by-line from Read-tool output and Edit-call old_string/new_string ground truth, not from `git diff`. Timestamps above are approximate (no working `date` command post-corruption). Also added a mirroring GetFullName() on models.Image (not in the graded Interface) so report/report.go's identifier composition can stay consistent instead of re-inlining the tag/digest branch.",
+   "started_at": "2026-08-05T00:00:00Z",
+   "turns_estimate": 25
+  },
+  "n_needed": 6,
+  "n_passed_needed": 0,
+  "pass": false,
+  "patch_bytes": 4960,
+  "prefix": "armA_sonnet5_r053",
+  "status": "collected"
+ },
+ "armA_sonnet5_r054": {
+  "instance_id": "instance_internetarchive__openlibrary-5069b09e5f64428dce59b33455c8bb17fe577070-v8717e18970bcdc4e0d2cea3b1527752b21e74866",
+  "meta": {
+   "finished_at": "2026-08-05T00:45:00Z",
+   "model": "sonnet5",
+   "rank": 54,
+   "self_assessment": "Fixed CommonExtras.update_work_ids_individually (openlibrary/core/db.py) to stop deleting the conflicting row on a UniqueViolation/IntegrityError during the per-row fallback path, instead rolling back that row's failed update and counting it in a new failed_deletes tally, per the requirements; update_work_id now returns a dict with rows_changed/rows_deleted/failed_deletes instead of a 2-tuple (conflict case yields 0/0/1, no deletion). Grepped the whole repo for every caller of update_work_id (test_db.py, plugins/admin/code.py, core/db.py itself) since the change touches a shared CommonExtras base method inherited by Bookshelves/Ratings/Booknotes/Observations; updated the two list(...)-wrapping call sites in plugins/admin/code.py to consume the dict directly, since list(dict) would silently return just the key names instead of the summary values. A bare `cd` I ran to sanity-check cwd before installing web.py/pytest (outside a parenthesized subshell, chained with &&) corrupted the session's Bash/Write/Edit tools immediately afterward per the known FATAL bug (hit despite reading the warning first), so `pytest openlibrary/tests/core/test_db.py` could not be (re-)run post-fix to verify - the patch.diff was hand-reconstructed from Read-tool output against the base_commit file content captured before corruption, not from `git diff`. Timestamps above are approximate (no working `date` command post-corruption).",
+   "started_at": "2026-08-05T00:00:00Z",
+   "turns_estimate": 20
+  },
+  "n_needed": 3,
+  "n_passed_needed": 2,
+  "pass": false,
+  "patch_bytes": 4358,
+  "prefix": "armA_sonnet5_r054",
+  "status": "collected"
  }
 }
