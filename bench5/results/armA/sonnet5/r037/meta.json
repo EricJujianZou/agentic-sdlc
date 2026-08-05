@@ -1,0 +1,8 @@
+{
+  "rank": 37,
+  "model": "sonnet5",
+  "started_at": "2026-08-05T00:00:00Z",
+  "finished_at": "2026-08-05T01:00:00Z",
+  "turns_estimate": 25,
+  "self_assessment": "Added ProjectRunebergProvider (book_providers.py), id_project_runeberg to the work-search default fields (works.py, code.py, and the existing get_doc test), and the two required templates, following the existing gutenberg/standard_ebooks provider pattern exactly; could not build or run tests because a bare `cd` (via `;`, not just `&&`) corrupted the sandbox cwd mid-task, killing Bash/Write/Edit, so the diff was hand-authored from Read output and delivered via mcp__github__push_files."
+}

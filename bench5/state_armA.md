@@ -3,12 +3,12 @@
 ## FATAL: cwd-corrupting bug — kills Bash+Write+Edit session-wide
 - ANY bare `cd` outside `(...)` perma-corrupts cwd, even single-command forms
   like `cd dir && cmd`, buried mid-command, or after only a read-only follow-
-  up (r034, r035 x3, r028/r033 via subagents). No safe bare `cd`, ever. Only
+  up (r034, r035 x3, r028/r033 via subagents, r037). No safe bare `cd`, ever. Only
   `(cd dir && cmd)` WITH PARENS, `git -C <path>`, or absolute paths are safe.
 - Symptom: Bash/Write/Edit fail with `PreToolUse:<tool> hook error: ... can't
   open file '.../hooks/pretooluse_guard.py'`. cwd rarely self-heals; even
   `pwd` fails once dead, so verify cwd only pre-corruption.
-- Recovery (r034/r035, both fully shipped): Read/Glob/Grep + MCP tools only
+- Recovery (r034/r035/r037, all fully shipped): Read/Glob/Grep + MCP tools only
   — Edit is also dead. Hand-build the unified diff from Read output (exact
   line-numbered old blocks, hand-authored new blocks, count line totals for
   `@@ -a,b +c,d @@`, unchanged lines as context not remove+add). Ship
