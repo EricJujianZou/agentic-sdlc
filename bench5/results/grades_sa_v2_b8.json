@@ -1,0 +1,104 @@
+{
+ "armA_sonnet5_r055": {
+  "pass": true,
+  "n_needed": 175,
+  "n_passed_needed": 175,
+  "status": "collected",
+  "instance_id": "instance_element-hq__element-web-f3534b42df3dcfe36dc48bddbf14034085af6d30-vnan",
+  "prefix": "armA_sonnet5_r055",
+  "meta": {
+   "rank": 55,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T00:00:00Z",
+   "finished_at": "2026-08-05T00:35:00Z",
+   "turns_estimate": 22,
+   "self_assessment": "In src/TextForEvent.tsx's textForMemberEvent (join/prevjoin branch), added a new leading condition ahead of the existing display-name-changed branch: when prevContent.displayname and content.displayname are both present and differ AND prevContent.avatar_url !== content.avatar_url, emit the single new translatable string '%(oldDisplayName)s changed their display name and profile picture' (oldDisplayName stripped of direction-override chars via removeDirectionOverrideChars, same as the sibling branch) instead of falling into the display-name-only message; all six pre-existing display-name-only and avatar-only branches are untouched/unreached-only-when-both-change, preserving their exact literals. Added the new key to src/i18n/strings/en_EN.json at the position matching its new call site (this file's key order mirrors _t() extraction order from source, not alphabetical, confirmed by the existing surrounding entries) with no other locale files touched, and introduced no additional combined-case variants per the requirement. A bare `cd ... ; true` sanity-check (no chain after it, stderr not even redirected into a pipe that mattered) run outside a parenthesized subshell corrupted the session's Bash/Write/Edit tools immediately afterward, per the documented FATAL bug - this happened AFTER both source edits were already applied and Read-verified, but BEFORE `git diff`/yarn/jest could be run, so patch.diff was hand-reconstructed from Read-tool output against the base_commit content captured pre-edit (recorded above) rather than from `git diff`, and the change could not be compiled, linted, or test-run to verify (`yarn install` also independently fails pre-corruption on this repo: codeload.github.com 403s the matrix-js-sdk git dependency, a known element-web issue). Verified only by manual trace against the requirement's stated cases and by mirroring the file's existing sibling-branch style/idiom exactly. Timestamps above are approximate (no working `date` command available at any point in this session)."
+  },
+  "patch_bytes": 3346
+ },
+ "armA_sonnet5_r056": {
+  "pass": true,
+  "n_needed": 7,
+  "n_passed_needed": 7,
+  "status": "collected",
+  "instance_id": "instance_gravitational__teleport-ad41b3c15414b28a6cec8c25424a19bfa7abd0e9-vee9b09fb20c43af7e520f57e9239bbcf46b7113d",
+  "prefix": "armA_sonnet5_r056",
+  "meta": {
+   "rank": 56,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T10:05:00Z",
+   "finished_at": "2026-08-05T10:22:12Z",
+   "turns_estimate": 25,
+   "self_assessment": "Added GetTeleportVersion(a *AppV3) and moved tsh's private makeTableWithTruncatedColumn into lib/asciitable as exported MakeTableWithTruncatedColumn (dedup'd tsh call sites), then applied it to tctl collection.go's Labels-bearing resource tables (servers/apps/databases/desktops/kube) for ls consistency; go build/vet/test green for lib/asciitable, api/types, tool/tctl, and targeted tool/tsh tests (TestProxySSHDial fails but is an unrelated pre-existing network-dial flake in the sandbox, not touched by this diff)."
+  },
+  "patch_bytes": 15880
+ },
+ "armA_sonnet5_r057": {
+  "pass": true,
+  "n_needed": 6,
+  "n_passed_needed": 6,
+  "status": "collected",
+  "instance_id": "instance_internetarchive__openlibrary-1be7de788a444f6255e89c10ef6aa608550604a8-v29f82c9cf21d57b242f8d8b0e541525d259e2d63",
+  "prefix": "armA_sonnet5_r057",
+  "meta": {
+   "rank": 57,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T10:30:00Z",
+   "finished_at": "2026-08-05T10:52:00Z",
+   "turns_estimate": 1,
+   "self_assessment": "Root cause was match.py omitting number_of_pages when building the comparison record from an existing edition Thing (verified with a throwaway debug test, deleted before diffing); added the three merge_marc.py functions (add_db_name, expand_record, threshold_match) per the interface spec, made editions_match tolerant of both raw and pre-expanded input, moved add_db_name/expand_record into merge_marc.py with utils/__init__.py re-exporting for backward compat, and confirmed via the full openlibrary/catalog test suite (225 passed, 1 skipped, 1 xfail unrelated) plus ruff."
+  },
+  "patch_bytes": 8069
+ },
+ "armA_sonnet5_r058": {
+  "pass": false,
+  "n_needed": 58,
+  "n_passed_needed": 55,
+  "status": "collected",
+  "instance_id": "instance_ansible__ansible-d30fc6c0b359f631130b0e979d9a78a7b3747d48-v1055803c3a812189a1133297f7f5468579283f86",
+  "prefix": "armA_sonnet5_r058",
+  "meta": {
+   "rank": 58,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T00:00:00Z",
+   "finished_at": "2026-08-05T02:00:00Z",
+   "turns_estimate": 1,
+   "self_assessment": "Fixed by making _build_collection_tar write SYMTYPE tar entries (correct relative linkname via os.path.relpath) for symlinks whose realpath resolves inside the collection root (checked via new _is_child_path helper), leaving external-target symlinks as copied regular files; made _walk record but not recurse into symlinked directories; made _tarfile_extract/_get_tar_file_member yield (TarInfo, stream) tuples; added _extract_tar_dir and made _extract_tar_file recreate symlinks (guarded by _is_child_path against a malicious linkname escaping the destination) instead of always copying content, used from install_artifact. Verified with the repo's own test/units/galaxy/test_collection.py (updated 2 pre-existing tests that asserted the old buggy expand-symlink behavior, plus the _get_tar_file_member tuple-return test) - all 59 tests passed in a local venv (pytest, PYTHONPATH=lib:test) BEFORE a bare `cd ... &&` in a later Bash call (checking test output, unrelated to the fix) corrupted this session's cwd per the known hazard, after which patch.diff was hand-reconstructed from Read output of the already-edited, already-tested file plus my saved pre-edit Read snapshots (git/Bash/Write/Edit all unavailable for the rest of the session) - line numbers were cross-checked hunk-by-hunk against fresh Read calls on the live edited file, but the diff itself could not be git-apply-tested end-to-end."
+  },
+  "patch_bytes": 17343
+ },
+ "armA_sonnet5_r059": {
+  "pass": true,
+  "n_needed": 198,
+  "n_passed_needed": 198,
+  "status": "collected",
+  "instance_id": "instance_NodeBB__NodeBB-97c8569a798075c50e93e585ac741ab55cb7c28b-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+  "prefix": "armA_sonnet5_r059",
+  "meta": {
+   "rank": 59,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T11:20:00Z",
+   "finished_at": "2026-08-05T11:45:00Z",
+   "turns_estimate": 1,
+   "self_assessment": "Added User.hidePrivateData(userData, callerUID) to src/user/data.js (operates on a spread copy, never mutates the original; compares uids via parseInt for reliability; skips filtering for self/admin/global-moderator; otherwise blanks email when !showemail || meta.config.hideEmail and fullname when !showfullname || meta.config.hideFullname) and wired it into the GET /api/v3/users/:uid controller (src/controllers/write/users.js) so the response is filtered with req.uid as caller. No package.json/node_modules exist at base_commit so the repo's own mocha suite couldn't run; verified instead with a standalone harness that stubs data.js's external deps (validator/nconf/lodash/db/meta/plugins/utils) via a Module._load hook and requires the real edited file, exercising self/admin/global-mod/regular-user/guest callers crossed with per-user and global privacy settings (8 scenarios, all passed) plus a copy-not-mutate check."
+  },
+  "patch_bytes": 1600
+ },
+ "armA_sonnet5_r060": {
+  "pass": true,
+  "n_needed": 182,
+  "n_passed_needed": 182,
+  "status": "collected",
+  "instance_id": "instance_qutebrowser__qutebrowser-cc360cd4a34a126274c7b51f3b63afbaf3e05a02-v5fc38aaf22415ab0b70567368332beee7955b367",
+  "prefix": "armA_sonnet5_r060",
+  "meta": {
+   "rank": 60,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T12:05:00Z",
+   "finished_at": "2026-08-05T12:24:35Z",
+   "turns_estimate": 22,
+   "self_assessment": "Rewrote parse_duration to raise ValueError (message contains 'Invalid duration') for malformed/negative input, support fractional h/m/s and whitespace between components, and treat plain digit strings as milliseconds directly per the Requirements section; updated the sole caller (later() in utilcmds.py) to catch ValueError instead of checking ms<0, and updated the pre-existing base_commit parametrized test to match (old rows asserting -1 conflicted with the new spec, so were split into a separate raises-ValueError test); verified behavior for all listed and edge cases by directly importing the real edited qutebrowser.utils.utils module (full pytest run was blocked by base_commit's pinned test plugins - py/pytest-qt/pytest-icdiff/pytest-clarity - being incompatible with the only available Python 3.10-3.13 interpreters, unrelated to this fix)."
+  },
+  "patch_bytes": 3933
+ }
+}
