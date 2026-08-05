@@ -223,3 +223,5 @@ observability/runs/
 prd.json 
 # keep on giving me merge conflicts.
 
+# bench5 protocol: per-instance scratch clones of task repos (never committed)
+bench5/workspaces/
