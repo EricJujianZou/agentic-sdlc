@@ -1,0 +1,8 @@
+{
+  "rank": 57,
+  "model": "sonnet5",
+  "started_at": "2026-08-05T10:30:00Z",
+  "finished_at": "2026-08-05T10:52:00Z",
+  "turns_estimate": 1,
+  "self_assessment": "Root cause was match.py omitting number_of_pages when building the comparison record from an existing edition Thing (verified with a throwaway debug test, deleted before diffing); added the three merge_marc.py functions (add_db_name, expand_record, threshold_match) per the interface spec, made editions_match tolerant of both raw and pre-expanded input, moved add_db_name/expand_record into merge_marc.py with utils/__init__.py re-exporting for backward compat, and confirmed via the full openlibrary/catalog test suite (225 passed, 1 skipped, 1 xfail unrelated) plus ruff."
+}
