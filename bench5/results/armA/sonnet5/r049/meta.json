@@ -1,0 +1,8 @@
+{
+  "rank": 49,
+  "model": "sonnet5",
+  "started_at": "2026-08-05T06:40:00Z",
+  "finished_at": "2026-08-05T06:53:00Z",
+  "turns_estimate": 35,
+  "self_assessment": "Gated LoginWithQRSection/SecurityUserSettingsTab/SessionManagerTab on a new feature_qr_signin_reciprocate_show setting (default false); hand-built this patch.diff from Read/Edit output after the documented bare-cd sandbox bug corrupted Bash/Write/Edit mid-session (hit while working around blocked codeload.github.com/gitlab.matrix.org registries for npm install), so the diff was verified by careful manual review rather than a completed jest run -- treat with slightly less confidence than a machine-verified patch."
+}

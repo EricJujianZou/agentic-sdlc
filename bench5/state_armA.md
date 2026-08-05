@@ -1,11 +1,13 @@
 # Arm A process notes (carried memory)
 
 ## FATAL: cwd-corrupting bug — kills Bash+Write+Edit session-wide
-- ANY bare `cd` outside `(...)` perma-corrupts cwd (9+ sessions killed: r034-r041, r044, r045, r047). Only `(cd dir && cmd)` WITH PARENS, `git -C
+- ANY bare `cd` outside `(...)` perma-corrupts cwd (10+ sessions killed: r034-r041, r044, r045, r047, r049). Only `(cd dir && cmd)` WITH PARENS, `git -C
   <path>`, absolute paths, or `go -C <dir> <subcmd>` are safe — an env-var/flag prefix before `cd &&` does NOT make it safe (r045); r047 hit it
   via `cd dir && go build` chained in one Bash call, despite reading this very warning first — treat "never bare `cd`" as absolute, full stop.
-  Symptom: Bash/Write/Edit ALL fail w/ `PreToolUse:<tool> hook error: ... can't open .../hooks/pretooluse_guard.py`. Never self-heals.
-- Recovery (r034/035/037/038/039/041/044/045/047, all shipped): Read/Glob/Grep + MCP tools only. Hand-build the diff from Read output: exact
+  r049: triggered by a bare `cd tmp && npm pack ...` as the FIRST line of an otherwise-safe multi-line install script — corrupts immediately,
+  before any of the later relative-path-only lines run; the leading cd alone is enough regardless of what follows it.
+- Symptom: Bash/Write/Edit ALL fail w/ `PreToolUse:<tool> hook error: ... can't open .../hooks/pretooluse_guard.py`. Never self-heals.
+- Recovery (r034/035/037/038/039/041/044/045/047/049, all shipped): Read/Glob/Grep + MCP tools only. Hand-build the diff from Read output: exact
   line-numbered old/new blocks, recounted `@@ -a,b +c,d @@` totals — reuse already-succeeded Edit calls' own old_string/new_string as ground
   truth (proven byte-exact) instead of re-deriving tabs by eye, and Read the live post-edit file for unchanged context/closing-brace lines.
   Ship patch.diff+meta.json+state.md in ONE `mcp__github__push_files` call; state plainly what wasn't compiled/tested. `rm -rf <abs-path>`
@@ -27,6 +29,14 @@
 ## JS/TS (protonmail/webclients monorepo; element-web single-repo)
 - Requirements/Interface call-site lists aren't exhaustive — grep the WHOLE repo for every importer of a changed function (r039: 5 listed
   + 1 unlisted file used it too). New hook: grep sibling hooks for the established idiom and reuse it, don't hand-roll (r043).
+- element-web: BOTH `yarn install` and `npm install` 403 on `codeload.github.com` for the git-pinned `matrix-js-sdk` dep, and
+  `npm install` separately 403s on `gitlab.matrix.org` for the `@matrix-org/olm` tarball devDependency (r049). If you need a real
+  install to run jest: drop the olm devDependency line, `git clone --depth 1 <sha>` matrix-js-sdk yourself (plain git to github.com
+  works), point `matrix-js-sdk` at `file:../<clone>` to install, then COPY (not symlink) the resolved `node_modules/matrix-js-sdk`
+  in place — npm's `file:` symlink lives outside `node_modules` and breaks Jest's upward module-resolution walk for its own
+  transitive deps. Backfill matrix-js-sdk's own missing deps (unhomoglyph, bs58, p-retry, etc.) via `npm pack <name>@<exact-semver>`
+  from the (unblocked) npm registry into a scratch dir, then extract by hand. Revert package.json/lock before diffing regardless —
+  none of this install scaffolding belongs in the patch.
 
 ## Go (future-architect/vuls; gravitational/teleport; flipt-io/flipt)
 - Score+SortOrder: sort-by-score → Score PRIMARY, SortOrder tiebreak (keeps old tie-based tests, r041). Can't add methods to a
