@@ -28,19 +28,17 @@
 
 ## JS/TS (protonmail/webclients monorepo; element-web single-repo)
 - Requirements/Interface call-site lists aren't exhaustive — grep the WHOLE repo for every importer of a changed function (r039: 5 listed
-  + 1 unlisted file used it too). New hook: grep sibling hooks for the established idiom and reuse it, don't hand-roll (r043).
-- webclients (yarn 3.2.0 berry): `(cd bench5/workspaces/task && node .yarn/releases/yarn-3.2.0.cjs install --mode=skip-build)` just works,
-  ~2min, no codeload 403 (r050). Each package/app has its own jest.config+jest.setup (no shared root) — run scoped per-package, e.g.
-  `(cd packages/components && node ../../.yarn/releases/yarn-3.2.0.cjs jest <path>)`, likewise `run check-types`/`eslint <path> --quiet`.
-  `install` rewrites yarn.lock even for a no-op — `git checkout -- yarn.lock` before diffing (r050).
-- element-web: BOTH `yarn install` and `npm install` 403 on `codeload.github.com` for the git-pinned `matrix-js-sdk` dep, and
-  `npm install` separately 403s on `gitlab.matrix.org` for the `@matrix-org/olm` tarball devDependency (r049). If you need a real
-  install to run jest: drop the olm devDependency line, `git clone --depth 1 <sha>` matrix-js-sdk yourself (plain git to github.com
-  works), point `matrix-js-sdk` at `file:../<clone>` to install, then COPY (not symlink) the resolved `node_modules/matrix-js-sdk`
-  in place — npm's `file:` symlink lives outside `node_modules` and breaks Jest's upward module-resolution walk for its own
-  transitive deps. Backfill matrix-js-sdk's own missing deps (unhomoglyph, bs58, p-retry, etc.) via `npm pack <name>@<exact-semver>`
-  from the (unblocked) npm registry into a scratch dir, then extract by hand. Revert package.json/lock before diffing regardless —
-  none of this install scaffolding belongs in the patch.
+  + 1 unlisted file used it too), AND for the raw buggy expression itself, not just a named helper's call sites — the same bug can be
+  hand-duplicated inline at several unrelated components instead of centralized in one helper (r051: 3 files, 1 named helper + 2 others,
+  all had `UpcomingSubscription ?? subscription`/`?.PeriodEnd ??` inlined). Reuse sibling hooks' established idiom, don't hand-roll (r043).
+- webclients (yarn berry; `.yarn/releases/yarn-*.cjs` version varies by base commit, 3.2.0 and 4.6.0 both seen): `(cd bench5/workspaces/task && node .yarn/releases/yarn-<ver>.cjs install --mode=skip-build)` works, ~1-2min, no codeload 403 (r050); this leaves native
+  addons unbuilt, so `canvas` (jest-environment-jsdom dep) fails every jsdom suite with `Cannot find module '.../canvas.node'` — fix via `apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev pkg-config` (librsvg2-dev 404s on a gdk-pixbuf mirror pkg,
+  skip it, not needed) then `(cd node_modules/canvas && npx --yes node-gyp rebuild)` (r051). Each package/app has its own jest.config — run scoped per-package, e.g. `(cd packages/components && node ../../.yarn/releases/yarn-<ver>.cjs jest <path>)`, same for `run
+  check-types`/`eslint <path> --quiet`/`prettier --check <path>` (prettier reflows multi-line overload signatures — run `--write`, r051). `install` rewrites yarn.lock even for a no-op — `git checkout -- yarn.lock` first (r050).
+- element-web: yarn/npm installs 403 on `codeload.github.com` (matrix-js-sdk git dep) and `gitlab.matrix.org` (@matrix-org/olm tarball,
+  r049). Fix: drop the olm devDependency, `git clone --depth 1 <sha>` matrix-js-sdk yourself, point at `file:../<clone>`, then COPY (not
+  symlink) the resolved `node_modules/matrix-js-sdk` in — npm's `file:` symlink breaks Jest's upward resolution for its transitive deps
+  (unhomoglyph, bs58, p-retry — `npm pack <name>@<semver>` + extract by hand). Revert package.json/lock before diffing.
 
 ## Go (future-architect/vuls; gravitational/teleport; flipt-io/flipt)
 - Score+SortOrder: sort-by-score → Score PRIMARY, SortOrder tiebreak (keeps old tie-based tests, r041). Can't add methods to a
@@ -48,12 +46,12 @@
   when adding a count (r042); `go build ./...` catches misses. Extend a per-provider switch (r045) by adding a sibling case, untouched.
 - Adding fields to a struct mirroring a proto message: check `rpc/*.pb.go` FIRST — the field (+ `GetXxx()`/enum `.String()`)
   often already exists at base_commit; mirror the repo's existing join/sanitize idiom, don't invent one (r046). EOL/KB literal-sync data
-  tasks (r047): a worked example given in the task text (one exact revision<->KB pair) anchors the rest of that build's KB sequence —
-  trust it over free recall; note in meta.json when `go build` couldn't be run to verify (e.g. after a cwd-corrupting mistake).
-- EOL-date requirements with NO worked example/anchor in the task text (r048, vuls): don't fabricate exact calendar days with false
-  confidence — derive from the vendor's stated *policy* (e.g. "N years standard + M years extended, new major every K years") applied
-  to the release's own GA year, keep it internally consistent across the requested versions, and say plainly in self_assessment that
-  day-level precision is a good-faith estimate, not sourced (sourcing it would violate rule 4 anyway).
+  tasks (r047): a worked example in the task text (one exact revision<->KB pair) anchors the rest of that build's KB sequence — trust
+  it over free recall; note in meta.json when `go build` couldn't be run to verify (e.g. after a cwd-corrupting mistake).
+- EOL-date requirements with NO worked example/anchor (r048, vuls): don't fabricate exact calendar days with false confidence — derive
+  from the vendor's stated *policy* (e.g. "N years standard + M years extended, new major every K years") applied to the release's own
+  GA year, stay internally consistent across requested versions, and say plainly in self_assessment it's a good-faith estimate, not
+  sourced (sourcing it would violate rule 4 anyway).
 
 ## Node.js (NodeBB-style)
 - Root `package.json` is `/package.json`-gitignored; CI does `cp install/package.json package.json` first, then `npm install` (~1200
