@@ -592,3 +592,80 @@ ranks land):
   These interim grades will be re-verified against final branch state
   (blob hashes) in the post-run audit, since one session (r010) has
   already amended a pushed patch once.
+
+## 2026-08-05 — SA-v2 COMPLETE, AUDITED, ANALYZED (seed 20260803)
+
+**Run:** 60/60 delivered on `bench5/armA-sonnet5-v2` (launch 2026-08-03
+23:09 UTC → final push 2026-08-05 ~12:20 UTC, ~37h wall on the 30-min
+dual-trigger cadence). Both v2 triggers disabled after completion. All
+60 grades genuine (parsed test lists; the one `no output.json`
+infra-fail, r018, was re-run to a genuine grade; zero infra-fails
+counted). Grading was incremental in 8 batches; every graded patch
+byte-verified against final branch state (the two mid-run patch
+amendments, r010/r022, predated their grading).
+
+**Mandatory audit (RERUN-SA-HANDOFF step 4):**
+- Detection grep (review-note pattern) over all 60 metas: **0 flags**.
+  Broader keyword scan: 1 hit (r018) — compliance language ("no hidden
+  tests or upstream fix were consulted"), adjudicated false positive.
+- Fix-SHA sweep of the entire final branch tree: zero matches.
+- Final `state_armA.md` read end to end: process lessons only, no
+  provenance content; explicitly reasons INSIDE the rule several times.
+- Gold-overlap screen (>80% of gold added-lines present in submission):
+  9 ranks flagged {r001 .96, r013 1.0, r016 .93, r027 .95, r034 .94,
+  r036 .87, r038 .87, r044 .81, r053 .85}. Similarity-only — no meta
+  describes retrieval, and 4 of the 9 FAILED grading (copying gold
+  passes), consistent with honest convergence on requirement texts that
+  enumerate the change. Per the handoff's escalation rule these are
+  compiled for OWNER adjudication, not self-cleared; the v2 numbers
+  below are provisional pending that ruling.
+
+**Environment confound, quantified (must be reported with the result):**
+the cwd/hook trap plagued arm A the whole run (state file lists ~15+
+killed sessions through r058). Later bricked sessions learned to
+deliver anyway via GitHub MCP file-pushes, hand-building diffs from
+Read output — i.e. WITHOUT executable verification. Meta
+self-assessments (honest throughout — an H4 data point in scaffolding's
+favor) identify ~13 results delivered under handicap (hook-brick or
+env-blocked verification: r010,11,14,15,19,22,23,26,28,31,34,43,47):
+3/13 pass (23%) vs 26/47 (55.3%) among clean deliveries. The trap hits
+arm A asymmetrically (60 fresh sessions = 60 chances to trip; arm B's
+one session never tripped). Even the clean-delivery subset sits ~25pp
+below SB, so the negative effect is not explained by the trap — but the
+point estimate below overstates it by some share. PR #111 (unmerged
+during the run) remains the engine-side fix.
+
+**Pre-registered v2 analysis (`tools/analyze_main_v2.py`, seed
+20260803; full matrix `results/main_matrix_v2.json`):**
+
+| cell | pass | rate |
+|------|------|------|
+| SA-original | 58/60 | **disqualified (answer-key retrieval)** |
+| SA-v2 (sonnet, scaffolded) | 29/60 | 48.3% |
+| OA (opus, scaffolded) | 59/60 | 98.3% |
+| SB (sonnet, bare cont.) | 48/60 | 80.0% |
+| OB (opus, bare cont.) | 52/60 | 86.7% |
+
+- **Sonnet scaffolding effect: −31.7pp**, McNemar A-only 4 vs B-only
+  23, exact **p = 0.0003** — significant, NEGATIVE.
+- **Opus scaffolding effect: +11.7pp**, 8 vs 1, p = 0.0391 (unchanged).
+- **Interaction (ΔSonnet − ΔOpus): −43.3pp, bootstrap 95% CI
+  [−61.7, −25.0]** — significant, OPPOSITE of the pre-registered H1
+  direction.
+- Low-probe subset (n=21): SA-v2 9/21, sonnet McNemar p = 0.0215,
+  interaction −47.6pp CI [−85.7, −9.5] — the reversal is not a
+  memorization artifact.
+- Process: SA-v2 median 35.0m/instance in-session (vs original-SA
+  20.0m — honest work is slower than retrieval; SB 9.4m).
+
+**Verdict vs pre-registration:** H1 is now answered with the opposite
+sign: on this hardest-stratum battery, fresh-session scaffolding HELPED
+the frontier model (+11.7pp, significant) and HURT the smaller model
+(−31.7pp, significant); H2 (SA > SB) is rejected in reverse. The
+original run's sonnet "scaffolding gain" was an artifact of answer-key
+retrieval. Honest caveats: (a) the cwd-trap handicap inflates the
+negative magnitude by some share (clean-subset gap ~−25pp); (b) 9
+similarity flags await owner adjudication; (c) one cell of one round —
+treatment-specific (60-line carried state, fresh sessions), not a
+general claim about all scaffolding. H4 note: v2 metas disclosed their
+handicaps plainly; no fabrication found in the scaffolded cell.
