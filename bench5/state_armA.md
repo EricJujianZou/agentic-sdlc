@@ -24,9 +24,8 @@
 
 ## Python (openlibrary-style large monoliths)
 - Break cyclic imports by subclassing the deeper shared base + lazy in-method import, not reordering (fragile — r036/r038). Moving a
-  class: grep WHOLE repo for old refs, re-export from old module.
-- Changing a shared base-class method's return type (tuple→dict): grep the WHOLE repo for every caller, not just the graded subclass —
-  other callers can destructure/wrap the old shape (e.g. `list(x)` on a tuple) and silently misbehave post-change instead of erroring (r054).
+  class: grep WHOLE repo for old refs, re-export from old module. Changing a shared base-class method's return type (tuple→dict): grep
+  the WHOLE repo for every caller — others can destructure/wrap the old shape and silently misbehave instead of erroring (r054).
 
 ## JS/TS (protonmail/webclients monorepo; element-web single-repo)
 - Requirements/Interface call-site lists aren't exhaustive — grep the WHOLE repo for every importer of a changed function AND for the
@@ -48,13 +47,14 @@
 - Adding fields to a struct mirroring a proto message: check `rpc/*.pb.go` FIRST — the field (+ `GetXxx()`/enum `.String()`)
   often already exists at base_commit; mirror the repo's existing join/sanitize idiom, don't invent one (r046). EOL/KB literal-sync data
   tasks (r047): trust one exact worked example in the task text over free recall; note in meta.json when `go build` couldn't run to verify.
-- EOL-date requirements with NO worked example/anchor (r048, vuls): derive from the vendor's stated *policy* (years standard/extended,
-  new major cadence) applied to the release's GA year, stay internally consistent, and say plainly it's a good-faith estimate (sourcing
-  it would violate rule 4 anyway).
-- r053 (vuls): a "downstream consistency" requirement (reporting/logging staying correct for a new alt-identifier field) is a repo-wide
-  grep for the raw old expression (`Name+":"+Tag`-shaped concatenation), not just call sites of the one named interface function — and if
-  two mirror structs exist (config-side + models-side), add the equivalent helper to both even though only one is in the graded Interface.
+- EOL-date reqs with NO worked example (r048, vuls): derive from the vendor's stated *policy* applied to the release's GA year, stay
+  consistent, say plainly it's a good-faith estimate (sourcing it would violate rule 4 anyway).
+- r053 (vuls): "downstream consistency" reqs are a repo-wide grep for the raw old expression, not just the named interface fn's call
+  sites — add the equivalent helper to every mirror struct, even ones outside the graded Interface.
+- r056 (teleport): moving a private helper to an exported package fn (interface names its new home) — grep ALL call sites incl.
+  `_test.go` (a test-only caller breaks once the private fn is deleted); its existing unit test IS the spec for edge cases — move it,
+  don't drop it. Multi-module repo (root+`api/`): `go -C api build ./types/...`, not `go build ./api/...` from root ("not part of module").
 
 ## Node.js (NodeBB-style)
-- Root `package.json` is `/package.json`-gitignored; CI does `cp install/package.json package.json` first, then `npm install` (~1200 pkgs,
-  ~1min). `redis-server` preinstalled (`--daemonize yes --port 6379`); `node app --setup=...` builds assets — run in `(...)` only.
+- Root `package.json` is gitignored; CI does `cp install/package.json package.json` first, then `npm install` (~1200 pkgs, ~1min).
+  `redis-server` preinstalled (`--daemonize yes --port 6379`); `node app --setup=...` builds assets — run in `(...)` only.
