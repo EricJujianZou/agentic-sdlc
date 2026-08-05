@@ -1,0 +1,104 @@
+{
+ "armA_sonnet5_r043": {
+  "pass": false,
+  "n_needed": 217,
+  "n_passed_needed": 180,
+  "status": "collected",
+  "instance_id": "instance_element-hq__element-web-72a8f8f03b1a01bb70ef8a5bb61759416991b32c-vnan",
+  "prefix": "armA_sonnet5_r043",
+  "meta": {
+   "rank": 43,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T03:25:00Z",
+   "finished_at": "2026-08-05T03:44:19Z",
+   "turns_estimate": 18,
+   "self_assessment": "Added src/hooks/useWindowWidth.ts using the repo's existing useEventEmitterState(emitter, eventName, fn) idiom (same pattern as useIsInitialSyncComplete.ts) to read UIStore.instance.windowWidth and update on UI_EVENTS.Resize with automatic listener cleanup on unmount; added a matching renderHook test, but could not run yarn install/jest/tsc because codeload.github.com (matrix-js-sdk git dependency) returned 403 through the proxy, so verification was manual code review against the established pattern rather than an executed test run."
+  },
+  "patch_bytes": 3207
+ },
+ "armA_sonnet5_r044": {
+  "pass": false,
+  "n_needed": 174,
+  "n_passed_needed": 173,
+  "status": "collected",
+  "instance_id": "instance_NodeBB__NodeBB-84e065752f6d7fbe5c08cbf50cb173ffb866b8fa-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e",
+  "prefix": "armA_sonnet5_r044",
+  "meta": {
+   "rank": 44,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T04:05:00Z",
+   "finished_at": "2026-08-05T04:30:00Z",
+   "turns_estimate": 35,
+   "self_assessment": "Rewrote Topics.validateTags to diff tags vs currentTags (loaded via a new tid param on edit, empty on create) into addedTags/removedTags, gating each independently on meta.config.systemTags for non-privileged users (cant-use-system-tag / new cant-remove-system-tag), threaded tid through posts/edit.js's existing call site, and added SocketTopics.canRemoveTag per the interface spec; verified against the repo's existing create-time system-tag tests by hand and via a from-scratch local NodeBB+redis boot (schema/asset build succeeded) but hit the documented cd-corruption bug right after setup finished and before mocha ran, so this patch is unverified by the actual test suite and was hand-assembled from Read output after Bash/Write/Edit broke session-wide."
+  },
+  "patch_bytes": 3505
+ },
+ "armA_sonnet5_r045": {
+  "pass": true,
+  "n_needed": 7,
+  "n_passed_needed": 7,
+  "status": "collected",
+  "instance_id": "instance_gravitational__teleport-59d39dee5a8a66e5b8a18a9085a199d369b1fba8-v626ec2a48416b10a88641359a169d99e935ff037",
+  "prefix": "armA_sonnet5_r045",
+  "meta": {
+   "rank": 45,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T00:00:00Z",
+   "finished_at": "2026-08-05T00:40:00Z",
+   "turns_estimate": 25,
+   "self_assessment": "Added lib/srv/db/ca.go with a CADownloader interface + realDownloader (dataDir-backed), NewRealDownloader, and a getCACert/initCACert pair that caches per-server-name in DataDir, folding in the prior RDS/Redshift logic from aws.go (removed) and adding downloadForCloudSQL via the vendored GCP SQL Admin client with an actionable permission-denied error; a bare `cd &&` mid-task corrupted the sandbox (hook script path broke) before I could run go build/go vet/tests, so this diff was hand-built from Read output of the already-edited files and is UNVERIFIED by compiler or tests."
+  },
+  "patch_bytes": 15411
+ },
+ "armA_sonnet5_r046": {
+  "pass": true,
+  "n_needed": 2,
+  "n_passed_needed": 2,
+  "status": "collected",
+  "instance_id": "instance_flipt-io__flipt-1dceb5edf3fa8f39495b939ef9cc0c3dd38fa17d",
+  "prefix": "armA_sonnet5_r046",
+  "meta": {
+   "rank": 46,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T05:11:00Z",
+   "finished_at": "2026-08-05T05:18:48Z",
+   "turns_estimate": 18,
+   "self_assessment": "Added SegmentOperator/Operator fields to audit Rule/RolloutSegment and joined multi-segment keys in NewRule/NewRollout, following the repo's existing sanitizeSegmentKeys/strings.Join idiom; build, vet, and full audit test suite pass, plus a local ad-hoc multi-segment test (removed before delivery)."
+  },
+  "patch_bytes": 2769
+ },
+ "armA_sonnet5_r047": {
+  "pass": false,
+  "n_needed": 97,
+  "n_passed_needed": 87,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-436341a4a522dc83eb8bddd1164b764c8dd6bc45",
+  "prefix": "armA_sonnet5_r047",
+  "meta": {
+   "rank": 47,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T00:00:00Z",
+   "finished_at": "2026-08-05T01:00:00Z",
+   "turns_estimate": 35,
+   "self_assessment": "Fedora/macOS/SUSE EOL edits are high-confidence (Fedora dates cross-checked internally consistent, SUSE 13/14 dates taken verbatim from the requirements text); Windows 10/11 KB-to-revision mappings for 19045/22621/22631 are anchored by the exact example the task gave (revision 2715 <-> KB5032190) and recalled from memory of public Microsoft update history, so are moderate-to-high confidence, but the Windows Server 2022 (20348) revision numbers are reconstructed from memory with lower confidence since no anchor was given; could not run go build/test because a bare `cd bench5/workspaces/task && go build` (violating the state file's own warning, my mistake) corrupted the session's cwd and permanently broke Bash/Write/Edit for the rest of the session (matches documented FATAL bug) - diff was hand-verified line-by-line via Read instead, using Edit's own successful old_string/new_string matches as ground truth for exact whitespace."
+  },
+  "patch_bytes": 4544
+ },
+ "armA_sonnet5_r048": {
+  "pass": false,
+  "n_needed": 85,
+  "n_passed_needed": 74,
+  "status": "collected",
+  "instance_id": "instance_future-architect__vuls-6682232b5c8a9d08c0e9f15bd90d41bff3875adc",
+  "prefix": "armA_sonnet5_r048",
+  "meta": {
+   "rank": 48,
+   "model": "sonnet5",
+   "started_at": "2026-08-05T06:08:00Z",
+   "finished_at": "2026-08-05T06:20:52Z",
+   "turns_estimate": 12,
+   "self_assessment": "Added AL2023/2025/2027/2029 to getAmazonLinuxVersion and GetEOL following the repo's existing map pattern; confirmed with go test ./config/... plus a temporary (deleted) verification test covering found/unknown and standard/extended EOL transitions, but the exact EOL calendar dates are a good-faith estimate from AWS's known 2-year-cadence/2-year-standard-support policy applied to each release's GA year, not independently sourced per rule 4."
+  },
+  "patch_bytes": 1623
+ }
+}
