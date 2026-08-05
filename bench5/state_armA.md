@@ -1,13 +1,13 @@
 # Arm A process notes (carried memory)
 
 ## FATAL: cwd-corrupting bug — kills Bash+Write+Edit session-wide
-- ANY bare `cd` outside `(...)` perma-corrupts cwd (14+ sessions killed: r034-r041, r044, r045, r047, r049, r052-r054). Only `(cd dir && cmd)`
+- ANY bare `cd` outside `(...)` perma-corrupts cwd (15+ sessions killed: r034-r041, r044, r045, r047, r049, r052-r055). Only `(cd dir && cmd)`
   WITH PARENS, `git -C <path>`, absolute paths, or `go -C <dir> <subcmd>` are safe — an env-var/flag prefix before `cd &&` does NOT make it
   safe (r045); a chained `cd dir && go build`/`npm pack ...` in one Bash call corrupts even after reading this warning first (r047/r049), and
   even a bare `cd <path>` used only as a solo throwaway cwd check with nothing chained after it, or stderr-redirected, corrupts too
-  (r052/r053) — there is no "harmless enough to skip the subshell" case, ever, full stop.
+  (r052/r053/r055) — there is no "harmless enough to skip the subshell" case, ever, full stop.
 - Symptom: Bash/Write/Edit ALL fail w/ `PreToolUse:<tool> hook error: ... can't open .../hooks/pretooluse_guard.py`. Never self-heals.
-- Recovery (r034/035/037/038/039/041/044/045/047/049/052-054, all shipped): Read/Glob/Grep + MCP tools only. Hand-build the diff from Read
+- Recovery (r034/035/037/038/039/041/044/045/047/049/052-055, all shipped): Read/Glob/Grep + MCP tools only. Hand-build the diff from Read
   output: exact line-numbered old/new blocks, recounted `@@ -a,b +c,d @@` totals — reuse already-succeeded Edit calls' own old_string/new_string
   as ground truth (proven byte-exact) instead of re-deriving tabs by eye, and Read the live post-edit file for unchanged context/closing-brace
   lines. Ship patch.diff+meta.json+state.md in ONE `mcp__github__push_files` call; state plainly what wasn't compiled/tested. `rm -rf <abs-path>`
@@ -31,13 +31,13 @@
 ## JS/TS (protonmail/webclients monorepo; element-web single-repo)
 - Requirements/Interface call-site lists aren't exhaustive — grep the WHOLE repo for every importer of a changed function AND for the
   raw buggy expression itself, not just a named helper's call sites — the same bug can be hand-duplicated inline at several unrelated
-  components instead of centralized in one helper (r051: 3 files, 1 helper + 2 inlined). Reuse sibling hooks' idiom, don't hand-roll (r043).
+  components instead of centralized in one helper (r051: 3 files, 1 helper + 2 inlined). Reuse sibling hooks'/branches' idiom, don't hand-roll (r043, r055); en_EN.json key order mirrors source _t()-call extraction order, not alphabetical — insert new keys at the matching position (r055).
 - webclients (yarn berry; `.yarn/releases/yarn-*.cjs` version varies by base commit): `(cd bench5/workspaces/task && node .yarn/releases/yarn-<ver>.cjs install --mode=skip-build)` works, no codeload 403 (r050); native addons unbuilt, so `canvas` fails jsdom suites —
   fix via `apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev pkg-config` then `(cd node_modules/canvas && npx --yes
   node-gyp rebuild)` (r051). Run jest/eslint/prettier scoped per-package via `(cd packages/<pkg> && node ../../.yarn/releases/yarn-<ver>.cjs
   <cmd>)` (prettier reflows multi-line signatures — use `--write`). `install` rewrites yarn.lock even for a no-op — `git checkout -- yarn.lock` first (r050).
 - element-web: yarn/npm installs 403 on `codeload.github.com` (matrix-js-sdk git dep) and `gitlab.matrix.org` (@matrix-org/olm tarball,
-  r049). Fix: drop the olm devDependency, `git clone --depth 1 <sha>` matrix-js-sdk yourself, point at `file:../<clone>`, then COPY (not
+  r049/r055). Fix: drop the olm devDependency, `git clone --depth 1 <sha>` matrix-js-sdk yourself, point at `file:../<clone>`, then COPY (not
   symlink) the resolved `node_modules/matrix-js-sdk` in — npm's `file:` symlink breaks Jest's upward resolution for transitive deps
   (unhomoglyph, bs58, p-retry — `npm pack <name>@<semver>` + extract by hand). Revert package.json/lock before diffing.
 
