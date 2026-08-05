@@ -1,0 +1,102 @@
+diff --git a/qutebrowser/misc/utilcmds.py b/qutebrowser/misc/utilcmds.py
+index 9530248..35f9fa3 100644
+--- a/qutebrowser/misc/utilcmds.py
++++ b/qutebrowser/misc/utilcmds.py
+@@ -46,11 +46,12 @@ def later(duration: str, command: str, win_id: int) -> None:
+     """Execute a command after some time.
+ 
+     Args:
+-        duration: Duration to wait in format XhYmZs or number for seconds.
++        duration: Duration to wait in format XhYmZs or number for milliseconds.
+         command: The command to run, with optional args.
+     """
+-    ms = utils.parse_duration(duration)
+-    if ms < 0:
++    try:
++        ms = utils.parse_duration(duration)
++    except ValueError:
+         raise cmdutils.CommandError("Wrong format, expected XhYmZs or Number.")
+     commandrunner = runners.CommandRunner(win_id)
+     timer = usertypes.Timer(name='later', parent=QApplication.instance())
+diff --git a/qutebrowser/utils/utils.py b/qutebrowser/utils/utils.py
+index 9fc8e1a..ceaa814 100644
+--- a/qutebrowser/utils/utils.py
++++ b/qutebrowser/utils/utils.py
+@@ -777,16 +777,21 @@ def libgl_workaround() -> None:
+ 
+ def parse_duration(duration: str) -> int:
+     """Parse duration in format XhYmZs into milliseconds duration."""
+-    has_only_valid_chars = re.match("^([0-9]+[shm]?){1,3}$", duration)
+-    if not has_only_valid_chars:
+-        return -1
+-    if re.match("^[0-9]+$", duration):
+-        seconds = int(duration)
+-    else:
+-        match = re.search("([0-9]+)s", duration)
+-        seconds = match.group(1) if match else 0
+-    match = re.search("([0-9]+)m", duration)
+-    minutes = match.group(1) if match else 0
+-    match = re.search("([0-9]+)h", duration)
+-    hours = match.group(1) if match else 0
+-    return (int(seconds) + int(minutes) * 60 + int(hours) * 3600) * 1000
++    if re.fullmatch(r"[0-9]+", duration):
++        return int(duration)
++
++    unit = r"[0-9]+(?:\.[0-9]+)?[hms]"
++    if not re.fullmatch(rf"\s*(?:{unit}\s*){{1,3}}", duration):
++        raise ValueError(f"Invalid duration: {duration!r}")
++
++    match = re.search(r"([0-9]+(?:\.[0-9]+)?h)", duration)
++    hours = match.group(1) if match else "0"
++    match = re.search(r"([0-9]+(?:\.[0-9]+)?m)", duration)
++    minutes = match.group(1) if match else "0"
++    match = re.search(r"([0-9]+(?:\.[0-9]+)?s)", duration)
++    seconds = match.group(1) if match else "0"
++
++    total_ms = (float(hours.rstrip("h")) * 3600 +
++                float(minutes.rstrip("m")) * 60 +
++                float(seconds.rstrip("s"))) * 1000
++    return int(total_ms)
+diff --git a/tests/unit/utils/test_utils.py b/tests/unit/utils/test_utils.py
+index 48e6600..f7f55cd 100644
+--- a/tests/unit/utils/test_utils.py
++++ b/tests/unit/utils/test_utils.py
+@@ -821,14 +821,12 @@ def test_libgl_workaround(monkeypatch, skip):
+ 
+ 
+ @pytest.mark.parametrize('durations, out', [
+-    ("-1s", -1),  # No sense to wait for negative seconds
+-    ("-1", -1),
+-    ("34ss", -1),
+     ("0", 0),
+     ("0s", 0),
++    ("0.5s", 500),  # Fractional values are supported
+     ("59s", 59000),
+-    ("60", 60000),
+-    ("60.4s", -1),  # Only accept integer values
++    ("60", 60),  # Plain digits are milliseconds, not seconds
++    ("60.4s", 60400),  # Fractional values are supported
+     ("1m1s", 61000),
+     ("1m", 60000),
+     ("1h", 3_600_000),
+@@ -838,6 +836,20 @@ def test_libgl_workaround(monkeypatch, skip):
+     ("1h1m1s", 3_661_000),
+     ("1h1m10s", 3_670_000),
+     ("10h1m10s", 36_070_000),
++    ("1h 1s", 3_601_000),  # Whitespace between components is ignored
++    ("1h 1m 1s", 3_661_000),
+ ])
+ def test_parse_duration(durations, out):
+     assert utils.parse_duration(durations) == out
++
++
++@pytest.mark.parametrize('durations', [
++    "-1s",  # No sense to wait for negative seconds
++    "-1",
++    "34ss",
++    "abc",
++    "1x",
++])
++def test_parse_duration_invalid(durations):
++    with pytest.raises(ValueError, match="Invalid duration"):
++        utils.parse_duration(durations)

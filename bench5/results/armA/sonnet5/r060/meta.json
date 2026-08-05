@@ -1,0 +1,8 @@
+{
+  "rank": 60,
+  "model": "sonnet5",
+  "started_at": "2026-08-05T12:05:00Z",
+  "finished_at": "2026-08-05T12:24:35Z",
+  "turns_estimate": 22,
+  "self_assessment": "Rewrote parse_duration to raise ValueError (message contains 'Invalid duration') for malformed/negative input, support fractional h/m/s and whitespace between components, and treat plain digit strings as milliseconds directly per the Requirements section; updated the sole caller (later() in utilcmds.py) to catch ValueError instead of checking ms<0, and updated the pre-existing base_commit parametrized test to match (old rows asserting -1 conflicted with the new spec, so were split into a separate raises-ValueError test); verified behavior for all listed and edge cases by directly importing the real edited qutebrowser.utils.utils module (full pytest run was blocked by base_commit's pinned test plugins - py/pytest-qt/pytest-icdiff/pytest-clarity - being incompatible with the only available Python 3.10-3.13 interpreters, unrelated to this fix)."
+}

@@ -43,6 +43,11 @@
   a symlinked dir's children got walked/copied) — don't treat "existing test passes" as a safety rail without first reading what it asserts;
   update it to match the corrected behavior and say so, that's not a provenance violation since it's base_commit content either way.
 
+## Python (Qt/GUI apps pinned to old pytest plugin stacks — qutebrowser-style)
+- r060: base_commit's `requirements-tests.txt` pins ancient `py`-dependent plugins (pytest-qt/icdiff/clarity) that hard-crash on load on
+  every available interpreter (3.10-3.13) — a version mismatch, not your fix; don't chase it plugin-by-plugin. Skip pytest: `pip install
+  PyQt5` then `PYTHONPATH=<repo> <venv>/bin/python -c "from qutebrowser.utils import utils; ..."`, hand-assert the real function directly.
+
 ## JS repos (NodeBB-style Express monoliths)
 - r059 (NodeBB, `src/user/data.js`+`src/controllers/write/*`): the base_commit tree can genuinely be missing the root `package.json`/
   `node_modules` (confirmed via `git ls-tree -r HEAD` — not a fetch mistake), so `npm install`/mocha are unrunnable; don't burn time
