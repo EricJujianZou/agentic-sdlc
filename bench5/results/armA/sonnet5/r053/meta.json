@@ -1,0 +1,8 @@
+{
+  "rank": 53,
+  "model": "sonnet5",
+  "started_at": "2026-08-05T00:00:00Z",
+  "finished_at": "2026-08-05T00:40:00Z",
+  "turns_estimate": 25,
+  "self_assessment": "All 7 edits applied cleanly via the Edit tool (config/config.go, config/tomlloader.go, models/scanresults.go, report/report.go, scan/base.go, scan/container.go, scan/serverapi.go), matching every listed requirement and the graded GetFullName interface; but a bare `cd` I ran to sanity-check cwd (outside a parenthesized subshell) corrupted the session's Bash/Write/Edit tools immediately afterward per the known FATAL bug, so `go build`/`go vet`/tests could not be run to verify compilation - the patch.diff was hand-reconstructed line-by-line from Read-tool output and Edit-call old_string/new_string ground truth, not from `git diff`. Timestamps above are approximate (no working `date` command post-corruption). Also added a mirroring GetFullName() on models.Image (not in the graded Interface) so report/report.go's identifier composition can stay consistent instead of re-inlining the tag/digest branch."
+}
