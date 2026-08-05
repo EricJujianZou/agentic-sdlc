@@ -29,6 +29,10 @@
 ## JS/TS (protonmail/webclients monorepo; element-web single-repo)
 - Requirements/Interface call-site lists aren't exhaustive — grep the WHOLE repo for every importer of a changed function (r039: 5 listed
   + 1 unlisted file used it too). New hook: grep sibling hooks for the established idiom and reuse it, don't hand-roll (r043).
+- webclients (yarn 3.2.0 berry): `(cd bench5/workspaces/task && node .yarn/releases/yarn-3.2.0.cjs install --mode=skip-build)` just works,
+  ~2min, no codeload 403 (r050). Each package/app has its own jest.config+jest.setup (no shared root) — run scoped per-package, e.g.
+  `(cd packages/components && node ../../.yarn/releases/yarn-3.2.0.cjs jest <path>)`, likewise `run check-types`/`eslint <path> --quiet`.
+  `install` rewrites yarn.lock even for a no-op — `git checkout -- yarn.lock` before diffing (r050).
 - element-web: BOTH `yarn install` and `npm install` 403 on `codeload.github.com` for the git-pinned `matrix-js-sdk` dep, and
   `npm install` separately 403s on `gitlab.matrix.org` for the `@matrix-org/olm` tarball devDependency (r049). If you need a real
   install to run jest: drop the olm devDependency line, `git clone --depth 1 <sha>` matrix-js-sdk yourself (plain git to github.com
