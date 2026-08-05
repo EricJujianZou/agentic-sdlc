@@ -42,3 +42,14 @@
   from the functions you're editing. The repo's OWN pre-existing unit tests can encode the exact bug being fixed (here: two tests asserted
   a symlinked dir's children got walked/copied) — don't treat "existing test passes" as a safety rail without first reading what it asserts;
   update it to match the corrected behavior and say so, that's not a provenance violation since it's base_commit content either way.
+
+## JS repos (NodeBB-style Express monoliths)
+- r059 (NodeBB, `src/user/data.js`+`src/controllers/write/*`): the base_commit tree can genuinely be missing the root `package.json`/
+  `node_modules` (confirmed via `git ls-tree -r HEAD` — not a fetch mistake), so `npm install`/mocha are unrunnable; don't burn time
+  chasing that. Verify instead with a throwaway Node script (scratchpad, not in the diff) that monkey-patches `Module._load` to stub the
+  file's external requires (npm pkgs like validator/nconf/lodash AND relative ones like `../database`/`../meta`/`../plugins`) by exact
+  request string, then does a real `require()` of the actual edited file and calls its exported factory with a hand-built `User` stub —
+  this exercises the real shipped code (not a reimplementation) without any real deps installed. Grep sibling controllers first
+  (`src/controllers/accounts/helpers.js` here) for the project's existing isSelf/isAdmin/isGlobalMod + showemail/showfullname +
+  hideEmail/hideFullname privacy pattern before inventing your own — reuse the same precedence (per-user setting AND-ed with global
+  hide-flag) so behavior matches every other privacy-filtering code path in the repo.
