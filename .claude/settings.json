@@ -1,5 +1,5 @@
 {
-  "_comment": "Hook wiring (plans/hooks_plan.md). Scripts gate themselves on ADW_TICKET_RUN where a rule should only bind harness-driven runs; destructive-command and branch-policy denials are always on.",
+  "_comment": "Hook wiring (plans/hooks_plan.md). Scripts gate themselves on ADW_TICKET_RUN where a rule should only bind harness-driven runs; destructive-command and branch-policy denials are always on. Launcher runs the script with cwd pinned to CLAUDE_PROJECT_DIR (fallback '.') so a cwd leaked by a session's `cd` cannot break hook invocation (bench5 SA-v2 lockouts, RUN.md 2026-08-04); pure-python env read keeps it shell-agnostic (sh and cmd verified).",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet python hooks/pretooluse_guard.py"
+            "command": "uv run --quiet python -c \"import os,sys,subprocess; r=os.environ.get('CLAUDE_PROJECT_DIR') or '.'; sys.exit(subprocess.run([sys.executable,'hooks/pretooluse_guard.py'], stdin=sys.stdin, cwd=r).returncode)\""
           }
         ]
       },
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet python hooks/pretooluse_guard.py"
+            "command": "uv run --quiet python -c \"import os,sys,subprocess; r=os.environ.get('CLAUDE_PROJECT_DIR') or '.'; sys.exit(subprocess.run([sys.executable,'hooks/pretooluse_guard.py'], stdin=sys.stdin, cwd=r).returncode)\""
           }
         ]
       }
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet python hooks/posttooluse_autocommit.py"
+            "command": "uv run --quiet python -c \"import os,sys,subprocess; r=os.environ.get('CLAUDE_PROJECT_DIR') or '.'; sys.exit(subprocess.run([sys.executable,'hooks/posttooluse_autocommit.py'], stdin=sys.stdin, cwd=r).returncode)\""
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet python hooks/stop_checklist.py"
+            "command": "uv run --quiet python -c \"import os,sys,subprocess; r=os.environ.get('CLAUDE_PROJECT_DIR') or '.'; sys.exit(subprocess.run([sys.executable,'hooks/stop_checklist.py'], stdin=sys.stdin, cwd=r).returncode)\""
           }
         ]
       }
